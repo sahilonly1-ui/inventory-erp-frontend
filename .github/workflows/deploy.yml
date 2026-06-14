@@ -1,0 +1,74 @@
+name: Deploy Frontend to Netlify
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+        env:
+          VITE_API_URL: https://inventory-erp-backend.onrender.com/api/v1
+
+      - name: Deploy to Netlify
+        run: |
+          npm install -g netlify-cli --quiet
+
+          # Get site ID for bespoke-souffle-3c1a0e.netlify.app
+          SITES=$(curl -s -H "Authorization: Bearer ${{ secrets.NETLIFY_AUTH_TOKEN }}" \
+            "https://api.netlify.com/api/v1/sites")
+          SITE_ID=$(echo $SITES | python3 -c "
+          import sys, json
+          sites = json.load(sys.stdin)
+          for s in (sites if isinstance(sites, list) else []):
+              d = s.get('default_domain','')
+              n = s.get('name','')
+              if 'bespoke-souffle' in d or 'bespoke-souffle' in n:
+                  print(s['id'])
+                  break
+          " 2>/dev/null || echo "")
+
+          if [ -n "$SITE_ID" ]; then
+            echo "Deploying to existing Netlify site: $SITE_ID"
+            netlify deploy --prod --dir=dist --site=$SITE_ID --auth=${{ secrets.NETLIFY_AUTH_TOKEN }} --message="Auto-deploy: backend pointed to Render"
+          else
+            echo "Creating new Netlify site and deploying..."
+            netlify deploy --prod --dir=dist --auth=${{ secrets.NETLIFY_AUTH_TOKEN }} --message="Initial deploy"
+          fi
+
+      - name: Set Netlify env var
+        run: |
+          SITES=$(curl -s -H "Authorization: Bearer ${{ secrets.NETLIFY_AUTH_TOKEN }}" \
+            "https://api.netlify.com/api/v1/sites")
+          SITE_ID=$(echo $SITES | python3 -c "
+          import sys, json
+          sites = json.load(sys.stdin)
+          for s in (sites if isinstance(sites, list) else []):
+              if 'bespoke-souffle' in s.get('default_domain','') or 'bespoke-souffle' in s.get('name',''):
+                  print(s['id'])
+                  break
+          " 2>/dev/null || echo "")
+
+          if [ -n "$SITE_ID" ]; then
+            curl -s -X PATCH \
+              -H "Authorization: Bearer ${{ secrets.NETLIFY_AUTH_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              "https://api.netlify.com/api/v1/sites/$SITE_ID" \
+              -d '{"build_settings":{"env":{"VITE_API_URL":"https://inventory-erp-backend.onrender.com/api/v1"}}}'
+            echo "VITE_API_URL env var set on Netlify site"
+          fi
