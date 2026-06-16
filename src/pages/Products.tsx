@@ -1346,6 +1346,19 @@ export default function Products(){
               style={{height:28,padding:'0 12px',background:'rgba(255,255,255,.12)',border:'1px solid rgba(255,255,255,.2)',borderRadius:'var(--r-md)',fontSize:11,fontWeight:600,cursor:'pointer',color:'#fff'}}>
               ⬇ Download Selected
             </button>
+            <button onClick={async()=>{
+                if(!window.confirm(`Permanently delete ${sel.size} product(s)? This cannot be undone.`))return;
+                try{
+                  const ids=[...sel];
+                  await api('/products/bulk-delete',{method:'DELETE',body:JSON.stringify({ids})});
+                  showT(`Deleted ${ids.length} products`);
+                  setSel(new Set());setBulkAction('');setBulkVal('');
+                  loadProducts();loadMeta();
+                }catch(e:any){showT('Delete failed: '+e.message);}
+              }}
+              style={{height:28,padding:'0 12px',background:'rgba(239,68,68,.2)',border:'1px solid rgba(239,68,68,.4)',borderRadius:'var(--r-md)',fontSize:11,fontWeight:600,cursor:'pointer',color:'#fca5a5'}}>
+              🗑 Delete Selected
+            </button>
             <button onClick={()=>{setSel(new Set());setBulkAction('');setBulkVal('');}}
               style={{marginLeft:'auto',background:'none',border:'none',color:'rgba(255,255,255,.5)',fontSize:12,cursor:'pointer'}}>
               Cancel
