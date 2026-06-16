@@ -1262,10 +1262,12 @@ export default function Products(){
           <div className="filter-row">
             <select className="f-select" value={brandF} onChange={e=>{setBrandF(e.target.value);setPage(1);}}>
               <option value="">All Brands</option>
+              <option value="__blank__">— No Brand —</option>
               {brands.map(b=><option key={b.id} value={b.name}>{b.name}</option>)}
             </select>
             <select className="f-select" value={catF} onChange={e=>{setCatF(e.target.value);setPage(1);}}>
               <option value="">All Categories</option>
+              <option value="__blank__">— No Category —</option>
               {categories.filter(c=>!c.parentId).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
             <select className="f-select" value={statusF} onChange={e=>{setStatusF(e.target.value);setPage(1);}}>
