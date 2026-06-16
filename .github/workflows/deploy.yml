@@ -22,72 +22,16 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          VITE_API_URL: https://inventory-erp-backend.onrender.com/api/v1
+          VITE_API_URL: https://inventory-erp-backend-iplr.onrender.com/api/v1
 
       - name: Deploy to Netlify
+        uses: nwtgck/actions-netlify@v3.0
+        with:
+          publish-dir: './dist'
+          production-branch: main
+          production-deploy: true
+          netlify-config-path: './netlify.toml'
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-        run: |
-          npm install -g netlify-cli@17 2>/dev/null
-
-          # Find site ID
-          SITE_ID=$(curl -s \
-            -H "Authorization: Bearer $NETLIFY_AUTH_TOKEN" \
-            "https://api.netlify.com/api/v1/sites" \
-            | python3 -c "
-          import sys, json
-          try:
-              sites = json.load(sys.stdin)
-              for s in (sites if isinstance(sites,list) else []):
-                  if 'bespoke-souffle' in s.get('name','') + s.get('default_domain',''):
-                      print(s['id']); break
-          except Exception as e:
-              print('', end='')
-          " 2>/dev/null || echo "")
-
-          echo "Site ID: '$SITE_ID'"
-
-          if [ -n "$SITE_ID" ]; then
-            echo "Deploying to existing site $SITE_ID ..."
-            netlify deploy \
-              --prod \
-              --dir=dist \
-              --site="$SITE_ID" \
-              --auth="$NETLIFY_AUTH_TOKEN" \
-              --message="Fix: VITE_API_URL now points to Render backend"
-          else
-            echo "No existing site found — creating new..."
-            netlify deploy \
-              --prod \
-              --dir=dist \
-              --auth="$NETLIFY_AUTH_TOKEN" \
-              --message="Initial deploy"
-          fi
-
-      - name: Update Netlify env var
-        env:
-          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-        run: |
-          SITE_ID=$(curl -s \
-            -H "Authorization: Bearer $NETLIFY_AUTH_TOKEN" \
-            "https://api.netlify.com/api/v1/sites" \
-            | python3 -c "
-          import sys, json
-          try:
-              sites = json.load(sys.stdin)
-              for s in (sites if isinstance(sites,list) else []):
-                  if 'bespoke-souffle' in s.get('name','') + s.get('default_domain',''):
-                      print(s['id']); break
-          except: pass
-          " 2>/dev/null || echo "")
-
-          if [ -n "$SITE_ID" ]; then
-            curl -s -X PATCH \
-              -H "Authorization: Bearer $NETLIFY_AUTH_TOKEN" \
-              -H "Content-Type: application/json" \
-              "https://api.netlify.com/api/v1/sites/$SITE_ID" \
-              -d '{"build_settings":{"env":{"VITE_API_URL":"https://inventory-erp-backend.onrender.com/api/v1"}}}'
-            echo "VITE_API_URL env var set on Netlify."
-          else
-            echo "Could not find site to update env var."
-          fi
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        timeout-minutes: 10
