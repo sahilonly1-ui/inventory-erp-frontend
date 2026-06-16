@@ -985,7 +985,19 @@ export default function Products(){
   const [bulkAction,setBulkAction]=useState('');
   const [bulkVal,setBulkVal]=useState('');
   const [bulkBusy,setBulkBusy]=useState(false);
-  const [visCols,setVisCols]=useState<string[]>(()=>{try{return JSON.parse(localStorage.getItem('erp_cols')||'null')||DEF_COLS;}catch{return DEF_COLS;}});
+  // v3 = MRP before Cost + Last Updated in defaults. Bumping clears old saved order.
+  const COLS_VER = 'v3';
+  const [visCols,setVisCols]=useState<string[]>(()=>{
+    try{
+      const saved=localStorage.getItem('erp_cols');
+      const ver=localStorage.getItem('erp_cols_ver');
+      if(saved&&ver===COLS_VER) return JSON.parse(saved);
+      // Version mismatch — clear old and use new defaults
+      localStorage.removeItem('erp_cols');
+      localStorage.setItem('erp_cols_ver',COLS_VER);
+      return DEF_COLS;
+    }catch{return DEF_COLS;}
+  });
   const [drawer,setDrawer]=useState<string|null>(null);
   const [showBrandMaster,setShowBrandMaster]=useState(false);
   const [showCatMaster,setShowCatMaster]=useState(false);
