@@ -1,12 +1,6 @@
 [build]
-  command = "npm run build"
   publish = "dist"
+  command = "npm run build"
 
 [build.environment]
-  NODE_VERSION = "20"
-
-# SPA fallback so client-side routes work on refresh
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
+  VITE_API_URL = "https://inventory-erp-backend-iplr.onrender.com/api/v1"

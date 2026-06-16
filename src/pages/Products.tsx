@@ -31,7 +31,6 @@ const ALL_COLS = [
   { key:'stock',        label:'Stock',        w:70  },
   { key:'updatedAt',    label:'Last Updated', w:110 },
   { key:'vendor',       label:'Vendor',       w:110 },
-  { key:'updatedAt',    label:'Updated',      w:90  },
 ];
 const DEF_COLS = ['ean','model','brand','category','status','sellingPrice','costPrice','stock','updatedAt'];
 
@@ -1397,6 +1396,7 @@ export default function Products(){
 
       {toast&&<div className="toasts"><div className="toast">{toast}</div></div>}
 
+      {/* Modern floating drag indicator */}
       {showStatusMgr&&<StatusManager labels={statusLabels} onSave={setStatusLabels} onClose={()=>setShowStatusMgr(false)}/>}
       {showBrandMaster&&<BrandMaster brands={brands} onClose={()=>setShowBrandMaster(false)} onRefresh={loadMeta}/>}
       {showCatMaster&&<CategoryMaster categories={categories} onClose={()=>setShowCatMaster(false)} onRefresh={loadMeta}/>}
@@ -1406,4 +1406,3 @@ export default function Products(){
     </>
   );
 }
-export { Products };

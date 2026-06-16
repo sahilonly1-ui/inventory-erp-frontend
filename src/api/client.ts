@@ -1,6 +1,6 @@
 // Tiny fetch wrapper that adds the bearer token, transparently refreshes it on
 // 401 (rotation-aware), and unwraps the backend's { success, data } envelope.
-const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8080/api/v1';
+const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? 'https://inventory-erp-backend-iplr.onrender.com/api/v1';
 
 let accessToken: string | null = null;
 export const setAccessToken = (t: string | null) => { accessToken = t; };
