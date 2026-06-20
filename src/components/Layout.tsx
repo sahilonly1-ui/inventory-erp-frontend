@@ -9,6 +9,7 @@ const NAV = [
   { to: '/products', label: 'Products', icon: '⬡' },
   { to: '/inventory', label: 'Inventory', icon: '⊟' },
   { to: '/imei', label: 'IMEI', icon: '⊕' },
+  { to: '/versions', label: 'Versions', icon: '🕓' },
 ];
 
 export function Layout({ children }: { children: ReactNode }) {

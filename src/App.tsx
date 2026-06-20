@@ -9,6 +9,7 @@ import { Dashboard } from './pages/Dashboard';
 import Products from './pages/Products';
 import { Inventory } from './pages/Inventory';
 import { Imei } from './pages/Imei';
+import { Versions } from './pages/Versions';
 
 const Shell = ({ children }: { children: ReactNode }) => (
   <ProtectedRoute>
@@ -27,6 +28,7 @@ export default function App() {
         <Route path="/products"  element={<Shell><Products /></Shell>} />
         <Route path="/inventory" element={<Shell><Inventory /></Shell>} />
         <Route path="/imei"      element={<Shell><Imei /></Shell>} />
+        <Route path="/versions"  element={<Shell><Versions /></Shell>} />
       </Routes>
     </AuthProvider>
   );
