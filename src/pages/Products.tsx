@@ -59,10 +59,10 @@ const stockQty=(p:Product)=>(p.stockLevels||[]).reduce((s,l)=>s+l.quantity,0);
 function qs(obj:any){const p=new URLSearchParams();Object.entries(obj).forEach(([k,v])=>{if(v===undefined||v===null||v==='')return;if(Array.isArray(v))v.forEach(x=>p.append(k,String(x)));else p.set(k,String(v));});return p.toString()?'?'+p.toString():'';}
 
 // ── Excel helpers ─────────────────────────────────────────────────────────
-const TEMPLATE_HEADERS = ['EAN','Product Name','Brand','Category','Status','Cost Price','MRP','GST%','HSN Code','Min Stock','Description'];
+const TEMPLATE_HEADERS = ['EAN','Product Name','Brand','Category','Status','MRP','Cost Price'];
 
 function downloadTemplate(){
-  const sample=[['8801234567890','Samsung Galaxy A55 8/128GB (Black)','Samsung','Smartphones','ACTIVE','18000','22999','18','8517','0','Samsung A-series phone']];
+  const sample=[['8801234567890','Samsung Galaxy A55 8/128GB (Black)','Samsung','Smartphones','ACTIVE','22999','18000']];
   const csv=[TEMPLATE_HEADERS,...sample].map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
   const url=URL.createObjectURL(blob);const a=document.createElement('a');
@@ -90,14 +90,14 @@ async function exportProducts(filters:any,visCols:string[],total:number, selecte
 
 function buildAndDownloadCSV(items:Product[], visCols:string[], filename:string){
   const colMap:Record<string,string>={ean:'EAN',model:'Product Name',brand:'Brand',category:'Category',vendor:'Vendor',status:'Status',costPrice:'Cost Price',sellingPrice:'MRP',stock:'Stock',updatedAt:'Last Updated'};
-  const headers=[...visCols.map(k=>colMap[k]||k),'GST%','HSN Code','Min Stock'];
-  const rows=items.map(p=>[...visCols.map(k=>{
+  const headers=visCols.map(k=>colMap[k]||k);
+  const rows=items.map(p=>visCols.map(k=>{
     if(k==='ean')return p.ean;if(k==='model')return p.model;if(k==='brand')return p.brand;
     if(k==='category')return p.category?.name||'';if(k==='vendor')return p.vendor?.name||'';
     if(k==='status')return S_LBL[p.status];if(k==='costPrice')return Number(p.costPrice);
     if(k==='sellingPrice')return Number(p.sellingPrice);if(k==='stock')return stockQty(p);
     if(k==='updatedAt')return fmtDate(p.updatedAt);return '';
-  }),Number(p.gstRate),p.hsnCode||'',p.minStock]);
+  }));
   const esc=(v:any)=>{const sv=String(v??'');return(sv.includes(',')||sv.includes('"'))?`"${sv.replace(/"/g,'""')}"`:`${sv}`;};
   const csv=[headers,...rows].map(r=>r.map(esc).join(',')).join('\n');
   const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
@@ -322,7 +322,7 @@ function BulkImportModal({categories,brands,onClose,onDone}:{categories:Category
 // ── Add Product Modal ─────────────────────────────────────────────────────
 function AddProductModal({brands:initBrands,categories,onClose,onSaved}:{brands:Brand[];categories:Category[];onClose:()=>void;onSaved:()=>void}){
   const [brands,setBrands]=useState<Brand[]>(initBrands);
-  const [form,setForm]=useState({ean:'',model:'',brand:'',brandId:'',categoryId:'',costPrice:'',sellingPrice:'',gstRate:'18',status:'ACTIVE' as Status,hsnCode:''});
+  const [form,setForm]=useState({ean:'',model:'',brand:'',brandId:'',categoryId:'',costPrice:'',sellingPrice:'',status:'ACTIVE' as Status});
   const [busy,setBusy]=useState(false);
   const [err,setErr]=useState('');
   const [newBrand,setNewBrand]=useState('');
@@ -355,8 +355,7 @@ function AddProductModal({brands:initBrands,categories,onClose,onSaved}:{brands:
         brandId:form.brandId||undefined,
         categoryId:form.categoryId||undefined,
         costPrice:Number(form.costPrice),sellingPrice:Number(form.sellingPrice),
-        gstRate:Number(form.gstRate)||18,status:form.status,
-        hsnCode:form.hsnCode||undefined,
+        status:form.status,
       })});
       onSaved();onClose();
     }catch(e:any){setErr(e.message||'Failed to save');}
@@ -425,14 +424,6 @@ function AddProductModal({brands:initBrands,categories,onClose,onSaved}:{brands:
               <select style={{...inp,appearance:'none',cursor:'pointer'}} value={form.status} onChange={e=>set('status',e.target.value as Status)}>
                 {(['ACTIVE','INACTIVE','DISCONTINUED','OPEN_BOX_ONLY','BLOCKED'] as Status[]).map(s=><option key={s} value={s}>{S_LBL[s]}</option>)}
               </select>
-            </div>
-            <div>
-              <label style={lbl}>GST %</label>
-              <input type="number" style={inp} value={form.gstRate} onChange={e=>set('gstRate',e.target.value)}/>
-            </div>
-            <div>
-              <label style={lbl}>HSN Code</label>
-              <input style={inp} value={form.hsnCode} onChange={e=>set('hsnCode',e.target.value)} placeholder="e.g. 8517"/>
             </div>
           </div>
         </div>
@@ -909,12 +900,8 @@ function Drawer({pid,brands,categories,onClose,onUpdated}:{pid:string;brands:Bra
                     <FRow label="Category" val={p.category?.name||'—'} field="categoryId"
                       opts={[{v:'',l:'No category'},...categories.filter(c=>!c.parentId).map(c=>({v:c.id,l:c.name}))]}/>
                     <div className="info-field"><div className="info-lbl">EAN</div><div className="info-val mono">{p.ean}</div></div>
-                    <FRow label="Cost Price ₹" val={String(Number(p.costPrice).toFixed(0))} field="costPrice" type="number"/>
                     <FRow label="MRP ₹" val={String(Number(p.sellingPrice).toFixed(0))} field="sellingPrice" type="number"/>
-                    <FRow label="GST %" val={String(p.gstRate)} field="gstRate" type="number"/>
-                    <FRow label="HSN Code" val={p.hsnCode||''} field="hsnCode"/>
-                    <FRow label="Min Stock" val={String(p.minStock)} field="minStock" type="number"/>
-                    <div className="info-field"><div className="info-lbl">Vendor</div><div className="info-val">{p.vendor?.name||'—'}</div></div>
+                    <FRow label="Cost Price ₹" val={String(Number(p.costPrice).toFixed(0))} field="costPrice" type="number"/>
                   </div>
                 </>
               )}
@@ -963,6 +950,9 @@ function DD({label,btnCls,children}:{label:string;btnCls?:string;children:React.
 // ── MAIN ──────────────────────────────────────────────────────────────────
 export default function Products(){
   const [products,setProducts]=useState<Paged<Product>|null>(null);
+  const [editCell,setEditCell]=useState<{id:string;field:'status'|'costPrice'|'sellingPrice'}|null>(null);
+  const [editVal,setEditVal]=useState<string>('');
+  const [savingCell,setSavingCell]=useState(false);
   const [stats,setStats]=useState<Stats|null>(null);
   const [brands,setBrands]=useState<Brand[]>([]);
   const [categories,setCategories]=useState<Category[]>([]);
@@ -1162,13 +1152,74 @@ export default function Products(){
   const items=products?.items??[];
   const allSel=items.length>0&&sel.size===items.length;
 
+  // Optimistically patch one field on one product, then sync with server.
+  const patchField=async(p:Product,field:'status'|'costPrice'|'sellingPrice',value:string)=>{
+    const payload:any=field==='status'?{status:value}:{[field]:Number(value)};
+    setSavingCell(true);
+    // optimistic UI update
+    setProducts(prev=>prev?{...prev,items:prev.items.map(it=>it.id===p.id?{...it,...payload} as Product:it)}:prev);
+    try{
+      await api(`/products/${p.id}`,{method:'PATCH',body:JSON.stringify(payload)});
+      showT('Saved ✓');
+    }catch(e:any){
+      showT('Save failed: '+e.message);
+      loadProducts(); // revert to server truth on failure
+    }finally{
+      setSavingCell(false);setEditCell(null);
+    }
+  };
+
   const cellVal=(p:Product,key:string)=>{
     if(key==='model')return<span style={{fontWeight:500,cursor:'pointer'}} onClick={()=>setDrawer(p.id)}>{p.model}</span>;
     if(key==='ean')return<span style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--txt-2)'}}>{p.ean}</span>;
-    if(key==='status')return<span className={S_CLS[p.status]}>{getStatusLabel(p.status)}</span>;
+
+    if(key==='status'){
+      const isEditing=editCell?.id===p.id&&editCell.field==='status';
+      if(isEditing)return(
+        <select autoFocus value={p.status} disabled={savingCell}
+          onChange={e=>patchField(p,'status',e.target.value)}
+          onBlur={()=>setEditCell(null)}
+          style={{fontSize:12,padding:'2px 4px',borderRadius:'var(--r-sm)',border:'1px solid var(--brand)',outline:'none',cursor:'pointer'}}
+          onClick={e=>e.stopPropagation()}>
+          {(['ACTIVE','INACTIVE','DISCONTINUED','OPEN_BOX_ONLY','BLOCKED'] as Status[]).map(s=><option key={s} value={s}>{getStatusLabel(s)}</option>)}
+        </select>
+      );
+      return(
+        <span className={S_CLS[p.status]} style={{cursor:'pointer'}} title="Click to change status"
+          onClick={e=>{e.stopPropagation();setEditCell({id:p.id,field:'status'});}}>
+          {getStatusLabel(p.status)}
+        </span>
+      );
+    }
+
     if(key==='stock'){const q=stockQty(p);return<span className={`spill ${q===0?'spill-out':q<=3?'spill-low':'spill-in'}`}>{q}</span>;}
-    if(key==='costPrice')return<span style={{fontVariantNumeric:'tabular-nums'}}>{fmt(p.costPrice)}</span>;
-    if(key==='sellingPrice')return<span style={{fontVariantNumeric:'tabular-nums'}}>{fmt(p.sellingPrice)}</span>;
+
+    if(key==='costPrice'||key==='sellingPrice'){
+      const isEditing=editCell?.id===p.id&&editCell.field===key;
+      const raw=key==='costPrice'?p.costPrice:p.sellingPrice;
+      if(isEditing)return(
+        <input type="number" autoFocus defaultValue={Number(raw)} disabled={savingCell}
+          onClick={e=>e.stopPropagation()}
+          onBlur={e=>{const v=e.target.value;if(v&&Number(v)!==Number(raw))patchField(p,key,v);else setEditCell(null);}}
+          onKeyDown={e=>{
+            if(e.key==='Enter'){const v=(e.target as HTMLInputElement).value;if(v)patchField(p,key,v);}
+            if(e.key==='Escape')setEditCell(null);
+          }}
+          style={{width:80,fontSize:13,padding:'3px 6px',borderRadius:'var(--r-sm)',border:'1px solid var(--brand)',outline:'none'}}/>
+      );
+      return(
+        <span style={{display:'inline-flex',alignItems:'center',gap:5,fontVariantNumeric:'tabular-nums',cursor:'pointer'}}
+          onClick={e=>{e.stopPropagation();setEditCell({id:p.id,field:key as any});}}
+          title="Click to edit">
+          {fmt(raw)}
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{opacity:.45}}>
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+        </span>
+      );
+    }
+
     if(key==='brand')return<span style={{fontSize:13,color:'var(--txt-2)'}}>{p.brand||'—'}</span>;
     if(key==='category')return<span style={{fontSize:12,color:'var(--txt-2)'}}>{p.category?.name||'—'}</span>;
     if(key==='vendor')return<span style={{fontSize:12,color:'var(--txt-2)'}}>{p.vendor?.name||'—'}</span>;
@@ -1200,9 +1251,6 @@ export default function Products(){
           </DD>
 
           <DD label="Tools ▾">
-            <button className="dd-item" onClick={handleSyncBrands} disabled={syncing}>{syncing?'Syncing…':'🔄 Sync Brands from Products'}</button>
-            <button className="dd-item" onClick={handleDedup}>🔀 Merge Duplicate Categories</button>
-            <hr className="dd-divider"/>
             <button className="dd-item" onClick={handleResetStock} disabled={resetting} style={{color:'var(--err)'}}>{resetting?'Resetting…':'⚠ Reset All Stock to Zero'}</button>
           </DD>
 
