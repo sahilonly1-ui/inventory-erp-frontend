@@ -1012,6 +1012,7 @@ export default function Products(){
   const [products,setProducts]=useState<Paged<Product>|null>(null);
   const [editCell,setEditCell]=useState<{id:string;field:'status'|'costPrice'|'sellingPrice'}|null>(null);
   const [editVal,setEditVal]=useState<string>('');
+  const [editPos,setEditPos]=useState<{top:number;left:number}>({top:0,left:0});
   const [savingCell,setSavingCell]=useState(false);
   const [stats,setStats]=useState<Stats|null>(null);
   const [brands,setBrands]=useState<Brand[]>([]);
@@ -1276,23 +1277,38 @@ export default function Products(){
       const isEditing=editCell?.id===p.id&&editCell.field===key;
       const raw=key==='costPrice'?p.costPrice:p.sellingPrice;
       if(isEditing)return(
-        <span style={{display:'inline-flex',alignItems:'center',gap:4}} onClick={e=>e.stopPropagation()}>
-          <input type="number" autoFocus value={editVal} disabled={savingCell}
-            onChange={e=>setEditVal(e.target.value)}
-            onKeyDown={e=>{
-              if(e.key==='Enter'&&editVal)patchField(p,key,editVal);
-              if(e.key==='Escape')setEditCell(null);
-            }}
-            style={{width:74,fontSize:13,padding:'3px 6px',borderRadius:'var(--r-sm)',border:'1px solid var(--brand)',outline:'none'}}/>
-          <button title="Save" disabled={savingCell||!editVal} onClick={()=>patchField(p,key,editVal)}
-            style={{width:22,height:22,display:'flex',alignItems:'center',justifyContent:'center',border:'none',borderRadius:'var(--r-sm)',background:'var(--ok-bg)',color:'var(--ok)',cursor:'pointer',fontSize:12,fontWeight:700}}>✓</button>
-          <button title="Cancel" disabled={savingCell} onClick={()=>setEditCell(null)}
-            style={{width:22,height:22,display:'flex',alignItems:'center',justifyContent:'center',border:'none',borderRadius:'var(--r-sm)',background:'var(--err-bg)',color:'var(--err)',cursor:'pointer',fontSize:11,fontWeight:700}}>✕</button>
-        </span>
+        <>
+          <span style={{fontVariantNumeric:'tabular-nums',opacity:.4}}>{fmt(raw)}</span>
+          {/* Fixed-position popover — escapes table scroll/overflow clipping entirely, stacked input ABOVE buttons */}
+          <div onClick={e=>e.stopPropagation()} style={{
+            position:'fixed',top:editPos.top,left:editPos.left,zIndex:2000,
+            background:'var(--surf-0)',border:'1px solid var(--brand)',borderRadius:'var(--r-md)',
+            boxShadow:'0 10px 28px rgba(0,0,0,.18)',padding:8,display:'flex',flexDirection:'column',gap:6,minWidth:104,
+          }}>
+            <input type="number" autoFocus value={editVal} disabled={savingCell}
+              onChange={e=>setEditVal(e.target.value)}
+              onKeyDown={e=>{
+                if(e.key==='Enter'&&editVal)patchField(p,key,editVal);
+                if(e.key==='Escape')setEditCell(null);
+              }}
+              style={{width:'100%',fontSize:13,padding:'4px 6px',borderRadius:'var(--r-sm)',border:'1px solid var(--bdr)',outline:'none',boxSizing:'border-box'}}/>
+            <div style={{display:'flex',gap:6,justifyContent:'center'}}>
+              <button title="Save" disabled={savingCell||!editVal} onClick={()=>patchField(p,key,editVal)}
+                style={{flex:1,height:24,display:'flex',alignItems:'center',justifyContent:'center',border:'none',borderRadius:'var(--r-sm)',background:'var(--ok-bg)',color:'var(--ok)',cursor:'pointer',fontSize:13,fontWeight:700}}>✓</button>
+              <button title="Cancel" disabled={savingCell} onClick={()=>setEditCell(null)}
+                style={{flex:1,height:24,display:'flex',alignItems:'center',justifyContent:'center',border:'none',borderRadius:'var(--r-sm)',background:'var(--err-bg)',color:'var(--err)',cursor:'pointer',fontSize:12,fontWeight:700}}>✕</button>
+            </div>
+          </div>
+        </>
       );
       return(
         <span style={{display:'inline-flex',alignItems:'center',gap:5,fontVariantNumeric:'tabular-nums',cursor:'pointer'}}
-          onClick={e=>{e.stopPropagation();setEditVal(String(Number(raw)));setEditCell({id:p.id,field:key as any});}}
+          onClick={e=>{
+            e.stopPropagation();
+            const r=(e.currentTarget as HTMLElement).getBoundingClientRect();
+            setEditPos({top:r.bottom+6,left:Math.max(8,Math.min(r.left,window.innerWidth-130))});
+            setEditVal(String(Number(raw)));setEditCell({id:p.id,field:key as any});
+          }}
           title="Click to edit">
           {fmt(raw)}
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{opacity:.45}}>
