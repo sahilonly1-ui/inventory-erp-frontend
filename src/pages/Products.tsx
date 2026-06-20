@@ -216,13 +216,15 @@ function BulkImportModal({categories,brands,onClose,onDone}:{categories:Category
     if(!rows.length)return;
     setStep('importing');setImportProgress(10);
     
-    // Animate progress bar while waiting (real progress happens server-side)
+    // Animate progress bar while waiting (real progress happens server-side).
+    // Faster/larger ticks than before so small imports (which finish in under
+    // a second) still show meaningful movement instead of sitting near 10%.
     const progressTimer=setInterval(()=>{
       setImportProgress(prev=>{
-        if(prev>=85)return prev; // hold at 85% until done
-        return prev+Math.random()*3; // slowly creep up
+        if(prev>=88)return prev; // hold just under 100% until the real response lands
+        return prev+4+Math.random()*6;
       });
-    },800);
+    },300);
     
     try{
       const cleanRows=rows.map(({_orig,_category,...r}:any)=>r);
@@ -250,6 +252,10 @@ function BulkImportModal({categories,brands,onClose,onDone}:{categories:Category
       const r=await resp.json();
       const data=r.data||r;
       clearInterval(progressTimer);setImportProgress(100);
+      // Let the bar actually be SEEN at 100% for a beat before flipping to the
+      // result screen — otherwise React batches both updates into one paint
+      // and the user never sees the bar finish, it just vanishes mid-way.
+      await new Promise(res=>setTimeout(res,450));
       setResult({
         created:data.created||0,
         updated:data.updated||0,
@@ -272,7 +278,7 @@ function BulkImportModal({categories,brands,onClose,onDone}:{categories:Category
             <div className="modal-ttl">Bulk Import Products</div>
             <div style={{fontSize:11,color:'var(--txt-3)',marginTop:2}}>Upload CSV · preview · import</div>
           </div>
-          <button onClick={onClose} style={{width:28,height:28,background:'var(--surf-1)',border:'1px solid var(--bdr)',borderRadius:'var(--r-md)',cursor:'pointer',fontSize:14,fontWeight:700,color:'var(--txt-2)'}}>✕</button>
+          <button onClick={()=>{if(step==='done')onDone();onClose();}} style={{width:28,height:28,background:'var(--surf-1)',border:'1px solid var(--bdr)',borderRadius:'var(--r-md)',cursor:'pointer',fontSize:14,fontWeight:700,color:'var(--txt-2)'}}>✕</button>
         </div>
         <div className="modal-body" style={{flex:1,overflowY:'auto'}}>
           {step==='upload'&&(
@@ -1616,8 +1622,6 @@ export default function Products(){
         </div>
         <div className="page-actions">
           <button className="btn btn-primary" onClick={()=>setShowAddProduct(true)} style={{fontSize:12,height:32,padding:'0 12px'}}>+ Add Product</button>
-          <button className="btn btn-secondary" onClick={()=>setShowBrandMaster(true)} style={{fontSize:12,height:32,padding:'0 10px'}}>🏷 Brands</button>
-          <button className="btn btn-secondary" onClick={()=>setShowCatMaster(true)} style={{fontSize:12,height:32,padding:'0 10px'}}>📂 Categories</button>
           <button className="btn btn-secondary" onClick={()=>setShowStatusMgr(true)} style={{fontSize:12,height:32,padding:'0 10px'}}>🔵 Status</button>
           <button className="btn btn-secondary" onClick={()=>{loadMeta();loadProducts();showT('Refreshed ✓');}} style={{fontSize:12,height:32,padding:'0 10px'}} title="Refresh all data">🔄 Refresh</button>
 
@@ -1660,12 +1664,20 @@ export default function Products(){
             {ico:'✅',val:stats?.active,lbl:'Active ↗',clr:'var(--ok)',key:'active'},
             {ico:'🟡',val:stats?.lowStock,lbl:'With Stock ↗',clr:'var(--warn)',key:'low'},
             {ico:'🚫',val:stats?.outOfStock,lbl:'Zero Stock ↗',clr:'var(--err)',key:'out'},
-            {ico:'🏷',val:brands.length,lbl:'Brands ↗',clr:'#7c3aed',key:'brands'},
+            {ico:null,val:brands.length,lbl:'Brands ↗',clr:'#7c3aed',key:'brands'},
             {ico:'📂',val:categories.length,lbl:'Categories ↗',clr:'var(--info)',key:'cats'},
           ].map(k=>(
             <div key={k.lbl} className="kpi-card" style={{cursor:k.key?'pointer':'default'}}
               onClick={()=>{if(k.key==='brands')setShowBrandMaster(true);else if(k.key==='cats')setShowCatMaster(true);else if(k.key)kpiClick(k.key);}}>
-              <div className="kpi-icon" style={{background:'#f8fafc',fontSize:15}}>{k.ico}</div>
+              <div className="kpi-icon" style={{background:'#f8fafc',fontSize:15}}>
+                {k.key==='brands'?(
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 8a4 4 0 1 0-4-4"/>
+                    <path d="M4 13.5V7a2 2 0 0 1 2-2h6.5a2 2 0 0 1 1.41.59l8 8a2 2 0 0 1 0 2.82l-6.59 6.59a2 2 0 0 1-2.82 0l-8-8A2 2 0 0 1 4 13.5Z"/>
+                    <circle cx="8.5" cy="8.5" r="1.25" fill="#7c3aed" stroke="none"/>
+                  </svg>
+                ):k.ico}
+              </div>
               <div className="kpi-value" style={k.clr?{color:k.clr}:{}}>{k.val?.toLocaleString()??'—'}</div>
               <div className="kpi-label">{k.lbl}</div>
             </div>
