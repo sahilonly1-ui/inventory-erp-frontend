@@ -59,10 +59,12 @@ const stockQty=(p:Product)=>(p.stockLevels||[]).reduce((s,l)=>s+l.quantity,0);
 function qs(obj:any){const p=new URLSearchParams();Object.entries(obj).forEach(([k,v])=>{if(v===undefined||v===null||v==='')return;if(Array.isArray(v))v.forEach(x=>p.append(k,String(x)));else p.set(k,String(v));});return p.toString()?'?'+p.toString():'';}
 
 // ── Excel helpers ─────────────────────────────────────────────────────────
-const TEMPLATE_HEADERS = ['EAN','Product Name','Brand','Category','Status','MRP','Cost Price'];
+const TEMPLATE_HEADERS = ['EAN','Product Name','Brand','Category','Status','MRP','Cost Price','Action'];
 
 function downloadTemplate(){
-  const sample=[['8801234567890','Samsung Galaxy A55 8/128GB (Black)','Samsung','Smartphones','ACTIVE','22999','18000']];
+  const sample=[
+    ['8801234567890','Samsung Galaxy A55 8/128GB (Black)','Samsung','Smartphones','ACTIVE','22999','18000','UPDATE'],
+  ];
   const csv=[TEMPLATE_HEADERS,...sample].map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
   const url=URL.createObjectURL(blob);const a=document.createElement('a');
@@ -135,6 +137,7 @@ function BulkImportModal({categories,brands,onClose,onDone}:{categories:Category
         else if(h==='status')obj.status=(['ACTIVE','INACTIVE','DISCONTINUED','OPEN_BOX_ONLY','BLOCKED'].includes(v.toUpperCase())?v.toUpperCase():'ACTIVE');
         else if(h==='cost price'||h==='cost')obj.costPrice=parseFloat(v)||0;
         else if(h==='mrp'||h==='selling price')obj.sellingPrice=parseFloat(v)||0;
+        else if(h==='action')obj.action=(v||'UPDATE').trim().toUpperCase();
         else if(h==='gst%'||h==='gst')obj.gstRate=parseFloat(v)||18;
         else if(h==='hsn code'||h==='hsn')obj.hsnCode=v;
         else if(h==='min stock')obj.minStock=parseInt(v)||0;
@@ -142,6 +145,7 @@ function BulkImportModal({categories,brands,onClose,onDone}:{categories:Category
       });
       if(!obj.status)obj.status='ACTIVE';
       if(!obj.gstRate)obj.gstRate=18;
+      if(!obj.action)obj.action='UPDATE';
       return obj;
     }).filter(r=>r.ean&&r.ean.trim()&&r.model&&r.model.trim());
   };
@@ -251,7 +255,7 @@ function BulkImportModal({categories,brands,onClose,onDone}:{categories:Category
                 <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
                   <thead>
                     <tr style={{background:'var(--surf-1)'}}>
-                      {['EAN','Name','Brand','Category','Status','Cost','MRP'].map(h=>(
+                      {['EAN','Name','Brand','Category','Status','Cost','MRP','Action'].map(h=>(
                         <th key={h} style={{padding:'7px 10px',textAlign:'left',fontWeight:600,color:'var(--txt-3)',fontSize:10,textTransform:'uppercase',borderBottom:'1px solid var(--bdr)'}}>{h}</th>
                       ))}
                     </tr>
@@ -266,9 +270,17 @@ function BulkImportModal({categories,brands,onClose,onDone}:{categories:Category
                         <td style={{padding:'6px 10px'}}><span className={S_CLS[r.status as Status]||'badge b-active'}>{S_LBL[r.status as Status]||r.status}</span></td>
                         <td style={{padding:'6px 10px'}}>{r.costPrice?fmt(r.costPrice):'₹0'}</td>
                         <td style={{padding:'6px 10px'}}>{r.sellingPrice?fmt(r.sellingPrice):'₹0'}</td>
+                        <td style={{padding:'6px 10px'}}>
+                          <span style={{
+                            fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:'var(--r-full)',
+                            background: r.action==='DELETE' ? 'var(--err-bg)' : 'var(--ok-bg)',
+                            color:      r.action==='DELETE' ? 'var(--err)'    : 'var(--ok)',
+                            border: `1px solid ${r.action==='DELETE' ? 'var(--err-bdr)' : 'var(--ok-bdr)'}`,
+                          }}>{r.action||'UPDATE'}</span>
+                        </td>
                       </tr>
                     ))}
-                    {rows.length>10&&<tr><td colSpan={7} style={{padding:'8px 10px',textAlign:'center',color:'var(--txt-3)',fontSize:11}}>...and {rows.length-10} more</td></tr>}
+                    {rows.length>10&&<tr><td colSpan={8} style={{padding:'8px 10px',textAlign:'center',color:'var(--txt-3)',fontSize:11}}>...and {rows.length-10} more</td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -291,11 +303,17 @@ function BulkImportModal({categories,brands,onClose,onDone}:{categories:Category
             <div style={{textAlign:'center',padding:'24px'}}>
               <div style={{fontSize:32,marginBottom:12}}>✅</div>
               <div style={{fontSize:15,fontWeight:700,marginBottom:8}}>Import Complete</div>
-              <div style={{display:'flex',justifyContent:'center',gap:16,marginBottom:12}}>
+              <div style={{display:'flex',justifyContent:'center',gap:16,marginBottom:12,flexWrap:'wrap'}}>
                 <div style={{textAlign:'center'}}><div style={{fontSize:22,fontWeight:800,color:'var(--ok)'}}>{result.created}</div><div style={{fontSize:11,color:'var(--txt-3)'}}>New products</div></div>
                 <div style={{textAlign:'center'}}><div style={{fontSize:22,fontWeight:800,color:'var(--brand)'}}>{result.updated}</div><div style={{fontSize:11,color:'var(--txt-3)'}}>Updated</div></div>
+                {!!result.deleted&&<div style={{textAlign:'center'}}><div style={{fontSize:22,fontWeight:800,color:'var(--err)'}}>{result.deleted}</div><div style={{fontSize:11,color:'var(--txt-3)'}}>Deleted</div></div>}
                 <div style={{textAlign:'center'}}><div style={{fontSize:22,fontWeight:800,color:'var(--err)'}}>{result.totalErrors}</div><div style={{fontSize:11,color:'var(--txt-3)'}}>Errors</div></div>
               </div>
+              {(!!result.brandsRemoved||!!result.categoriesRemoved)&&(
+                <div style={{fontSize:11,color:'var(--txt-3)',marginBottom:10}}>
+                  🧹 Cleaned up {result.brandsRemoved||0} empty brand(s) and {result.categoriesRemoved||0} empty category(ies)
+                </div>
+              )}
               {result.errors?.length>0&&<div style={{textAlign:'left',background:'var(--err-bg)',border:'1px solid var(--err-bdr)',borderRadius:'var(--r-md)',padding:'10px 12px',fontSize:11,color:'var(--err)'}}>{result.errors.map((e:string,i:number)=><div key={i}>{e}</div>)}</div>}
             </div>
           )}
@@ -1137,6 +1155,24 @@ export default function Products(){
     catch(e:any){showT('Error: '+e.message);}finally{setResetting(false);}
   };
 
+  const [deletingAll,setDeletingAll]=useState(false);
+  const handleDeleteAll=async()=>{
+    const total=products?.total||0;
+    const confirmed=confirm(
+      `⚠️ PERMANENTLY DELETE ALL ${total.toLocaleString()} PRODUCTS?\n\n`+
+      `This will delete every product in the system, and remove any brand or category that has no other products left.\n\n`+
+      `This action CANNOT be undone. Type OK to confirm.`
+    );
+    if(!confirmed)return;
+    setDeletingAll(true);
+    try{
+      const r=await api<any>('/products/delete-all',{method:'DELETE'});
+      showT(`Deleted ${r.deleted} products · removed ${r.brandsRemoved||0} brands · ${r.categoriesRemoved||0} categories`);
+      setSel(new Set());loadProducts();loadMeta();
+    }catch(e:any){showT('Error: '+e.message);}
+    finally{setDeletingAll(false);}
+  };
+
   const handleDedup=async()=>{
     if(!confirm('Merge duplicate category names?'))return;
     try{const r=await api<any>('/products/categories/dedup',{method:'POST'});showT(`Merged ${r.deduplicated} duplicates`);loadMeta();}
@@ -1198,18 +1234,23 @@ export default function Products(){
       const isEditing=editCell?.id===p.id&&editCell.field===key;
       const raw=key==='costPrice'?p.costPrice:p.sellingPrice;
       if(isEditing)return(
-        <input type="number" autoFocus defaultValue={Number(raw)} disabled={savingCell}
-          onClick={e=>e.stopPropagation()}
-          onBlur={e=>{const v=e.target.value;if(v&&Number(v)!==Number(raw))patchField(p,key,v);else setEditCell(null);}}
-          onKeyDown={e=>{
-            if(e.key==='Enter'){const v=(e.target as HTMLInputElement).value;if(v)patchField(p,key,v);}
-            if(e.key==='Escape')setEditCell(null);
-          }}
-          style={{width:80,fontSize:13,padding:'3px 6px',borderRadius:'var(--r-sm)',border:'1px solid var(--brand)',outline:'none'}}/>
+        <span style={{display:'inline-flex',alignItems:'center',gap:4}} onClick={e=>e.stopPropagation()}>
+          <input type="number" autoFocus value={editVal} disabled={savingCell}
+            onChange={e=>setEditVal(e.target.value)}
+            onKeyDown={e=>{
+              if(e.key==='Enter'&&editVal)patchField(p,key,editVal);
+              if(e.key==='Escape')setEditCell(null);
+            }}
+            style={{width:74,fontSize:13,padding:'3px 6px',borderRadius:'var(--r-sm)',border:'1px solid var(--brand)',outline:'none'}}/>
+          <button title="Save" disabled={savingCell||!editVal} onClick={()=>patchField(p,key,editVal)}
+            style={{width:22,height:22,display:'flex',alignItems:'center',justifyContent:'center',border:'none',borderRadius:'var(--r-sm)',background:'var(--ok-bg)',color:'var(--ok)',cursor:'pointer',fontSize:12,fontWeight:700}}>✓</button>
+          <button title="Cancel" disabled={savingCell} onClick={()=>setEditCell(null)}
+            style={{width:22,height:22,display:'flex',alignItems:'center',justifyContent:'center',border:'none',borderRadius:'var(--r-sm)',background:'var(--err-bg)',color:'var(--err)',cursor:'pointer',fontSize:11,fontWeight:700}}>✕</button>
+        </span>
       );
       return(
         <span style={{display:'inline-flex',alignItems:'center',gap:5,fontVariantNumeric:'tabular-nums',cursor:'pointer'}}
-          onClick={e=>{e.stopPropagation();setEditCell({id:p.id,field:key as any});}}
+          onClick={e=>{e.stopPropagation();setEditVal(String(Number(raw)));setEditCell({id:p.id,field:key as any});}}
           title="Click to edit">
           {fmt(raw)}
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{opacity:.45}}>
@@ -1252,6 +1293,8 @@ export default function Products(){
 
           <DD label="Tools ▾">
             <button className="dd-item" onClick={handleResetStock} disabled={resetting} style={{color:'var(--err)'}}>{resetting?'Resetting…':'⚠ Reset All Stock to Zero'}</button>
+            <hr className="dd-divider"/>
+            <button className="dd-item" onClick={handleDeleteAll} disabled={deletingAll} style={{color:'var(--err)',fontWeight:700}}>{deletingAll?'Deleting…':'🗑️ Delete ALL Products'}</button>
           </DD>
 
           <DD label={`Views${views.length>0?` (${views.length})`:''}`}>
@@ -1398,8 +1441,9 @@ export default function Products(){
                 if(!window.confirm(`Permanently delete ${sel.size} product(s)? This cannot be undone.`))return;
                 try{
                   const ids=[...sel];
-                  await api('/products/bulk-delete',{method:'DELETE',body:JSON.stringify({ids})});
-                  showT(`Deleted ${ids.length} products`);
+                  const r=await api<any>('/products/bulk-delete',{method:'DELETE',body:JSON.stringify({ids})});
+                  const extra=(r.brandsRemoved||r.categoriesRemoved)?` · removed ${r.brandsRemoved||0} brand(s), ${r.categoriesRemoved||0} category(ies)`:'';
+                  showT(`Deleted ${r.deleted??ids.length} products${extra}`);
                   setSel(new Set());setBulkAction('');setBulkVal('');
                   loadProducts();loadMeta();
                 }catch(e:any){showT('Delete failed: '+e.message);}
