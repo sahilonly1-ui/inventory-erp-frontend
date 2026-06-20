@@ -152,10 +152,15 @@ function BulkImportModal({categories,brands,onClose,onDone}:{categories:Category
   const [importProgress,setImportProgress]=useState(0);
 
   const parseCSV=(text:string)=>{
-      const lines=text.split('\n').map(l=>l.trim().replace(/\r/,'')).filter(l=>l.length>0);
-    if(!lines.length)return[];
+      // A line of only commas/whitespace (Excel often leaves these behind after
+      // clearing cell contents without deleting the row) is blank — drop it up
+      // front so it never even reaches per-row parsing.
+      const isBlankLine=(l:string)=>/^[,\s]*$/.test(l);
+      const lines=text.split('\n').map(l=>l.replace(/\r/,'')).filter(l=>l.trim().length>0&&!isBlankLine(l));
+    if(!lines.length)return{rows:[],skippedBlank:0,totalLines:0};
     const headers=lines[0].split(',').map(h=>h.trim().replace(/^"|"$/g,'').toLowerCase());
-    return lines.slice(1).filter(l=>l.trim()).map(line=>{
+    const dataLines=lines.slice(1);
+    const parsedRows=dataLines.map(line=>{
       const vals:string[]=[];let cur='';let inQ=false;
       for(const c of line){if(c==='"')inQ=!inQ;else if(c===','&&!inQ){vals.push(cur.trim());cur='';}else cur+=c;}
       vals.push(cur.trim());
@@ -179,14 +184,29 @@ function BulkImportModal({categories,brands,onClose,onDone}:{categories:Category
       if(!obj.gstRate)obj.gstRate=18;
       if(!obj.action)obj.action='UPDATE';
       return obj;
-    }).filter(r=>r.ean&&r.ean.trim()&&r.model&&r.model.trim());
+    });
+    const validRows=parsedRows.filter(r=>r.ean&&r.ean.trim()&&r.model&&r.model.trim());
+    return{rows:validRows,skippedBlank:dataLines.length-validRows.length,totalLines:dataLines.length};
   };
+
+  const [skippedInfo,setSkippedInfo]=useState<{skipped:number;total:number}|null>(null);
 
   const handleFile=(e:React.ChangeEvent<HTMLInputElement>)=>{
     const f=e.target.files?.[0];if(!f)return;
     const reader=new FileReader();
     reader.onload=ev=>{
-      try{const parsed=parseCSV(ev.target?.result as string);setRows(parsed);setStep('preview');setErr('');}
+      try{
+        const{rows:parsed,skippedBlank,totalLines}=parseCSV(ev.target?.result as string);
+        if(!parsed.length){
+          setErr(totalLines>0
+            ?`No valid rows found. The file has ${totalLines} data line(s) but none had both an EAN and a Product Name — check those two columns.`
+            :'The file appears to be empty.');
+          setRows([]);setSkippedInfo(null);
+          return;
+        }
+        setRows(parsed);setStep('preview');setErr('');
+        setSkippedInfo(skippedBlank>0?{skipped:skippedBlank,total:totalLines}:null);
+      }
       catch(e:any){setErr('Parse error: '+e.message);}
     };
     reader.readAsText(f,'UTF-8');
@@ -280,9 +300,14 @@ function BulkImportModal({categories,brands,onClose,onDone}:{categories:Category
           )}
           {step==='preview'&&(
             <>
-              <div style={{fontSize:13,fontWeight:500,marginBottom:10,color:'var(--txt)'}}>
+              <div style={{fontSize:13,fontWeight:500,marginBottom:6,color:'var(--txt)'}}>
                 {rows.length} products ready to import. Review before importing:
               </div>
+              {skippedInfo&&(
+                <div style={{fontSize:11,color:'var(--txt-3)',marginBottom:10}}>
+                  Skipped {skippedInfo.skipped} blank/incomplete row{skippedInfo.skipped!==1?'s':''} out of {skippedInfo.total} in the file (missing EAN or Product Name)
+                </div>
+              )}
               <div style={{overflowX:'auto',border:'1px solid var(--bdr)',borderRadius:'var(--r-md)'}}>
                 <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
                   <thead>
