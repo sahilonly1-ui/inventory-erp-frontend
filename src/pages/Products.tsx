@@ -347,8 +347,13 @@ function BulkImportModal({categories,brands,onClose,onDone}:{categories:Category
                 </div>
               )}
               {(!!result.brandsRemoved||!!result.categoriesRemoved)&&(
-                <div style={{fontSize:11,color:'var(--txt-3)',marginBottom:10}}>
+                <div style={{fontSize:11,color:'var(--txt-3)',marginBottom:6}}>
                   🧹 Cleaned up {result.brandsRemoved||0} empty brand(s) and {result.categoriesRemoved||0} empty category(ies)
+                </div>
+              )}
+              {!!result.inFileDuplicates&&(
+                <div style={{fontSize:11,color:'var(--warn)',marginBottom:10}}>
+                  ⚠ {result.inFileDuplicates} duplicate EAN row(s) found in this file — only the last occurrence of each was used
                 </div>
               )}
               {result.errors?.length>0&&<div style={{textAlign:'left',background:'var(--err-bg)',border:'1px solid var(--err-bdr)',borderRadius:'var(--r-md)',padding:'10px 12px',fontSize:11,color:'var(--err)'}}>{result.errors.map((e:string,i:number)=><div key={i}>{e}</div>)}</div>}
