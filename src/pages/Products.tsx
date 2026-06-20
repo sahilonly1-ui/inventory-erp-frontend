@@ -837,40 +837,288 @@ function BrandMaster({brands,onClose,onRefresh}:{brands:Brand[];onClose:()=>void
 // ── Category Master ───────────────────────────────────────────────────────
 function CategoryMaster({categories,onClose,onRefresh}:{categories:Category[];onClose:()=>void;onRefresh:()=>void}){
   const [newName,setNewName]=useState('');
+  const [editId,setEditId]=useState<string|null>(null);
+  const [editName,setEditName]=useState('');
   const [busy,setBusy]=useState('');
   const [search,setSearch]=useState('');
+  const [tab,setTab]=useState<'list'|'import'>('list');
+  const [importRows,setImportRows]=useState<{name:string;action:string;_orig?:string}[]>([]);
+  const [importBusy,setImportBusy]=useState(false);
+  const [importResult,setImportResult]=useState<any>(null);
+
   const flat=categories.filter(c=>!c.parentId);
   const filtered=flat.filter(c=>c.name.toLowerCase().includes(search.toLowerCase()));
-  const add=async()=>{if(!newName.trim())return;setBusy('add');try{await api('/products/categories',{method:'POST',body:JSON.stringify({name:newName.trim()})});setNewName('');onRefresh();}finally{setBusy('');}};
-  const del=async(id:string,name:string)=>{if(!confirm(`Delete "${name}"?`))return;setBusy(id);try{await api(`/products/categories/${id}`,{method:'DELETE'});onRefresh();}finally{setBusy('');}};
   const inp={height:34,padding:'0 10px',border:'1px solid var(--bdr)',borderRadius:'var(--r-md)',fontSize:13,outline:'none'};
+
+  // ── Export categories to CSV ──
+  const exportCategories=()=>{
+    const rows=['Name,Action',...flat.map(c=>'"'+c.name+'",ADD')];
+    const csv=rows.join('\n');
+    const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
+    const url=URL.createObjectURL(blob);const a=document.createElement('a');
+    a.href=url;a.download='Categories_'+new Date().toISOString().slice(0,10)+'.csv';
+    document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+  };
+
+  // ── Download blank template ──
+  const downloadTemplate=()=>{
+    const csv='Name,Action\nSmartphones,ADD\nHeadphones,ADD\nCables & Chargers,ADD\nOld Category,DELETE\nWrong Name,UPDATE';
+    const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
+    const url=URL.createObjectURL(blob);const a=document.createElement('a');
+    a.href=url;a.download='Category_Import_Template.csv';
+    document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+  };
+
+  // ── Parse CSV file ──
+  const handleFile=(e:React.ChangeEvent<HTMLInputElement>)=>{
+    const f=e.target.files?.[0];if(!f)return;
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      const text=ev.target?.result as string;
+      const lines=text.split('\n').map(l=>l.trim().replace(/\r/,'')).filter(l=>l.length>0);
+      if(!lines.length)return;
+      const isHeader=lines[0].toLowerCase().includes('name');
+      const rows=lines.slice(isHeader?1:0).filter(l=>l.trim()).map(line=>{
+        const parts=line.split(',').map(v=>v.trim().replace(/^"|"$/g,''));
+        return { name:parts[0]||'', action:(parts[1]||'ADD').toUpperCase(), _orig:line };
+      }).filter(r=>r.name);
+      setImportRows(rows);setImportResult(null);
+    };
+    reader.readAsText(f,'UTF-8');
+    e.target.value='';
+  };
+
+  // ── Run import ──
+  const runImport=async()=>{
+    if(!importRows.length)return;
+    setImportBusy(true);
+    try{
+      const r=await api<any>('/products/categories/bulk-import',{method:'POST',body:JSON.stringify({rows:importRows})});
+      setImportResult(r);onRefresh();
+    }catch(e:any){setImportResult({error:e.message});}
+    finally{setImportBusy(false);}
+  };
+
+  const add=async()=>{if(!newName.trim())return;setBusy('add');try{await api('/products/categories',{method:'POST',body:JSON.stringify({name:newName.trim()})});setNewName('');onRefresh();}finally{setBusy('');}};
+  const save=async(id:string)=>{setBusy(id);try{await api(`/products/categories/${id}`,{method:'PATCH',body:JSON.stringify({name:editName.trim()})});setEditId(null);onRefresh();}finally{setBusy('');}};
+  const del=async(id:string,name:string)=>{if(!confirm(`Delete "${name}"?`))return;setBusy(id+'-d');try{await api(`/products/categories/${id}`,{method:'DELETE'});onRefresh();}finally{setBusy('');}};
+
   return(
     <div className="modal-overlay" onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
-      <div className="modal" style={{width:440,maxHeight:'75vh',display:'flex',flexDirection:'column'}}>
+      <div className="modal" style={{width:560,maxHeight:'85vh',display:'flex',flexDirection:'column'}}>
+        {/* Header */}
         <div className="modal-hdr" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-          <div><div className="modal-ttl">Category Master</div><div style={{fontSize:11,color:'var(--txt-3)',marginTop:1}}>{flat.length} categories</div></div>
-          <button onClick={onClose} style={{width:28,height:28,background:'var(--err-bg)',border:'1px solid var(--err-bdr)',borderRadius:'var(--r-md)',cursor:'pointer',fontSize:14,fontWeight:700,color:'var(--err)'}}>✕</button>
-        </div>
-        <div className="modal-body" style={{flex:1,overflowY:'auto',paddingTop:12}}>
-          <div style={{display:'flex',gap:6,marginBottom:10}}>
-            <input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="New category…"
-              onKeyDown={e=>e.key==='Enter'&&add()} style={{...inp,flex:1}}/>
-            <button onClick={add} disabled={busy==='add'||!newName.trim()}
-              style={{height:34,padding:'0 14px',background:'var(--brand)',color:'#fff',border:'none',borderRadius:'var(--r-md)',fontSize:13,fontWeight:600,cursor:'pointer'}}>
-              {busy==='add'?'…':'+ Add'}
-            </button>
+          <div>
+            <div className="modal-ttl">Category Master</div>
+            <div style={{fontSize:11,color:'var(--txt-3)',marginTop:1}}>{flat.length} categories total</div>
           </div>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search…"
-            style={{...inp,width:'100%',height:30,fontSize:12,marginBottom:8}}/>
-          {filtered.map(c=>(
-            <div key={c.id} style={{display:'flex',alignItems:'center',gap:7,padding:'7px 10px',background:'var(--surf-1)',border:'1px solid var(--bdr-s)',borderRadius:'var(--r-md)',marginBottom:4}}>
-              <span style={{flex:1,fontSize:13,fontWeight:500}}>{c.name}</span>
-              <button onClick={()=>del(c.id,c.name)} disabled={busy===c.id}
-                style={{height:24,padding:'0 8px',fontSize:11,background:'none',border:'1px solid var(--err-bdr)',borderRadius:'var(--r-sm)',cursor:'pointer',color:'var(--err)'}}>
-                {busy===c.id?'…':'Delete'}
-              </button>
-            </div>
+          <div style={{display:'flex',gap:6,alignItems:'center'}}>
+            <button onClick={exportCategories} title="Export all categories to CSV"
+              style={{height:28,padding:'0 10px',background:'var(--ok-bg)',border:'1px solid var(--ok-bdr)',borderRadius:'var(--r-md)',fontSize:11,fontWeight:600,cursor:'pointer',color:'var(--ok)',display:'flex',alignItems:'center',gap:4}}>
+              <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Export CSV
+            </button>
+            <button onClick={downloadTemplate} title="Download import template"
+              style={{height:28,padding:'0 10px',background:'var(--info-bg)',border:'1px solid var(--info-bdr)',borderRadius:'var(--r-md)',fontSize:11,fontWeight:600,cursor:'pointer',color:'var(--info)',display:'flex',alignItems:'center',gap:4}}>
+              <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              Template
+            </button>
+            <button onClick={onClose} style={{width:28,height:28,background:'var(--err-bg)',border:'1px solid var(--err-bdr)',borderRadius:'var(--r-md)',cursor:'pointer',fontSize:14,fontWeight:700,color:'var(--err)'}}>✕</button>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div style={{display:'flex',borderBottom:'1px solid var(--bdr)',padding:'0 20px'}}>
+          {(['list','import'] as const).map(t=>(
+            <button key={t} onClick={()=>setTab(t)}
+              style={{padding:'9px 14px',fontSize:12,fontWeight:tab===t?600:500,color:tab===t?'var(--brand)':'var(--txt-3)',
+                border:'none',borderBottom:`2px solid ${tab===t?'var(--brand)':'transparent'}`,
+                background:'none',cursor:'pointer',transition:'color .12s'}}>
+              {t==='list'?`📋 Manage (${flat.length})`:'📥 Bulk Import/Edit'}
+            </button>
           ))}
+        </div>
+
+        {/* Body */}
+        <div style={{flex:1,overflowY:'auto',padding:'16px 20px'}}>
+          {tab==='list'&&(
+            <>
+              <div style={{display:'flex',gap:6,marginBottom:12}}>
+                <input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="Type new category name and press Enter…"
+                  onKeyDown={e=>e.key==='Enter'&&add()}
+                  style={{...inp,flex:1,height:36}}/>
+                <button onClick={add} disabled={busy==='add'||!newName.trim()}
+                  style={{height:36,padding:'0 16px',background:'var(--brand)',color:'#fff',border:'none',borderRadius:'var(--r-md)',fontSize:13,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>
+                  {busy==='add'?'Adding…':'+ Add Category'}
+                </button>
+              </div>
+
+              <div style={{position:'relative',marginBottom:10}}>
+                <span style={{position:'absolute',left:10,top:'50%',transform:'translateY(-50%)',color:'var(--txt-3)',pointerEvents:'none'}}>
+                  <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                </span>
+                <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search categories…"
+                  style={{...inp,width:'100%',height:32,fontSize:12,paddingLeft:30}}/>
+              </div>
+
+              <div style={{fontSize:11,color:'var(--txt-3)',marginBottom:8}}>
+                {filtered.length} categor{filtered.length!==1?'ies':'y'} {search&&`matching "${search}"`}
+              </div>
+
+              <div style={{display:'flex',flexDirection:'column',gap:3}}>
+                {filtered.map((c,i)=>(
+                  <div key={c.id} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',
+                    background:i%2===0?'var(--surf-1)':'var(--surf-0)',
+                    border:'1px solid var(--bdr-s)',borderRadius:'var(--r-md)'}}>
+                    {editId===c.id?(
+                      <>
+                        <input autoFocus value={editName} onChange={e=>setEditName(e.target.value)}
+                          onKeyDown={e=>{if(e.key==='Enter')save(c.id);if(e.key==='Escape')setEditId(null);}}
+                          style={{flex:1,height:30,padding:'0 10px',border:'1.5px solid var(--brand)',borderRadius:'var(--r-md)',fontSize:13,outline:'none',boxShadow:'0 0 0 3px rgba(37,99,235,.1)'}}/>
+                        <button onClick={()=>save(c.id)} disabled={busy===c.id}
+                          style={{height:28,padding:'0 12px',fontSize:12,fontWeight:600,background:'var(--brand)',color:'#fff',border:'none',borderRadius:'var(--r-md)',cursor:'pointer',whiteSpace:'nowrap'}}>
+                          {busy===c.id?'Saving…':'✓ Save'}
+                        </button>
+                        <button onClick={()=>setEditId(null)}
+                          style={{height:28,padding:'0 10px',fontSize:12,background:'var(--surf-2)',border:'1px solid var(--bdr)',borderRadius:'var(--r-md)',cursor:'pointer',color:'var(--txt-2)'}}>
+                          Cancel
+                        </button>
+                      </>
+                    ):(
+                      <>
+                        <div style={{width:26,height:26,background:'var(--brand-l)',borderRadius:'var(--r-sm)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                          <span style={{fontSize:11,fontWeight:700,color:'var(--brand)'}}>{c.name[0]?.toUpperCase()}</span>
+                        </div>
+                        <span style={{flex:1,fontSize:13,fontWeight:500,color:'var(--txt)'}}>{c.name}</span>
+                        <button onClick={()=>{setEditId(c.id);setEditName(c.name);}}
+                          style={{height:26,padding:'0 10px',fontSize:11,fontWeight:600,background:'var(--surf-0)',border:'1px solid var(--bdr-h)',borderRadius:'var(--r-md)',cursor:'pointer',color:'var(--txt-2)',whiteSpace:'nowrap'}}>
+                          ✎ Edit
+                        </button>
+                        <button onClick={()=>del(c.id,c.name)} disabled={busy===c.id+'-d'}
+                          style={{height:26,padding:'0 10px',fontSize:11,fontWeight:600,background:'var(--err-bg)',border:'1px solid var(--err-bdr)',borderRadius:'var(--r-md)',cursor:'pointer',color:'var(--err)',whiteSpace:'nowrap'}}>
+                          {busy===c.id+'-d'?'…':'🗑 Delete'}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                ))}
+                {filtered.length===0&&(
+                  <div style={{textAlign:'center',padding:'32px 0',color:'var(--txt-3)'}}>
+                    <div style={{fontSize:24,marginBottom:8}}>🔍</div>
+                    <div style={{fontSize:13}}>{search?`No categories matching "${search}"`:'No categories yet — add one above'}</div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {tab==='import'&&(
+            <>
+              <div style={{background:'var(--info-bg)',border:'1px solid var(--info-bdr)',borderRadius:'var(--r-md)',padding:'12px 14px',marginBottom:14,fontSize:12,color:'var(--info)',lineHeight:1.6}}>
+                <strong>How it works:</strong><br/>
+                • Export current categories → edit in Excel → re-import<br/>
+                • Or download the template, fill category names, set Action column<br/>
+                • <strong>Action column:</strong> <code style={{background:'rgba(2,132,199,.1)',padding:'1px 5px',borderRadius:3}}>ADD</code> = create new &nbsp;
+                <code style={{background:'rgba(2,132,199,.1)',padding:'1px 5px',borderRadius:3}}>UPDATE</code> = rename existing &nbsp;
+                <code style={{background:'rgba(2,132,199,.1)',padding:'1px 5px',borderRadius:3}}>DELETE</code> = remove category
+              </div>
+
+              {!importRows.length&&!importResult&&(
+                <div
+                  onClick={()=>document.getElementById('category-import-file')?.click()}
+                  style={{border:'2px dashed var(--bdr)',borderRadius:'var(--r-lg)',padding:'36px 24px',textAlign:'center',cursor:'pointer',transition:'border-color .15s,background .15s'}}
+                  onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.borderColor='var(--brand)';(e.currentTarget as HTMLElement).style.background='var(--brand-l)';}}
+                  onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.borderColor='var(--bdr)';(e.currentTarget as HTMLElement).style.background='';}}
+                >
+                  <div style={{fontSize:32,marginBottom:10}}>📂</div>
+                  <div style={{fontSize:14,fontWeight:600,color:'var(--txt)',marginBottom:4}}>Click to upload CSV</div>
+                  <div style={{fontSize:12,color:'var(--txt-3)'}}>Export first, edit in Excel, then re-upload</div>
+                  <input id="category-import-file" type="file" accept=".csv,.txt" style={{display:'none'}} onChange={handleFile}/>
+                </div>
+              )}
+
+              {importRows.length>0&&!importResult&&(
+                <>
+                  <div style={{fontSize:13,fontWeight:600,marginBottom:10,color:'var(--txt)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                    <span>{importRows.length} rows ready to process</span>
+                    <button onClick={()=>setImportRows([])} style={{fontSize:11,background:'none',border:'none',color:'var(--txt-3)',cursor:'pointer'}}>← Upload different file</button>
+                  </div>
+                  <div style={{border:'1px solid var(--bdr)',borderRadius:'var(--r-md)',overflow:'hidden',marginBottom:12}}>
+                    <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+                      <thead>
+                        <tr style={{background:'var(--surf-1)'}}>
+                          <th style={{padding:'7px 12px',textAlign:'left',fontWeight:600,color:'var(--txt-3)',fontSize:10,textTransform:'uppercase',borderBottom:'1px solid var(--bdr)'}}>Category Name</th>
+                          <th style={{padding:'7px 12px',textAlign:'left',fontWeight:600,color:'var(--txt-3)',fontSize:10,textTransform:'uppercase',borderBottom:'1px solid var(--bdr)',width:90}}>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {importRows.slice(0,15).map((r,i)=>(
+                          <tr key={i} style={{borderBottom:'1px solid var(--bdr-s)'}}>
+                            <td style={{padding:'7px 12px',fontWeight:500}}>{r.name}</td>
+                            <td style={{padding:'7px 12px'}}>
+                              <span style={{
+                                display:'inline-flex',alignItems:'center',padding:'2px 8px',borderRadius:'var(--r-full)',fontSize:10,fontWeight:700,
+                                background:r.action==='DELETE'?'var(--err-bg)':r.action==='UPDATE'?'var(--brand-l)':'var(--ok-bg)',
+                                color:r.action==='DELETE'?'var(--err)':r.action==='UPDATE'?'var(--brand)':'var(--ok)',
+                              }}>
+                                {r.action}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                        {importRows.length>15&&(
+                          <tr><td colSpan={2} style={{padding:'7px 12px',textAlign:'center',color:'var(--txt-3)',fontSize:11}}>…and {importRows.length-15} more</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div style={{display:'flex',gap:8}}>
+                    <button onClick={()=>{document.getElementById('category-import-file')?.click();}}
+                      style={{height:34,padding:'0 14px',background:'var(--surf-0)',border:'1px solid var(--bdr)',borderRadius:'var(--r-md)',fontSize:13,cursor:'pointer',color:'var(--txt-2)'}}>
+                      Change File
+                    </button>
+                    <button onClick={runImport} disabled={importBusy}
+                      style={{height:34,padding:'0 20px',background:'var(--brand)',color:'#fff',border:'none',borderRadius:'var(--r-md)',fontSize:13,fontWeight:700,cursor:'pointer',flex:1}}>
+                      {importBusy?'Processing…':`Apply ${importRows.length} Changes`}
+                    </button>
+                    <input id="category-import-file" type="file" accept=".csv,.txt" style={{display:'none'}} onChange={handleFile}/>
+                  </div>
+                </>
+              )}
+
+              {importResult&&(
+                <div style={{textAlign:'center',padding:'24px 0'}}>
+                  {importResult.error?(
+                    <>
+                      <div style={{fontSize:32,marginBottom:10}}>❌</div>
+                      <div style={{fontSize:14,fontWeight:600,color:'var(--err)',marginBottom:8}}>Import Failed</div>
+                      <div style={{fontSize:12,color:'var(--err)',background:'var(--err-bg)',border:'1px solid var(--err-bdr)',borderRadius:'var(--r-md)',padding:'10px 14px'}}>{importResult.error}</div>
+                    </>
+                  ):(
+                    <>
+                      <div style={{fontSize:36,marginBottom:12}}>✅</div>
+                      <div style={{fontSize:15,fontWeight:700,color:'var(--txt)',marginBottom:14}}>Import Complete</div>
+                      <div style={{display:'flex',justifyContent:'center',gap:20,marginBottom:14}}>
+                        <div><div style={{fontSize:24,fontWeight:800,color:'var(--ok)'}}>{importResult.created}</div><div style={{fontSize:11,color:'var(--txt-3)'}}>Created</div></div>
+                        <div><div style={{fontSize:24,fontWeight:800,color:'var(--brand)'}}>{importResult.updated}</div><div style={{fontSize:11,color:'var(--txt-3)'}}>Updated</div></div>
+                        <div><div style={{fontSize:24,fontWeight:800,color:'var(--warn)'}}>{importResult.deleted}</div><div style={{fontSize:11,color:'var(--txt-3)'}}>Deleted</div></div>
+                        <div><div style={{fontSize:24,fontWeight:800,color:'var(--err)'}}>{importResult.totalErrors}</div><div style={{fontSize:11,color:'var(--txt-3)'}}>Errors</div></div>
+                      </div>
+                      {importResult.errors?.length>0&&(
+                        <div style={{textAlign:'left',background:'var(--err-bg)',border:'1px solid var(--err-bdr)',borderRadius:'var(--r-md)',padding:'10px 12px',fontSize:11,color:'var(--err)',marginBottom:10}}>
+                          {importResult.errors.map((e:string,i:number)=><div key={i}>• {e}</div>)}
+                        </div>
+                      )}
+                    </>
+                  )}
+                  <button onClick={()=>{setImportRows([]);setImportResult(null);}}
+                    style={{height:32,padding:'0 16px',background:'var(--surf-1)',border:'1px solid var(--bdr)',borderRadius:'var(--r-md)',fontSize:12,cursor:'pointer',color:'var(--txt-2)',marginTop:8}}>
+                    Import Another File
+                  </button>
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
     </div>
