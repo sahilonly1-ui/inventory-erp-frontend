@@ -53,6 +53,38 @@ const S_CLS:Record<Status,string>={ACTIVE:'badge b-active',INACTIVE:'badge b-ina
 const S_LBL:Record<Status,string>={ACTIVE:'Active',INACTIVE:'Inactive',DISCONTINUED:'Discontinued',OPEN_BOX_ONLY:'Open Box',BLOCKED:'Blocked'};
 
 const fmt=(n:string|number)=>'₹'+Number(n).toLocaleString('en-IN',{maximumFractionDigits:0});
+
+// ── Human-readable history diff ─────────────────────────────────────────────
+const HIST_LABELS:Record<string,string>={
+  model:'Product Name',brand:'Brand',categoryId:'Category',status:'Status',
+  costPrice:'Cost Price',sellingPrice:'MRP',ean:'EAN',minStock:'Min Stock',
+  gstRate:'GST %',hsnCode:'HSN Code',vendorId:'Vendor',
+};
+function histDisplay(key:string,val:any,ctx:any):string{
+  if(val===null||val===undefined||val==='')return'—';
+  if(key==='costPrice'||key==='sellingPrice')return fmt(val);
+  if(key==='status')return S_LBL[val as Status]||String(val);
+  if(key==='categoryId')return ctx?.categoryName??'—';
+  return String(val);
+}
+function formatHistoryLines(h:any):string[]{
+  if(h.action==='CREATE')return['Product created'];
+  if(h.action==='DELETE')return['Product deleted'];
+  const nv=h.newValue||{};const ov=h.oldValue||{};
+  if(nv.bulk){
+    const keys=Object.keys(nv).filter(k=>k!=='bulk');
+    if(!keys.length)return['Bulk update applied'];
+    return[`Bulk update: ${keys.map(k=>HIST_LABELS[k]||k).join(', ')}`];
+  }
+  const keys=Object.keys(nv).filter(k=>k!=='categoryName');
+  if(!keys.length)return['Updated'];
+  return keys.map(k=>{
+    const label=HIST_LABELS[k]||k;
+    const before=histDisplay(k,ov[k],ov);
+    const after=histDisplay(k,nv[k],nv);
+    return before===after?`${label} set to ${after}`:`${label}: ${before} → ${after}`;
+  });
+}
 const fmtDate=(s:string)=>new Date(s).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'});
 const stockQty=(p:Product)=>(p.stockLevels||[]).reduce((s,l)=>s+l.quantity,0);
 
@@ -133,7 +165,7 @@ function BulkImportModal({categories,brands,onClose,onDone}:{categories:Category
         if(h==='ean'||h==='barcode')obj.ean=v;
         else if(h==='product name'||h==='model'||h==='name')obj.model=v;
         else if(h==='brand')obj.brand=v;
-        else if(h==='category'){const cat=categories.find(c=>c.name.toLowerCase()===v.toLowerCase());obj.categoryId=cat?.id;obj._category=v;}
+        else if(h==='category'){const cat=categories.find(c=>c.name.toLowerCase()===v.toLowerCase());obj.categoryId=cat?.id;obj._category=v;obj.categoryName=v;}
         else if(h==='status')obj.status=(['ACTIVE','INACTIVE','DISCONTINUED','OPEN_BOX_ONLY','BLOCKED'].includes(v.toUpperCase())?v.toUpperCase():'ACTIVE');
         else if(h==='cost price'||h==='cost')obj.costPrice=parseFloat(v)||0;
         else if(h==='mrp'||h==='selling price')obj.sellingPrice=parseFloat(v)||0;
@@ -309,6 +341,11 @@ function BulkImportModal({categories,brands,onClose,onDone}:{categories:Category
                 {!!result.deleted&&<div style={{textAlign:'center'}}><div style={{fontSize:22,fontWeight:800,color:'var(--err)'}}>{result.deleted}</div><div style={{fontSize:11,color:'var(--txt-3)'}}>Deleted</div></div>}
                 <div style={{textAlign:'center'}}><div style={{fontSize:22,fontWeight:800,color:'var(--err)'}}>{result.totalErrors}</div><div style={{fontSize:11,color:'var(--txt-3)'}}>Errors</div></div>
               </div>
+              {(!!result.brandsCreated||!!result.categoriesCreated)&&(
+                <div style={{fontSize:11,color:'var(--ok)',marginBottom:6}}>
+                  ✓ Auto-created {result.brandsCreated||0} new brand(s) and {result.categoriesCreated||0} new category(ies)
+                </div>
+              )}
               {(!!result.brandsRemoved||!!result.categoriesRemoved)&&(
                 <div style={{fontSize:11,color:'var(--txt-3)',marginBottom:10}}>
                   🧹 Cleaned up {result.brandsRemoved||0} empty brand(s) and {result.categoriesRemoved||0} empty category(ies)
@@ -941,8 +978,13 @@ function Drawer({pid,brands,categories,onClose,onUpdated}:{pid:string;brands:Bra
                   {(p.history||[]).map((h:any)=>(
                     <div key={h.id} className="hist-item">
                       <div className={`hist-dot ${h.action?.toLowerCase()}`}/>
-                      <div style={{flex:1}}><div className="hist-action">{h.action}</div><div className="hist-time">{new Date(h.createdAt).toLocaleString('en-IN')}</div>
-                        {h.newValue&&<div className="hist-json">{JSON.stringify(h.newValue,null,2)}</div>}</div>
+                      <div style={{flex:1}}>
+                        <div className="hist-action">{h.action}</div>
+                        <div className="hist-time">{new Date(h.createdAt).toLocaleString('en-IN')}</div>
+                        <div className="hist-diff">
+                          {formatHistoryLines(h).map((line,i)=><div key={i}>{line}</div>)}
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </>

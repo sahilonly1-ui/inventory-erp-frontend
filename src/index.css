@@ -234,7 +234,7 @@ input,select,textarea{font-family:inherit}
 .hist-dot.create{background:var(--ok)}.hist-dot.update{background:var(--brand)}.hist-dot.delete{background:var(--err)}
 .hist-action{font-size:11px;font-weight:600;margin-bottom:1px}
 .hist-time{font-size:11px;color:var(--txt-3)}
-.hist-json{font-family:var(--mono);font-size:10px;color:var(--txt-3);background:var(--surf-1);border-radius:var(--r-sm);padding:5px 7px;margin-top:3px;overflow-x:auto;white-space:pre-wrap;word-break:break-all}
+.hist-diff{font-size:11px;color:var(--txt-2);margin-top:4px;display:flex;flex-direction:column;gap:3px;line-height:1.4}
 
 /* ── Dropdown ── */
 .dd{position:relative;display:inline-block}
