@@ -5,11 +5,14 @@ import { getAccessToken } from '../api/client';
 import { connectSocket, disconnectSocket } from '../realtime/socket';
 
 const NAV = [
-  { to: '/', label: 'Dashboard', icon: '▦' },
-  { to: '/products', label: 'Products', icon: '⬡' },
-  { to: '/inventory', label: 'Inventory', icon: '⊟' },
-  { to: '/imei', label: 'IMEI', icon: '⊕' },
-  { to: '/versions', label: 'Versions', icon: '🕓' },
+  { to: '/',         label: 'Dashboard',  icon: '▦'  },
+  { to: '/products', label: 'Products',   icon: '⬡'  },
+  { to: '/stock-in', label: 'Stock In',   icon: '📥'  },
+  { to: '/stock-out',label: 'Stock Out',  icon: '📤'  },
+  { to: '/imei',     label: 'IMEI',       icon: '⊕'  },
+  { to: '/vendors',  label: 'Vendors',    icon: '🏢'  },
+  { to: '/reports',  label: 'Reports',    icon: '📊'  },
+  { to: '/versions', label: 'Versions',   icon: '🕓'  },
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
@@ -23,52 +26,68 @@ export function Layout({ children }: { children: ReactNode }) {
     if (!token) return;
     const socket = connectSocket(token);
     socket.on('stock.changed', (e: { quantity: number; type: string }) => {
-      const id = Date.now() + Math.random();
-      setToasts(t => [...t, { id, text: `${e.type} → qty ${e.quantity}` }]);
-      setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 4000);
+      const text = e.quantity > 0 ? `+${e.quantity} units received` : `${e.quantity} units dispatched`;
+      setToasts(ts => [...ts, { id: Date.now(), text }]);
+      setTimeout(() => setToasts(ts => ts.slice(1)), 4000);
     });
-    return () => disconnectSocket();
+    return () => { disconnectSocket(); };
   }, []);
 
-  const initials = (user?.fullName || 'A').split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase();
-
   return (
-    <div className="app">
+    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--surf-2)' }}>
+      {/* Sidebar */}
       <aside className="sidebar">
-        <div className="sidebar-brand">
-          <div className="sidebar-logo">iT</div>
-          <div>
-            <div className="sidebar-brand-name">iTechArena</div>
-            <div className="sidebar-brand-sub">ERP System</div>
-          </div>
-        </div>
-        <nav className="sidebar-nav">
-          <div className="sidebar-section-label">Main Menu</div>
-          {NAV.map(n => (
-            <Link key={n.to} to={n.to}
-              className={`sidebar-link${loc.pathname === n.to ? ' active' : ''}`}>
-              <span style={{ fontSize: 14, width: 16, textAlign: 'center', flexShrink: 0 }}>{n.icon}</span>
-              {n.label}
-            </Link>
-          ))}
-        </nav>
-        <div className="sidebar-footer">
-          <div className="sidebar-user">
-            <div className="sidebar-avatar">{initials}</div>
-            <div className="sidebar-user-info">
-              <div className="sidebar-user-name">{user?.fullName || 'Administrator'}</div>
-              <div className="sidebar-user-role">{user?.roles?.join(', ') || 'ADMIN'}</div>
+        {/* Logo */}
+        <div style={{ padding: '18px 16px 14px', borderBottom: '1px solid var(--bdr)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 32, height: 32, background: 'var(--brand)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 13, fontWeight: 700 }}>iT</div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--txt)', lineHeight: 1.2 }}>iTechArena</div>
+              <div style={{ fontSize: 10, color: 'var(--txt-3)', letterSpacing: '.06em', textTransform: 'uppercase' }}>ERP System</div>
             </div>
           </div>
-          <button className="btn-signout" onClick={() => { logout(); navigate('/login'); }}>
-            Sign out
-          </button>
+        </div>
+
+        {/* Nav */}
+        <nav style={{ flex: 1, padding: '8px 8px', overflowY: 'auto' }}>
+          <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '.08em', padding: '10px 8px 6px' }}>Main Menu</div>
+          {NAV.map(n => {
+            const active = n.to === '/' ? loc.pathname === '/' : loc.pathname.startsWith(n.to);
+            return (
+              <Link key={n.to} to={n.to} className={`nav-link${active ? ' active' : ''}`}>
+                <span style={{ fontSize: 14 }}>{n.icon}</span>
+                <span>{n.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* User */}
+        <div style={{ padding: '10px 8px', borderTop: '1px solid var(--bdr)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', marginBottom: 4 }}>
+            <div style={{ width: 28, height: 28, background: 'var(--brand)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+              {user?.fullName?.charAt(0)?.toUpperCase() || 'A'}
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.fullName || 'Administrator'}</div>
+              <div style={{ fontSize: 10, color: 'var(--txt-3)', textTransform: 'uppercase', letterSpacing: '.04em' }}>{user?.roles?.[0] || 'ADMIN'}</div>
+            </div>
+          </div>
+          <button className="btn-signout" onClick={() => { logout(); navigate('/login'); }}>Sign out</button>
         </div>
       </aside>
-      <main className="content">{children}</main>
-      <div className="toasts">
-        {toasts.map(t => <div key={t.id} className="toast">{t.text}</div>)}
-      </div>
+
+      {/* Content */}
+      <main className="content">
+        <div className="page-body">{children}</div>
+      </main>
+
+      {/* Toast notifications */}
+      {toasts.length > 0 && (
+        <div className="toasts">
+          {toasts.map(t => <div key={t.id} className="toast">{t.text}</div>)}
+        </div>
+      )}
     </div>
   );
 }

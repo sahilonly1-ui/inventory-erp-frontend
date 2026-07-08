@@ -7,9 +7,12 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import Products from './pages/Products';
-import { Inventory } from './pages/Inventory';
 import { Imei } from './pages/Imei';
 import { Versions } from './pages/Versions';
+import { Vendors } from './pages/Vendors';
+import { StockIn } from './pages/StockIn';
+import { StockOut } from './pages/StockOut';
+import { Reports } from './pages/Reports';
 
 const Shell = ({ children }: { children: ReactNode }) => (
   <ProtectedRoute>
@@ -26,8 +29,11 @@ export default function App() {
         <Route path="/login"     element={<Login />} />
         <Route path="/"          element={<Shell><Dashboard /></Shell>} />
         <Route path="/products"  element={<Shell><Products /></Shell>} />
-        <Route path="/inventory" element={<Shell><Inventory /></Shell>} />
+        <Route path="/stock-in"  element={<Shell><StockIn /></Shell>} />
+        <Route path="/stock-out" element={<Shell><StockOut /></Shell>} />
         <Route path="/imei"      element={<Shell><Imei /></Shell>} />
+        <Route path="/vendors"   element={<Shell><Vendors /></Shell>} />
+        <Route path="/reports"   element={<Shell><Reports /></Shell>} />
         <Route path="/versions"  element={<Shell><Versions /></Shell>} />
       </Routes>
     </AuthProvider>
