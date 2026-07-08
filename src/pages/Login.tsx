@@ -9,13 +9,18 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [error, setError]       = useState('');
   const [busy, setBusy]         = useState(false);
+  const [slowMsg, setSlowMsg]   = useState('');
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    setBusy(true); setError('');
+    setBusy(true); setError(''); setSlowMsg('');
+
+    // After 5s show a friendly "waking up" note — Render free tier has a ~30s cold-start
+    const slowTimer = setTimeout(() => setSlowMsg('Server is starting up, please wait…'), 5000);
+
     try { await login(email, password); navigate('/'); }
     catch (err) { setError(err instanceof Error ? err.message : 'Login failed'); }
-    finally { setBusy(false); }
+    finally { clearTimeout(slowTimer); setBusy(false); setSlowMsg(''); }
   };
 
   return (
@@ -85,6 +90,15 @@ export function Login() {
               />
             </div>
 
+            {slowMsg && (
+              <div style={{
+                background:'#eff6ff', border:'1px solid #bfdbfe',
+                borderRadius:8, padding:'10px 14px',
+                fontSize:12, color:'#1d4ed8', display:'flex', alignItems:'center', gap:8,
+              }}>
+                <div style={{width:12,height:12,border:'2px solid rgba(29,78,216,.3)',borderTopColor:'#1d4ed8',borderRadius:'50%',animation:'spin .8s linear infinite',flexShrink:0}}/> {slowMsg}
+              </div>
+            )}
             {error && (
               <div style={{
                 background:'#fef2f2', border:'1px solid #fecaca',
