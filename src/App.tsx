@@ -9,32 +9,29 @@ import { Dashboard } from './pages/Dashboard';
 import Products from './pages/Products';
 import { Imei } from './pages/Imei';
 import { Versions } from './pages/Versions';
-import { Vendors } from './pages/Vendors';
+import { Suppliers } from './pages/Suppliers';
 import { StockIn } from './pages/StockIn';
 import { StockOut } from './pages/StockOut';
 import { Reports } from './pages/Reports';
 
 const Shell = ({ children }: { children: ReactNode }) => (
-  <ProtectedRoute>
-    <Layout>
-      <ErrorBoundary>{children}</ErrorBoundary>
-    </Layout>
-  </ProtectedRoute>
+  <ProtectedRoute><Layout><ErrorBoundary>{children}</ErrorBoundary></Layout></ProtectedRoute>
 );
 
 export default function App() {
   return (
     <AuthProvider>
       <Routes>
-        <Route path="/login"     element={<Login />} />
-        <Route path="/"          element={<Shell><Dashboard /></Shell>} />
-        <Route path="/products"  element={<Shell><Products /></Shell>} />
-        <Route path="/stock-in"  element={<Shell><StockIn /></Shell>} />
-        <Route path="/stock-out" element={<Shell><StockOut /></Shell>} />
-        <Route path="/imei"      element={<Shell><Imei /></Shell>} />
-        <Route path="/vendors"   element={<Shell><Vendors /></Shell>} />
-        <Route path="/reports"   element={<Shell><Reports /></Shell>} />
-        <Route path="/versions"  element={<Shell><Versions /></Shell>} />
+        <Route path="/login"      element={<Login />} />
+        <Route path="/"           element={<Shell><Dashboard /></Shell>} />
+        <Route path="/products"   element={<Shell><Products /></Shell>} />
+        <Route path="/stock-in"   element={<Shell><StockIn /></Shell>} />
+        <Route path="/stock-out"  element={<Shell><StockOut /></Shell>} />
+        <Route path="/imei"       element={<Shell><Imei /></Shell>} />
+        <Route path="/suppliers"  element={<Shell><Suppliers /></Shell>} />
+        <Route path="/vendors"    element={<Shell><Suppliers /></Shell>} />
+        <Route path="/reports"    element={<Shell><Reports /></Shell>} />
+        <Route path="/versions"   element={<Shell><Versions /></Shell>} />
       </Routes>
     </AuthProvider>
   );

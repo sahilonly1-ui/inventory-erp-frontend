@@ -1,449 +1,395 @@
 import { useState, useEffect, useRef, useCallback, KeyboardEvent } from 'react';
 import { api } from '../api/client';
 
+// ── Types ───────────────────────────────────────────────────────────────────
 interface Warehouse { id: string; name: string; }
-interface Vendor { id: string; name: string; code: string; }
-interface Product { id: string; ean: string; model: string; brand: string; category?: string; imeiRequired: boolean; costPrice?: number; }
-type CellName = 'ean' | 'qty' | 'imei' | 'vendor';
-type RowStatus = 'empty' | 'found' | 'not_found' | 'awaiting_imei' | 'awaiting_qty' | 'saved' | 'err';
+interface Supplier  { id: string; name: string; code: string; }
+type RowStatus = 'empty' | 'found' | 'awaiting_imei' | 'awaiting_qty' | 'saved' | 'err';
 
 interface Row {
   id: string;
   ean: string; productId: string; model: string; brand: string; imeiRequired: boolean;
-  qty: string; imei: string; vendor: string; vendorId: string; unitCost: string;
-  status: RowStatus; errCell: CellName | ''; errMsg: string;
+  qty: number; imei: string;
+  status: RowStatus; errMsg: string;
 }
 
-const newRow = (): Row => ({
-  id: Math.random().toString(36).slice(2), ean: '', productId: '', model: '', brand: '',
-  imeiRequired: false, qty: '1', imei: '', vendor: '', vendorId: '', unitCost: '',
-  status: 'empty', errCell: '', errMsg: '',
-});
+// ── Helpers ─────────────────────────────────────────────────────────────────
+const uid = () => Math.random().toString(36).slice(2, 9);
+const genDoc = () => `SIN-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${String(Math.floor(Math.random()*9000+1000))}`;
+const emptyRow = (): Row => ({ id: uid(), ean:'', productId:'', model:'', brand:'', imeiRequired:false, qty:0, imei:'', status:'empty', errMsg:'' });
+const SUPP_KEY = 'erp_suppliers_v1';
+const getSuppHistory = (): string[] => { try { return JSON.parse(localStorage.getItem(SUPP_KEY)||'[]'); } catch { return []; } };
+const saveSuppHistory = (name: string) => {
+  const h = getSuppHistory().filter(s => s !== name);
+  localStorage.setItem(SUPP_KEY, JSON.stringify([name, ...h].slice(0, 100)));
+};
 
-const genDoc = () => `SIN-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.floor(Math.random()*9000+1000)}`;
+// ── Input style ──────────────────────────────────────────────────────────────
+const cellInp: React.CSSProperties = { width:'100%', height:'100%', border:'none', padding:'0 8px', background:'transparent', fontSize:13, color:'#101828', outline:'none', fontFamily:'inherit' };
 
+// ── Component ────────────────────────────────────────────────────────────────
 export function StockIn() {
-  const [rows, setRows] = useState<Row[]>([newRow()]);
-  const [activeRow, setActiveRow] = useState(0);
-  const [activeCell, setActiveCell] = useState<CellName>('ean');
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [warehouses, setWarehouses]   = useState<Warehouse[]>([]);
+  const [suppliers, setSuppliers]     = useState<Supplier[]>([]);
+  const [suppHistory, setSuppHistory] = useState<string[]>(getSuppHistory);
+
+  // Session header
   const [warehouseId, setWarehouseId] = useState('');
-  const [docNumber] = useState(genDoc);
-  const [drawer, setDrawer] = useState<{ ean: string } | null>(null);
-  const [drawerForm, setDrawerForm] = useState<any>({ ean:'',model:'',brand:'',categoryName:'',costPrice:'',sellingPrice:'',mrp:'',gstRate:'18',imeiRequired:false,hsnCode:'',vendorName:'' });
-  const [vendorSearch, setVendorSearch] = useState('');
-  const [vendorDrop, setVendorDrop] = useState(false);
-  const [savingRow, setSavingRow] = useState(false);
-  const [summaryTab, setSummaryTab] = useState<'live'|'party'>('live');
-  const [drawerSaving, setDrawerSaving] = useState(false);
-  const cellRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const [supplier, setSupplier]       = useState('');
+  const [invoiceNo, setInvoiceNo]     = useState('');
+  const [sessionDate, setSessionDate] = useState(new Date().toISOString().slice(0,10));
+  const [suppSearch, setSuppSearch]   = useState('');
+  const [suppDrop, setSuppDrop]       = useState(false);
+  const [docNumber]                   = useState(genDoc);
+
+  // Grid
+  const [rows, setRows] = useState<Row[]>([emptyRow()]);
+  const [activeRow, setActiveRow] = useState(0);
+  const [focusCell, setFocusCell] = useState<'ean'|'imei'>('ean');
+
+  // Right panel
+  const [drawer, setDrawer] = useState<string|null>(null); // ean that triggered it
+  const [df, setDf] = useState({ ean:'', model:'', brand:'', categoryName:'', costPrice:'', sellingPrice:'', mrp:'', gstRate:'18', imeiRequired:false, hsnCode:'' });
+
+  // Refs for cell focus
+  const refs = useRef<Record<string, HTMLInputElement|null>>({});
+  const setRef = (rowIdx: number, cell: 'ean'|'imei') => (el: HTMLInputElement|null) => { refs.current[`${rowIdx}-${cell}`] = el; };
 
   useEffect(() => {
-    api<Warehouse[]>('/warehouses').then(ws => { setWarehouses(ws); if (ws.length) setWarehouseId(ws[0].id); }).catch(() => {});
-    api<Vendor[]>('/vendors').then(setVendors).catch(() => {});
+    api<Warehouse[]>('/warehouses').then(ws => { setWarehouses(ws); if (ws.length) setWarehouseId(ws[0].id); }).catch(()=>{});
+    api<Supplier[]>('/suppliers').catch(()=>{});
+    api<{items: Supplier[]; total: number}>('/vendors').then(d => setSuppliers(Array.isArray(d) ? d : (d as any).items || [])).catch(()=>{});
   }, []);
 
-  // Auto-focus logic
+  // Focus management
   useEffect(() => {
-    const key = `${activeRow}-${activeCell}`;
-    const el = cellRefs.current[key];
-    if (el) { el.focus(); el.select(); }
-  }, [activeRow, activeCell]);
+    const el = refs.current[`${activeRow}-${focusCell}`];
+    if (el) { setTimeout(() => { el.focus(); }, 30); }
+  }, [activeRow, focusCell]);
 
-  const setRef = (rowIdx: number, cell: CellName) => (el: HTMLInputElement | null) => {
-    cellRefs.current[`${rowIdx}-${cell}`] = el;
-  };
-
-  const updateRow = (idx: number, patch: Partial<Row>) =>
+  const updateRow = useCallback((idx: number, patch: Partial<Row>) => {
     setRows(rs => rs.map((r, i) => i === idx ? { ...r, ...patch } : r));
+  }, []);
 
-  // ── EAN lookup ──────────────────────────────────────────────────────────────
-  const handleEanEnter = useCallback(async (idx: number, ean: string) => {
-    if (!ean.trim()) return;
+  const addRowAfter = useCallback((currentIdx: number, nextFocus: 'ean'|'imei', prefill?: Partial<Row>) => {
+    setRows(rs => {
+      const next = { ...emptyRow(), ...prefill };
+      const updated = [...rs];
+      updated.splice(currentIdx + 1, 0, next);
+      return updated;
+    });
+    setActiveRow(currentIdx + 1);
+    setFocusCell(nextFocus);
+  }, []);
+
+  // ── EAN Enter ───────────────────────────────────────────────────────────────
+  const handleEan = useCallback(async (idx: number, ean: string) => {
+    const v = ean.trim();
+    if (!v) return;
     if (!warehouseId) { alert('Select a warehouse first'); return; }
     try {
-      const result = await api<{ product: Product; total: number }>(`/inventory/lookup?ean=${encodeURIComponent(ean.trim())}`);
-      const p = result.product;
-      updateRow(idx, { productId: p.id, model: p.model, brand: p.brand, imeiRequired: p.imeiRequired, status: 'found', errCell: '', errMsg: '' });
+      const res = await api<{ product: { id:string; ean:string; model:string; brand:string; imeiRequired:boolean } }>(`/inventory/lookup?ean=${encodeURIComponent(v)}`);
+      const p = res.product;
       if (p.imeiRequired) {
-        setActiveCell('imei');
-        updateRow(idx, { status: 'awaiting_imei' });
+        updateRow(idx, { productId:p.id, model:p.model, brand:p.brand, imeiRequired:true, qty:0, status:'awaiting_imei', errMsg:'' });
+        setFocusCell('imei');
       } else {
-        updateRow(idx, { qty: '1', status: 'awaiting_qty' });
-        setActiveCell('qty');
+        // Non-IMEI: check if same EAN already in rows → increment qty
+        const existIdx = rows.findIndex((r, i) => i !== idx && r.productId === p.id && r.status === 'saved');
+        if (existIdx >= 0) {
+          // Increment existing row
+          setRows(rs => rs.map((r, i) => i === existIdx ? { ...r, qty: r.qty + 1 } : r));
+          updateRow(idx, { ean:'', productId:'', model:'', brand:'', qty:0, status:'empty', errMsg:'' });
+          setFocusCell('ean');
+        } else {
+          updateRow(idx, { productId:p.id, model:p.model, brand:p.brand, imeiRequired:false, qty:1, status:'saved', errMsg:'' });
+          // Auto-save non-IMEI row and move to next
+          try {
+            await api('/inventory/stock-in', { method:'POST', body: JSON.stringify({ productId:p.id, warehouseId, quantity:1, remarks:`${docNumber}${supplier ? ' | '+supplier : ''}${invoiceNo ? ' | INV:'+invoiceNo : ''}` }) });
+          } catch {}
+          addRowAfter(idx, 'ean');
+        }
       }
     } catch {
-      // EAN not found → open right drawer
-      updateRow(idx, { ean: ean.trim(), status: 'not_found' });
-      setDrawerForm((f: any) => ({ ...f, ean: ean.trim() }));
-      setDrawer({ ean: ean.trim() });
+      // EAN not found
+      updateRow(idx, { ean:v, status:'err', errMsg:'Not found' });
+      setDf(f => ({ ...f, ean:v }));
+      setDrawer(v);
     }
-  }, [warehouseId]);
+  }, [warehouseId, rows, addRowAfter, updateRow, docNumber, supplier, invoiceNo]);
 
-  // ── IMEI validation & row save ───────────────────────────────────────────────
-  const handleImeiEnter = useCallback(async (idx: number, imei: string) => {
-    if (!imei.trim()) return;
-    // Quick duplicate check via lookup
+  // ── IMEI Enter ──────────────────────────────────────────────────────────────
+  const handleImei = useCallback(async (idx: number, imei: string) => {
+    const v = imei.trim();
+    if (!v) return;
+    const row = rows[idx];
+    if (!row.productId) { setFocusCell('ean'); return; }
+
+    // Duplicate check
     try {
-      await api(`/imei/${encodeURIComponent(imei.trim())}`);
-      // If found → duplicate
-      updateRow(idx, { errCell: 'imei', errMsg: `IMEI ${imei} already in system!`, status: 'err' });
-      setActiveCell('imei');
-      // Error sound
-      try { new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAA...').play(); } catch {}
+      await api(`/imei/${encodeURIComponent(v)}`);
+      // Found → duplicate
+      updateRow(idx, { errMsg:`IMEI ${v} already in system`, imei:v });
+      setFocusCell('imei');
       return;
-    } catch {
-      // 404 = not found = good, proceed
-    }
-    // Valid IMEI → save row
-    await saveRow(idx, imei.trim());
-  }, []);
+    } catch { /* 404 = not found = OK */ }
 
-  // ── Save a completed row ────────────────────────────────────────────────────
-  const saveRow = useCallback(async (idx: number, imei?: string) => {
-    const r = rows[idx];
-    if (!r.productId || !warehouseId) return;
-    setSavingRow(true);
+    // Valid → save
     try {
-      if (r.imeiRequired && imei) {
-        await api('/imei/receive', {
-          method: 'POST',
-          body: JSON.stringify({ productId: r.productId, warehouseId, imeis: [{ imei1: imei }], remarks: docNumber }),
-        });
-        updateRow(idx, { imei, qty: '1', status: 'saved', errCell: '', errMsg: '' });
-      } else {
-        const qty = parseInt(r.qty) || 1;
-        await api('/inventory/stock-in', {
-          method: 'POST',
-          body: JSON.stringify({ productId: r.productId, warehouseId, quantity: qty, vendorId: r.vendorId || undefined, remarks: docNumber }),
-        });
-        updateRow(idx, { status: 'saved', errCell: '', errMsg: '' });
-      }
-      // Add next row and move focus
-      if (idx === rows.length - 1) setRows(rs => [...rs, newRow()]);
-      setActiveRow(idx + 1);
-      setActiveCell('ean');
-    } catch (e: any) {
-      updateRow(idx, { errMsg: e.message, status: 'err' });
-    } finally { setSavingRow(false); }
-  }, [rows, warehouseId, docNumber]);
-
-  // ── Vendor autocomplete ─────────────────────────────────────────────────────
-  const filteredVendors = vendors.filter(v => v.name.toLowerCase().includes(vendorSearch.toLowerCase()) || v.code.toLowerCase().includes(vendorSearch.toLowerCase()));
-  const exactMatch = vendors.find(v => v.name.toLowerCase() === vendorSearch.toLowerCase());
-
-  const selectVendor = useCallback((v: Vendor, rowIdx: number) => {
-    updateRow(rowIdx, { vendor: v.name, vendorId: v.id });
-    setVendorSearch(''); setVendorDrop(false);
-    setActiveCell('ean');
-    if (rowIdx === rows.length - 1) setRows(rs => [...rs, newRow()]);
-    setActiveRow(rowIdx + 1);
-  }, [rows.length]);
-
-  const autoCreateVendor = useCallback(async (name: string, rowIdx: number) => {
-    const code = name.replace(/\s+/g, '').toUpperCase().slice(0, 10) + Math.floor(Math.random() * 100);
-    try {
-      const v = await api<Vendor>('/vendors', { method: 'POST', body: JSON.stringify({ name, code }) });
-      setVendors(vs => [...vs, v]);
-      selectVendor(v, rowIdx);
-    } catch { selectVendor({ id: '', name, code: '' }, rowIdx); }
-  }, [selectVendor]);
-
-  // ── Keyboard handlers ───────────────────────────────────────────────────────
-  const onEanKey = (e: KeyboardEvent<HTMLInputElement>, idx: number) => {
-    if (e.key === 'Enter' || e.key === 'Tab') {
-      e.preventDefault();
-      handleEanEnter(idx, (e.target as HTMLInputElement).value);
+      await api('/imei/receive', { method:'POST', body: JSON.stringify({ productId:row.productId, warehouseId, imeis:[{ imei1:v }], remarks:`${docNumber}${supplier ? ' | '+supplier : ''}` }) });
+      const newQty = row.qty + 1;
+      updateRow(idx, { imei:v, qty:newQty, status:'saved', errMsg:'' });
+      // Next row: same product pre-filled, focus IMEI (batch mode)
+      addRowAfter(idx, 'imei', { productId:row.productId, model:row.model, brand:row.brand, imeiRequired:true, status:'awaiting_imei' });
+    } catch (e:any) {
+      updateRow(idx, { errMsg:e.message, imei:v });
+      setFocusCell('imei');
     }
-  };
-  const onImeiKey = (e: KeyboardEvent<HTMLInputElement>, idx: number) => {
-    if (e.key === 'Enter' || e.key === 'Tab') {
-      e.preventDefault();
-      handleImeiEnter(idx, (e.target as HTMLInputElement).value);
-    }
-    if (e.key === 'Escape') { updateRow(idx, { errCell: '', errMsg: '' }); }
-  };
-  const onQtyKey = (e: KeyboardEvent<HTMLInputElement>, idx: number) => {
-    if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); saveRow(idx); }
-  };
-  const onVendorKey = async (e: KeyboardEvent<HTMLInputElement>, idx: number) => {
-    if (e.key === 'Escape') { setVendorDrop(false); return; }
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      const val = (e.target as HTMLInputElement).value.trim();
-      if (!val) { saveRow(idx); return; }
-      if (exactMatch) { selectVendor(exactMatch, idx); }
-      else { await autoCreateVendor(val, idx); }
-    }
-    if (e.key === 'ArrowDown') { e.preventDefault(); setVendorDrop(true); }
-  };
+  }, [rows, warehouseId, addRowAfter, updateRow, docNumber, supplier]);
 
-  // ── Live summary ─────────────────────────────────────────────────────────────
-  const savedRows = rows.filter(r => r.status === 'saved');
-  const summary = Object.values(
-    savedRows.reduce((acc: any, r) => {
-      const k = r.model || r.ean;
-      if (!acc[k]) acc[k] = { model: k, qty: 0, vendor: r.vendor };
-      acc[k].qty += parseInt(r.qty) || 1;
-      return acc;
-    }, {})
-  ) as { model: string; qty: number; vendor: string }[];
-  const grandTotal = summary.reduce((s: number, r: any) => s + r.qty, 0);
+  const deleteRow = useCallback((idx: number) => {
+    setRows(rs => { if (rs.length === 1) return [emptyRow()]; return rs.filter((_,i) => i !== idx); });
+    if (activeRow >= idx && activeRow > 0) setActiveRow(r => r - 1);
+  }, [activeRow]);
 
-  // ── Party summary ─────────────────────────────────────────────────────────────
-  const partyMap = savedRows.reduce((acc: any, r) => {
-    const v = r.vendor || '(No Vendor)';
-    if (!acc[v]) acc[v] = {};
-    const k = r.model || r.ean;
-    acc[v][k] = (acc[v][k] || 0) + (parseInt(r.qty) || 1);
-    return acc;
-  }, {});
+  const clearAll = () => { if (!confirm('Clear all scanned rows?')) return; setRows([emptyRow()]); setActiveRow(0); setFocusCell('ean'); };
+
+  // ── Supplier autocomplete ────────────────────────────────────────────────────
+  const allSuggestions = [...new Set([...suppHistory, ...suppliers.map(s => s.name)])].filter(s => s.toLowerCase().includes(suppSearch.toLowerCase())).slice(0,8);
+
+  const selectSupplier = (name: string) => { setSupplier(name); setSuppSearch(''); setSuppDrop(false); saveSuppHistory(name); setSuppHistory(getSuppHistory()); };
 
   // ── Drawer save ───────────────────────────────────────────────────────────────
-  const saveDrawerProduct = async () => {
-    if (!drawerForm.model) return;
-    setDrawerSaving(true);
+  const saveDrawer = async () => {
+    if (!df.model) return;
     try {
-      const status = 'ACTIVE';
-      await api('/products', {
-        method: 'POST',
-        body: JSON.stringify({
-          ean: drawerForm.ean, model: drawerForm.model, brand: drawerForm.brand || '',
-          categoryName: drawerForm.categoryName,
-          costPrice: parseFloat(drawerForm.costPrice) || 0,
-          sellingPrice: parseFloat(drawerForm.sellingPrice) || 0,
-          imeiRequired: !!drawerForm.imeiRequired,
-          gstRate: parseFloat(drawerForm.gstRate) || 18,
-          status,
-        }),
-      });
+      await api('/products', { method:'POST', body: JSON.stringify({ ean:df.ean, model:df.model, brand:df.brand, categoryName:df.categoryName, costPrice:parseFloat(df.costPrice)||0, sellingPrice:parseFloat(df.sellingPrice)||0, imeiRequired:df.imeiRequired, gstRate:parseFloat(df.gstRate)||18, status:'ACTIVE' }) });
       setDrawer(null);
-      // Re-trigger EAN lookup for the row
-      const idx = rows.findIndex(r => r.ean === drawerForm.ean && r.status === 'not_found');
-      if (idx >= 0) { await handleEanEnter(idx, drawerForm.ean); }
-    } catch (e: any) { alert(e.message); }
-    finally { setDrawerSaving(false); }
+      const idx = rows.findIndex(r => r.ean === df.ean && r.status === 'err');
+      if (idx >= 0) { updateRow(idx, { errMsg:'', status:'empty' }); setActiveRow(idx); setFocusCell('ean'); }
+    } catch (e:any) { alert(e.message); }
   };
 
-  const COL_W = { num: 36, ean: 150, model: 220, qty: 60, imei: 180, vendor: 160, cost: 90 };
+  // ── Summary ───────────────────────────────────────────────────────────────────
+  const savedRows = rows.filter(r => r.status === 'saved' && r.qty > 0);
+  const summary = Object.values(savedRows.reduce((acc:any, r) => { const k = r.model || r.ean; if (!acc[k]) acc[k] = { model:k, qty:0 }; acc[k].qty += r.qty; return acc; }, {})) as { model:string; qty:number }[];
+  const grandTotal = summary.reduce((s,r) => s + r.qty, 0);
+
+  // ── Keyboard handlers ─────────────────────────────────────────────────────────
+  const onEanKey = (e: KeyboardEvent<HTMLInputElement>, idx: number) => {
+    if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) { e.preventDefault(); handleEan(idx, (e.target as HTMLInputElement).value); }
+  };
+  const onImeiKey = (e: KeyboardEvent<HTMLInputElement>, idx: number) => {
+    if (e.key === 'Enter') { e.preventDefault(); handleImei(idx, (e.target as HTMLInputElement).value); }
+    if (e.key === 'Escape') { updateRow(idx, { errMsg:'' }); }
+  };
+
+  // ── Row status pill ───────────────────────────────────────────────────────────
+  const StatusPill = ({ row }: { row: Row }) => {
+    if (row.errMsg) return <span style={{ fontSize:10, background:'#fef2f2', color:'#dc2626', padding:'2px 8px', borderRadius:10, fontWeight:600 }} title={row.errMsg}>✕ Error</span>;
+    if (row.status === 'saved') return <span style={{ fontSize:10, background:'#dcfce7', color:'#15803d', padding:'2px 8px', borderRadius:10, fontWeight:600 }}>✓ {row.imeiRequired ? `IMEI` : `Qty`}</span>;
+    if (row.status === 'awaiting_imei') return <span style={{ fontSize:10, background:'#fef9c3', color:'#854d0e', padding:'2px 8px', borderRadius:10 }}>Scan IMEI</span>;
+    if (row.status === 'found') return <span style={{ fontSize:10, background:'#dbeafe', color:'#1d4ed8', padding:'2px 8px', borderRadius:10 }}>Found</span>;
+    return null;
+  };
+
+  const inpStyle = (active: boolean): React.CSSProperties => ({
+    width:'100%', height:'100%', border:'none', padding:'0 8px',
+    background: active ? '#fff' : 'transparent',
+    fontSize:13, color:'#101828', outline:'none', fontFamily:'inherit',
+  });
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 56px)' }}>
-      {/* Toolbar */}
-      <div className="xg-toolbar">
-        <span className="xg-doc">{docNumber}</span>
-        <span style={{ fontSize: 11, color: '#667085' }}>Date:</span>
-        <input type="date" defaultValue={new Date().toISOString().slice(0,10)} style={{ width: 130 }} />
-        <span style={{ fontSize: 11, color: '#667085' }}>Warehouse:</span>
-        <select value={warehouseId} onChange={e => setWarehouseId(e.target.value)} style={{ width: 160 }}>
-          {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-        </select>
-        <div style={{ flex: 1 }} />
-        <span style={{ fontSize: 11, color: '#667085' }}>{savedRows.length} rows · {grandTotal} units</span>
-        <button className="btn btn-primary" style={{ height: 28, fontSize: 12 }} disabled={!savedRows.length}>
-          ✓ Done ({savedRows.length})
-        </button>
+    <div style={{ display:'flex', flexDirection:'column', height:'calc(100vh - 0px)', background:'#f5f7fa' }}>
+      {/* ── Session Header ──────────────────────────────────────────────────── */}
+      <div style={{ background:'#fff', borderBottom:'1px solid #e4e7ec', padding:'10px 16px', flexShrink:0 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}>
+          <span style={{ fontSize:11, fontWeight:700, color:'#2563eb', background:'#eff6ff', padding:'3px 10px', borderRadius:20, border:'1px solid #bfdbfe', letterSpacing:'.02em' }}>{docNumber}</span>
+          <span style={{ fontSize:12, fontWeight:600, color:'#475467', marginLeft:4 }}>Stock In Entry</span>
+          <div style={{ flex:1 }} />
+          <span style={{ fontSize:11, color:'#98a2b3' }}>{savedRows.length} items · {grandTotal} units</span>
+          <button onClick={clearAll} style={{ height:28, padding:'0 10px', border:'1px solid #fca5a5', borderRadius:6, background:'#fef2f2', color:'#dc2626', fontSize:11, fontWeight:600, cursor:'pointer' }}>Clear All</button>
+          <button style={{ height:28, padding:'0 14px', border:'none', borderRadius:6, background:'#2563eb', color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer', opacity:savedRows.length ? 1 : .4 }} disabled={!savedRows.length}>✓ Done</button>
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 160px 180px 160px', gap:8 }}>
+          {/* Supplier */}
+          <div style={{ position:'relative' }}>
+            <label style={{ fontSize:10, fontWeight:700, color:'#98a2b3', textTransform:'uppercase', letterSpacing:'.06em', display:'block', marginBottom:3 }}>Supplier / Received From *</label>
+            <input value={suppSearch || supplier} placeholder="Type supplier name…"
+              onChange={e => { setSuppSearch(e.target.value); setSupplier(''); setSuppDrop(true); }}
+              onFocus={() => { setSuppSearch(supplier); setSuppDrop(true); }}
+              onBlur={() => setTimeout(() => { setSuppDrop(false); if (suppSearch && !supplier) { setSupplier(suppSearch); saveSuppHistory(suppSearch); setSuppHistory(getSuppHistory()); } }, 200)}
+              onKeyDown={e => { if (e.key === 'Enter' && suppSearch) { selectSupplier(suppSearch); } if (e.key === 'Escape') setSuppDrop(false); }}
+              style={{ width:'100%', height:34, padding:'0 10px', border:`1.5px solid ${supplier ? '#2563eb' : '#d0d5dd'}`, borderRadius:7, fontSize:13, color:'#101828', outline:'none', boxSizing:'border-box' }} />
+            {suppDrop && allSuggestions.length > 0 && (
+              <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'#fff', border:'1px solid #e4e7ec', borderRadius:8, boxShadow:'0 8px 24px rgba(0,0,0,.1)', zIndex:200, marginTop:2, overflow:'hidden' }}>
+                {allSuggestions.map(s => (
+                  <div key={s} onMouseDown={() => selectSupplier(s)}
+                    style={{ padding:'8px 12px', fontSize:13, cursor:'pointer', color:'#344054' }}
+                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background='#f5f7fa'}
+                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.background='transparent'}>{s}</div>
+                ))}
+                {suppSearch && !allSuggestions.find(s => s.toLowerCase() === suppSearch.toLowerCase()) && (
+                  <div onMouseDown={() => selectSupplier(suppSearch)}
+                    style={{ padding:'8px 12px', fontSize:13, cursor:'pointer', color:'#2563eb', fontWeight:600, borderTop:'1px solid #f2f4f7' }}>
+                    ＋ Add "{suppSearch}"
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          {/* Date */}
+          <div>
+            <label style={{ fontSize:10, fontWeight:700, color:'#98a2b3', textTransform:'uppercase', letterSpacing:'.06em', display:'block', marginBottom:3 }}>Date</label>
+            <input type="date" value={sessionDate} onChange={e => setSessionDate(e.target.value)} style={{ width:'100%', height:34, padding:'0 10px', border:'1.5px solid #d0d5dd', borderRadius:7, fontSize:13, color:'#101828', outline:'none', boxSizing:'border-box' }} />
+          </div>
+          {/* Invoice */}
+          <div>
+            <label style={{ fontSize:10, fontWeight:700, color:'#98a2b3', textTransform:'uppercase', letterSpacing:'.06em', display:'block', marginBottom:3 }}>Invoice No. <span style={{ color:'#c4c8d0', fontWeight:400 }}>(optional)</span></label>
+            <input value={invoiceNo} onChange={e => setInvoiceNo(e.target.value)} placeholder="e.g. INV-2026-001" style={{ width:'100%', height:34, padding:'0 10px', border:'1.5px solid #d0d5dd', borderRadius:7, fontSize:13, color:'#101828', outline:'none', boxSizing:'border-box' }} />
+          </div>
+          {/* Warehouse */}
+          <div>
+            <label style={{ fontSize:10, fontWeight:700, color:'#98a2b3', textTransform:'uppercase', letterSpacing:'.06em', display:'block', marginBottom:3 }}>Warehouse</label>
+            <select value={warehouseId} onChange={e => setWarehouseId(e.target.value)} style={{ width:'100%', height:34, padding:'0 10px', border:'1.5px solid #d0d5dd', borderRadius:7, fontSize:13, color:'#101828', outline:'none', background:'#fff', boxSizing:'border-box' }}>
+              {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+          </div>
+        </div>
       </div>
 
-      {/* Main area */}
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+      {/* ── Main: Grid + Right Panel ────────────────────────────────────────── */}
+      <div style={{ flex:1, display:'flex', overflow:'hidden' }}>
         {/* Grid */}
-        <div className="xg-wrap" style={{ flex: 1, margin: 0, borderRadius: 0, border: 'none', borderRight: '1px solid #d0d5dd' }}>
-          <div className="xg-main">
-            <table className="xg-table">
-              <thead>
-                <tr>
-                  <th className="xg-th" style={{ width: COL_W.num }}>#</th>
-                  <th className="xg-th" style={{ width: COL_W.ean }}>EAN / Barcode</th>
-                  <th className="xg-th" style={{ width: COL_W.model }}>Product Name</th>
-                  <th className="xg-th" style={{ width: COL_W.qty }}>Qty</th>
-                  <th className="xg-th" style={{ width: COL_W.imei }}>IMEI / Sr.No</th>
-                  <th className="xg-th" style={{ width: COL_W.vendor }}>Vendor</th>
-                  <th className="xg-th" style={{ width: COL_W.cost }}>Cost ₹</th>
-                  <th className="xg-th" style={{ width: 80 }}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row, idx) => {
-                  const isActive = idx === activeRow;
-                  const cls = `xg-row ${row.status === 'saved' ? 'saved' : ''} ${isActive ? 'active' : ''} ${row.status === 'err' ? 'error' : ''}`;
-                  return (
-                    <tr key={row.id} className={cls} onClick={() => { setActiveRow(idx); setActiveCell('ean'); }}>
-                      <td className="xg-row-num">{idx + 1}</td>
-                      {/* EAN */}
-                      <td className={`xg-td ${isActive && activeCell === 'ean' ? 'xg-focus' : ''}`}>
-                        <input ref={setRef(idx, 'ean')} value={row.ean}
-                          onChange={e => updateRow(idx, { ean: e.target.value })}
+        <div style={{ flex:1, overflowY:'auto', overflowX:'auto' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13, tableLayout:'fixed' }}>
+            <colgroup>
+              <col style={{ width:40 }}/><col style={{ width:160 }}/><col /><col style={{ width:60 }}/><col style={{ width:200 }}/><col style={{ width:110 }}/><col style={{ width:38 }}/>
+            </colgroup>
+            <thead>
+              <tr style={{ background:'#f8fafc', position:'sticky', top:0, zIndex:5 }}>
+                {['#','EAN / Barcode','Product Name','Qty','IMEI / Serial No.','Status',''].map((h,i) => (
+                  <th key={i} style={{ padding:'0 8px', height:32, textAlign: i === 3 ? 'center' : 'left', fontWeight:600, color:'#64748b', fontSize:11, textTransform:'uppercase', letterSpacing:'.06em', borderBottom:'2px solid #e4e7ec', whiteSpace:'nowrap', userSelect:'none' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, idx) => {
+                const isActive = idx === activeRow;
+                const rowBg = row.status === 'saved' ? '#f0fdf4' : row.errMsg ? '#fff8f8' : isActive ? '#f0f9ff' : idx%2===0 ? '#fff' : '#fafafa';
+                return (
+                  <tr key={row.id} style={{ background:rowBg, transition:'background .1s' }} onClick={() => setActiveRow(idx)}>
+                    {/* Row num */}
+                    <td style={{ padding:'0 8px', height:36, textAlign:'center', color:'#94a3b8', fontSize:11, fontWeight:600, background:'#f8fafc', borderBottom:'1px solid #e4e7ec', borderRight:'1px solid #e4e7ec' }}>{idx+1}</td>
+                    {/* EAN */}
+                    <td style={{ borderBottom:'1px solid #e4e7ec', borderRight:'1px solid #e4e7ec', padding:0 }}
+                        >
+                      <div style={{ display:'flex', height:36, border: isActive && focusCell==='ean' ? '2px solid #2563eb' : '2px solid transparent', borderRadius: isActive && focusCell==='ean' ? 4 : 0 }}>
+                        <input ref={setRef(idx,'ean')} value={row.ean}
+                          onChange={e => updateRow(idx, { ean:e.target.value, errMsg:'', status:row.status==='err'?'empty':row.status })}
                           onKeyDown={e => onEanKey(e, idx)}
-                          onFocus={() => { setActiveRow(idx); setActiveCell('ean'); }}
-                          placeholder={idx === 0 ? 'Scan EAN…' : ''} />
-                      </td>
-                      {/* Product Name */}
-                      <td className="xg-td">
-                        <input value={row.model} readOnly tabIndex={-1}
-                          style={{ color: row.model ? '#101828' : '#98a2b3', fontWeight: row.model ? 500 : 400 }}
-                          placeholder="Auto-filled" />
-                      </td>
-                      {/* Qty */}
-                      <td className={`xg-td ${isActive && activeCell === 'qty' ? 'xg-focus' : ''}`}>
-                        <input ref={setRef(idx, 'qty')} type="number" min="1" value={row.qty}
-                          onChange={e => updateRow(idx, { qty: e.target.value })}
-                          onKeyDown={e => onQtyKey(e, idx)}
-                          onFocus={() => { setActiveRow(idx); setActiveCell('qty'); }}
-                          readOnly={row.imeiRequired}
-                          style={{ textAlign: 'center', color: row.imeiRequired ? '#98a2b3' : 'inherit' }} />
-                      </td>
-                      {/* IMEI */}
-                      <td className={`xg-td ${row.errCell === 'imei' ? 'cell-err' : ''} ${isActive && activeCell === 'imei' ? 'xg-focus' : ''}`}>
-                        <input ref={setRef(idx, 'imei')} value={row.imei}
-                          onChange={e => updateRow(idx, { imei: e.target.value, errCell: '', errMsg: '' })}
+                          onFocus={() => { setActiveRow(idx); setFocusCell('ean'); }}
+                          placeholder={idx===0?'Scan EAN or barcode…':''}
+                          style={{ ...cellInp, background: isActive && focusCell==='ean' ? '#fff' : 'transparent' }} />
+                      </div>
+                    </td>
+                    {/* Product Name */}
+                    <td style={{ borderBottom:'1px solid #e4e7ec', borderRight:'1px solid #e4e7ec', padding:0 }}>
+                      <input value={row.model} readOnly tabIndex={-1} placeholder="Auto-filled after scan"
+                        style={{ ...cellInp, color: row.model ? '#101828' : '#94a3b8', fontWeight: row.model ? 500 : 400, cursor:'default' }} />
+                    </td>
+                    {/* Qty — auto, readonly */}
+                    <td style={{ borderBottom:'1px solid #e4e7ec', borderRight:'1px solid #e4e7ec', padding:0, textAlign:'center' }}>
+                      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:36, fontSize:14, fontWeight:700, color: row.qty > 0 ? '#16a34a' : '#94a3b8' }}>
+                        {row.qty > 0 ? row.qty : '—'}
+                      </div>
+                    </td>
+                    {/* IMEI */}
+                    <td style={{ borderBottom:'1px solid #e4e7ec', borderRight:'1px solid #e4e7ec', padding:0 }}>
+                      <div style={{ display:'flex', height:36, border: isActive && focusCell==='imei' ? '2px solid #f59e0b' : '2px solid transparent', borderRadius: isActive && focusCell==='imei' ? 4 : 0 }}>
+                        <input ref={setRef(idx,'imei')} value={row.imei}
+                          onChange={e => updateRow(idx, { imei:e.target.value, errMsg:'' })}
                           onKeyDown={e => onImeiKey(e, idx)}
-                          onFocus={() => { setActiveRow(idx); setActiveCell('imei'); }}
+                          onFocus={() => { setActiveRow(idx); setFocusCell('imei'); }}
                           readOnly={!row.imeiRequired}
                           placeholder={row.imeiRequired ? 'Scan IMEI…' : '—'}
-                          style={{ fontFamily: 'var(--mono)', fontSize: 12, color: row.errCell === 'imei' ? '#dc2626' : 'inherit' }} />
-                      </td>
-                      {/* Vendor */}
-                      <td className={`xg-td ${isActive && activeCell === 'vendor' ? 'xg-focus' : ''}`} style={{ position: 'relative' }}>
-                        <input ref={setRef(idx, 'vendor')} value={isActive && activeCell === 'vendor' ? vendorSearch : row.vendor}
-                          onChange={e => { setVendorSearch(e.target.value); setVendorDrop(true); }}
-                          onKeyDown={e => onVendorKey(e, idx)}
-                          onFocus={() => { setActiveRow(idx); setActiveCell('vendor'); setVendorSearch(row.vendor); setVendorDrop(true); }}
-                          onBlur={() => setTimeout(() => setVendorDrop(false), 180)}
-                          placeholder="Type vendor…" />
-                        {isActive && activeCell === 'vendor' && vendorDrop && (
-                          <div className="xg-vendor-drop">
-                            {filteredVendors.slice(0, 8).map(v => (
-                              <div key={v.id} className="xg-vendor-item" onMouseDown={() => selectVendor(v, idx)}>
-                                {v.name} <span style={{ fontSize: 10, color: '#98a2b3' }}>{v.code}</span>
-                              </div>
-                            ))}
-                            {vendorSearch && !exactMatch && (
-                              <div className="xg-vendor-item create" onMouseDown={() => autoCreateVendor(vendorSearch, idx)}>
-                                ＋ Create "{vendorSearch}"
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </td>
-                      {/* Cost */}
-                      <td className="xg-td">
-                        <input type="number" value={row.unitCost}
-                          onChange={e => updateRow(idx, { unitCost: e.target.value })}
-                          onFocus={() => { setActiveRow(idx); setActiveCell('vendor'); }}
-                          placeholder="0" style={{ textAlign: 'right' }} />
-                      </td>
-                      {/* Status badge */}
-                      <td className="xg-td" style={{ textAlign: 'center' }}>
-                        {row.status === 'saved' && <span style={{ fontSize: 10, background: '#dcfce7', color: '#16a34a', padding: '2px 7px', borderRadius: 10, fontWeight: 700 }}>✓ Saved</span>}
-                        {row.status === 'err' && <span style={{ fontSize: 10, background: '#fee2e2', color: '#dc2626', padding: '2px 7px', borderRadius: 10, fontWeight: 700, cursor: 'help' }} title={row.errMsg}>⚠ Error</span>}
-                        {row.status === 'awaiting_imei' && <span style={{ fontSize: 10, background: '#fef9c3', color: '#854d0e', padding: '2px 7px', borderRadius: 10 }}>IMEI ↓</span>}
-                        {row.status === 'awaiting_qty' && <span style={{ fontSize: 10, background: '#dbeafe', color: '#1e40af', padding: '2px 7px', borderRadius: 10 }}>Qty ↓</span>}
-                        {savingRow && isActive && <div className="spinner" style={{ margin: '0 auto', width: 14, height: 14 }} />}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Right summary panel */}
-        <div className="xg-right">
-          <div className="xg-right-tab">
-            <button className={summaryTab === 'live' ? 'on' : ''} onClick={() => setSummaryTab('live')}>📊 Live Summary</button>
-            <button className={summaryTab === 'party' ? 'on' : ''} onClick={() => setSummaryTab('party')}>🏢 Party-wise</button>
-          </div>
-
-          {summaryTab === 'live' && (
-            <>
-              <div style={{ padding: '8px 10px', borderBottom: '1px solid #e4e7ec', fontSize: 11, fontWeight: 600, color: '#667085', textTransform: 'uppercase', letterSpacing: '.05em' }}>
-                STOCK RECEIVED TODAY
-              </div>
-              <div className="xg-summary">
-                {summary.length === 0 && <div style={{ color: '#98a2b3', fontSize: 12, textAlign: 'center', marginTop: 20 }}>Scan products to see summary</div>}
-                {summary.map((s: any) => (
-                  <div key={s.model} className="xg-summary-row">
-                    <span className="xg-summary-model">{s.model}</span>
-                    <span className="xg-summary-qty">+{s.qty}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="xg-total">
-                <span>Grand Total</span>
-                <span style={{ color: 'var(--ok)' }}>+{grandTotal} units</span>
-              </div>
-            </>
-          )}
-
-          {summaryTab === 'party' && (
-            <>
-              <div style={{ padding: '8px 10px', borderBottom: '1px solid #e4e7ec', fontSize: 11, fontWeight: 600, color: '#667085', textTransform: 'uppercase', letterSpacing: '.05em' }}>
-                VENDOR-WISE SUMMARY
-              </div>
-              <div className="xg-summary" style={{ padding: '8px' }}>
-                {Object.keys(partyMap).length === 0 && <div style={{ color: '#98a2b3', fontSize: 12, textAlign: 'center', marginTop: 20 }}>No data yet</div>}
-                {Object.entries(partyMap).map(([vendor, products]: any) => {
-                  const total = Object.values(products).reduce((s: any, v: any) => s + v, 0) as number;
-                  return (
-                    <div key={vendor} className="party-section">
-                      <div className="party-hdr">{vendor} <span style={{ color: 'var(--brand)' }}>{total}</span></div>
-                      <div style={{ padding: '4px 12px 8px' }}>
-                        {Object.entries(products).map(([model, qty]: any) => (
-                          <div key={model} className="party-row"><span>{model}</span><span style={{ fontWeight: 600 }}>{qty}</span></div>
-                        ))}
+                          style={{ ...cellInp, fontFamily: row.imeiRequired ? 'monospace' : 'inherit', fontSize:12, color: row.errMsg && row.imei ? '#dc2626' : '#101828', background: isActive && focusCell==='imei' ? '#fffbeb' : 'transparent', cursor: row.imeiRequired ? 'text' : 'default' }} />
                       </div>
-                    </div>
-                  );
-                })}
+                    </td>
+                    {/* Status */}
+                    <td style={{ borderBottom:'1px solid #e4e7ec', borderRight:'1px solid #e4e7ec', padding:'0 8px', textAlign:'center' }}>
+                      <StatusPill row={row} />
+                    </td>
+                    {/* Delete */}
+                    <td style={{ borderBottom:'1px solid #e4e7ec', padding:0, textAlign:'center' }}>
+                      <button onClick={e => { e.stopPropagation(); deleteRow(idx); }}
+                        style={{ width:28, height:28, border:'none', background:'none', cursor:'pointer', color:'#d1d5db', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto' }}
+                        onMouseEnter={e => (e.currentTarget as HTMLElement).style.color='#dc2626'}
+                        onMouseLeave={e => (e.currentTarget as HTMLElement).style.color='#d1d5db'}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* ── Right: Live Summary ─────────────────────────────────────────── */}
+        <div style={{ width:260, borderLeft:'1px solid #e4e7ec', background:'#fff', display:'flex', flexDirection:'column', flexShrink:0 }}>
+          <div style={{ padding:'10px 12px 8px', borderBottom:'1px solid #f2f4f7' }}>
+            <div style={{ fontSize:10, fontWeight:700, color:'#98a2b3', textTransform:'uppercase', letterSpacing:'.08em' }}>Stock Received — {sessionDate}</div>
+            {supplier && <div style={{ fontSize:11, fontWeight:600, color:'#2563eb', marginTop:2 }}>From: {supplier}</div>}
+          </div>
+          <div style={{ flex:1, overflowY:'auto', padding:'6px 0' }}>
+            {summary.length === 0 ? (
+              <div style={{ padding:'24px 12px', textAlign:'center', color:'#c4c8d0', fontSize:12 }}>Scan products to see summary</div>
+            ) : summary.map(s => (
+              <div key={s.model} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'5px 14px', fontSize:12 }}>
+                <span style={{ color:'#344054', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:175 }}>{s.model}</span>
+                <span style={{ fontWeight:700, color:'#16a34a', flexShrink:0, marginLeft:6 }}>{s.qty}</span>
               </div>
-              <div className="xg-total"><span>Grand Total</span><span style={{ color: 'var(--ok)' }}>{grandTotal}</span></div>
-            </>
+            ))}
+          </div>
+          {grandTotal > 0 && (
+            <div style={{ padding:'10px 14px', borderTop:'1px solid #f2f4f7', display:'flex', justifyContent:'space-between', fontSize:13, fontWeight:700 }}>
+              <span style={{ color:'#344054' }}>Grand Total</span>
+              <span style={{ color:'#16a34a' }}>{grandTotal} units</span>
+            </div>
           )}
         </div>
       </div>
 
-      {/* New Product Drawer */}
-      <div className={`xg-drawer ${drawer ? 'open' : ''}`}>
-        <div className="xg-drawer-hdr">
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#101828' }}>🆕 New Product</div>
-            <div style={{ fontSize: 11, color: '#667085', marginTop: 2 }}>EAN: <strong>{drawer?.ean}</strong> not found in system</div>
-          </div>
-          <button onClick={() => setDrawer(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#667085' }}>✕</button>
-        </div>
-        <div className="xg-drawer-body">
-          {[
-            ['EAN', 'ean', 'text'], ['Product Name *', 'model', 'text'], ['Brand', 'brand', 'text'],
-            ['Category', 'categoryName', 'text'], ['Cost Price ₹', 'costPrice', 'number'],
-            ['MRP ₹', 'mrp', 'number'], ['Selling Price ₹', 'sellingPrice', 'number'],
-            ['GST %', 'gstRate', 'number'], ['HSN Code', 'hsnCode', 'text'],
-          ].map(([label, key, type]) => (
-            <div key={key as string} className="xg-field">
-              <label>{label as string}</label>
-              <input type={type as string} value={drawerForm[key as string]} onChange={e => setDrawerForm((f: any) => ({ ...f, [key as string]: e.target.value }))} />
+      {/* ── New Product Drawer ──────────────────────────────────────────────── */}
+      {drawer !== null && (
+        <div style={{ position:'fixed', inset:0, zIndex:300, display:'flex', alignItems:'stretch', justifyContent:'flex-end' }}>
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,.25)' }} onClick={() => setDrawer(null)} />
+          <div style={{ width:380, background:'#fff', boxShadow:'-8px 0 40px rgba(0,0,0,.15)', display:'flex', flexDirection:'column', position:'relative', zIndex:1 }}>
+            <div style={{ padding:'16px 20px', borderBottom:'1px solid #e4e7ec', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <div>
+                <div style={{ fontSize:15, fontWeight:700, color:'#101828' }}>New Product</div>
+                <div style={{ fontSize:12, color:'#98a2b3', marginTop:2 }}>EAN <strong style={{ color:'#2563eb', fontFamily:'monospace' }}>{drawer}</strong> not in system</div>
+              </div>
+              <button onClick={() => setDrawer(null)} style={{ width:28, height:28, border:'1px solid #e4e7ec', borderRadius:7, background:'#f9fafb', cursor:'pointer', fontSize:16, color:'#6b7280' }}>✕</button>
             </div>
-          ))}
-          <div className="xg-field">
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', textTransform: 'none', letterSpacing: 0 }}>
-              <input type="checkbox" checked={drawerForm.imeiRequired} onChange={e => setDrawerForm((f: any) => ({ ...f, imeiRequired: e.target.checked }))} style={{ width: 'auto', height: 'auto' }} />
-              <span style={{ fontSize: 13, fontWeight: 500, color: '#344054' }}>IMEI Required (mobile/tablet)</span>
-            </label>
+            <div style={{ flex:1, overflowY:'auto', padding:'16px 20px' }}>
+              {[['Product Name *','model','text'],['Brand','brand','text'],['Category','categoryName','text'],['Selling Price ₹','sellingPrice','number'],['MRP ₹','mrp','number'],['Cost Price ₹','costPrice','number'],['GST %','gstRate','number'],['HSN Code','hsnCode','text']].map(([l,k,t]) => (
+                <div key={k as string} style={{ marginBottom:12 }}>
+                  <label style={{ fontSize:11, fontWeight:600, color:'#64748b', textTransform:'uppercase', letterSpacing:'.05em', display:'block', marginBottom:4 }}>{l as string}</label>
+                  <input type={t as string} value={df[k as keyof typeof df] as string} onChange={e => setDf(f => ({ ...f, [k as string]: e.target.value }))}
+                    style={{ width:'100%', height:36, padding:'0 10px', border:'1.5px solid #d0d5dd', borderRadius:7, fontSize:13, color:'#101828', outline:'none', boxSizing:'border-box' }}
+                    onFocus={e => (e.target as HTMLInputElement).style.borderColor='#2563eb'}
+                    onBlur={e => (e.target as HTMLInputElement).style.borderColor='#d0d5dd'} />
+                </div>
+              ))}
+              <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', marginBottom:20 }}>
+                <input type="checkbox" checked={df.imeiRequired} onChange={e => setDf(f => ({ ...f, imeiRequired:e.target.checked }))} style={{ width:16, height:16, accentColor:'#2563eb' }} />
+                <span style={{ fontSize:13, color:'#344054', fontWeight:500 }}>IMEI / Serial tracking required</span>
+              </label>
+              <button onClick={saveDrawer} style={{ width:'100%', height:42, border:'none', borderRadius:8, background:'#2563eb', color:'#fff', fontSize:14, fontWeight:700, cursor:'pointer' }}>Save Product &amp; Continue</button>
+            </div>
           </div>
-          <button className="btn btn-primary" style={{ width: '100%', height: 40, fontSize: 14, marginTop: 8 }}
-            onClick={saveDrawerProduct} disabled={!drawerForm.model || drawerSaving}>
-            {drawerSaving ? 'Saving…' : 'Save Product & Continue'}
-          </button>
-        </div>
-      </div>
-      {drawer && <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.2)', zIndex: 199 }} onClick={() => setDrawer(null)} />}
-
-      {/* Error toast */}
-      {rows.some(r => r.errMsg) && (
-        <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', background: '#dc2626', color: '#fff', padding: '10px 20px', borderRadius: 8, fontSize: 13, fontWeight: 600, zIndex: 300 }}>
-          ⚠ {rows.find(r => r.errMsg)?.errMsg}
         </div>
       )}
     </div>
