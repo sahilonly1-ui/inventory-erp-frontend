@@ -79,7 +79,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
       {/* Content */}
       <main className="content">
-        <div className="page-body">{children}</div>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>{children}</div>
       </main>
 
       {/* Toast notifications */}

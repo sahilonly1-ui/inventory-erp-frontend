@@ -1,19 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { api } from '../api/client';
 
-interface DashStats {
-  products: number; activeProducts: number; vendors: number;
-  categories: number; brands: number;
-  today: { stockIn: number; stockOut: number; imeiScanned: number };
-}
-interface DailySummary {
-  date: string;
-  totals: { stockInUnits: number; stockOutUnits: number; stockInTxns: number; stockOutTxns: number; imeiIn: number; imeiOut: number };
-  byProduct: { productId: string; ean: string; model: string; brand: string; inQty: number; outQty: number; vendors: string[] }[];
-  recentTxns: { id: string; type: string; qty: number; product: string; vendor?: string; warehouse: string; createdAt: string }[];
-}
+interface DashStats { products: number; activeProducts: number; vendors: number; categories: number; brands: number; today: { stockIn: number; stockOut: number; imeiScanned: number; }; }
+interface DailySummary { totals: { stockInUnits: number; stockOutUnits: number; imeiIn: number; imeiOut: number; stockInTxns: number; stockOutTxns: number }; byProduct: { productId: string; ean: string; model: string; brand: string; inQty: number; outQty: number; vendors: string[] }[]; recentTxns: { id: string; type: string; qty: number; product: string; vendor?: string; warehouse: string; createdAt: string }[]; }
 
-const fmt = (n: number) => n.toLocaleString('en-IN');
+const fmt = (n: number) => n?.toLocaleString('en-IN') ?? '0';
 const fmtT = (s: string) => new Date(s).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 
 export function Dashboard() {
@@ -21,6 +12,7 @@ export function Dashboard() {
   const [daily, setDaily] = useState<DailySummary | null>(null);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<'in'|'out'|'movement'>('in');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -30,149 +22,187 @@ export function Dashboard() {
         api<DailySummary>(`/inventory/daily-summary?date=${date}`),
       ]);
       setStats(s); setDaily(d);
-    } catch { /* ignore */ }
+    } catch {}
     finally { setLoading(false); }
   }, [date]);
 
   useEffect(() => { load(); }, [load]);
 
-  const kpis = stats ? [
-    { ico: '📦', val: stats.products, lbl: 'Total Products', clr: '' },
-    { ico: '✅', val: stats.activeProducts, lbl: 'Active Products', clr: 'var(--ok)' },
-    { ico: '🏢', val: stats.vendors, lbl: 'Vendors', clr: '#7c3aed' },
-    { ico: null, val: stats.brands, lbl: 'Brands', clr: '#2563eb' },
-    { ico: '📂', val: stats.categories, lbl: 'Categories', clr: 'var(--info)' },
-    { ico: '📱', val: stats.today.imeiScanned, lbl: 'IMEIs Today', clr: '#0891b2' },
-  ] : [];
+  const stockInProducts = daily?.byProduct.filter(p => p.inQty > 0) ?? [];
+  const stockOutProducts = daily?.byProduct.filter(p => p.outQty > 0) ?? [];
+
+  // Group stock-in by vendor (from transactions)
+  const vendorGroups = (daily?.recentTxns ?? [])
+    .filter(t => t.qty > 0)
+    .reduce((acc: any, t) => { const v = t.vendor || 'No Vendor'; if (!acc[v]) acc[v] = []; acc[v].push(t); return acc; }, {});
+
+  const customerGroups = (daily?.recentTxns ?? [])
+    .filter(t => t.qty < 0)
+    .reduce((acc: any, t) => { const v = t.vendor || 'Customer'; if (!acc[v]) acc[v] = []; acc[v].push(t); return acc; }, {});
 
   return (
-    <>
-      <div className="page-header">
-        <div>
-          <div className="page-title">Dashboard</div>
-          <div className="page-subtitle">iTechArena Inventory ERP</div>
-        </div>
-        <div className="page-actions">
-          <input type="date" value={date} onChange={e => setDate(e.target.value)}
-            style={{ height: 32, padding: '0 10px', border: '1px solid var(--bdr)', borderRadius: 'var(--r-md)', fontSize: 12, background: 'var(--surf-0)', color: 'var(--txt)' }} />
-          <button className="btn btn-secondary" onClick={load} style={{ fontSize: 12, height: 32 }}>↺ Refresh</button>
-        </div>
+    <div style={{ height: 'calc(100vh - 56px)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {/* Compact header */}
+      <div style={{ padding: '8px 16px', borderBottom: '1px solid #e4e7ec', background: '#fff', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+        <div style={{ fontWeight: 700, fontSize: 15, color: '#101828' }}>Operational Dashboard</div>
+        <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ height: 28, padding: '0 8px', border: '1px solid #d0d5dd', borderRadius: 6, fontSize: 12, background: '#fff', color: '#344054', marginLeft: 'auto' }} />
+        <button onClick={load} style={{ height: 28, padding: '0 12px', border: '1px solid #d0d5dd', borderRadius: 6, background: '#fff', fontSize: 12, cursor: 'pointer', color: '#344054' }}>↺</button>
       </div>
 
-      {loading && <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><div className="spinner" style={{ width: 28, height: 28 }} /></div>}
-
-      {!loading && (
-        <>
-          {/* KPI grid */}
-          <div className="kpi-grid">
-            {kpis.map(k => (
-              <div key={k.lbl} className="kpi-card">
-                <div className="kpi-icon" style={{ background: '#f8fafc', fontSize: 15 }}>
-                  {k.ico === null ? (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2">
-                      <path d="M12 8a4 4 0 1 0-4-4"/><path d="M4 13.5V7a2 2 0 0 1 2-2h6.5a2 2 0 0 1 1.41.59l8 8a2 2 0 0 1 0 2.82l-6.59 6.59a2 2 0 0 1-2.82 0l-8-8A2 2 0 0 1 4 13.5Z"/>
-                      <circle cx="8.5" cy="8.5" r="1.25" fill="#2563eb" stroke="none"/>
-                    </svg>
-                  ) : k.ico}
-                </div>
-                <div className="kpi-value" style={k.clr ? { color: k.clr } : {}}>{fmt(k.val ?? 0)}</div>
-                <div className="kpi-label">{k.lbl}</div>
+      {loading ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1 }}><div className="spinner" style={{ width: 28, height: 28 }} /></div>
+      ) : (
+        <div style={{ flex: 1, overflow: 'auto', padding: '12px 16px' }}>
+          {/* KPI strip */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8, marginBottom: 14 }}>
+            {[
+              { l: 'Total Products', v: stats?.products, c: '#344054' },
+              { l: 'Active', v: stats?.activeProducts, c: '#16a34a' },
+              { l: 'Brands', v: stats?.brands, c: '#2563eb' },
+              { l: 'Categories', v: stats?.categories, c: '#7c3aed' },
+              { l: 'Vendors', v: stats?.vendors, c: '#0891b2' },
+              { l: `Stock In (${date.slice(5)})`, v: daily?.totals.stockInUnits, c: '#16a34a' },
+              { l: `Stock Out (${date.slice(5)})`, v: daily?.totals.stockOutUnits, c: '#dc2626' },
+            ].map(k => (
+              <div key={k.l} style={{ background: '#fff', border: '1px solid #e4e7ec', borderRadius: 8, padding: '8px 10px', textAlign: 'center' }}>
+                <div style={{ fontSize: 18, fontWeight: 700, color: k.c, lineHeight: 1.2 }}>{fmt(k.v ?? 0)}</div>
+                <div style={{ fontSize: 10, color: '#667085', marginTop: 2, lineHeight: 1.3 }}>{k.l}</div>
               </div>
             ))}
           </div>
 
-          {/* Today's movements */}
-          {daily && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
-              <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 'var(--r-lg)', padding: '16px 20px' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#16a34a', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Stock In — {date}</div>
-                <div style={{ display: 'flex', gap: 24 }}>
-                  <div><div style={{ fontSize: 28, fontWeight: 700, color: '#16a34a' }}>{fmt(daily.totals.stockInUnits)}</div><div style={{ fontSize: 11, color: '#4ade80' }}>Units received</div></div>
-                  <div><div style={{ fontSize: 28, fontWeight: 700, color: '#16a34a' }}>{daily.totals.imeiIn}</div><div style={{ fontSize: 11, color: '#4ade80' }}>IMEIs in</div></div>
-                  <div><div style={{ fontSize: 28, fontWeight: 700, color: '#16a34a' }}>{daily.totals.stockInTxns}</div><div style={{ fontSize: 11, color: '#4ade80' }}>Transactions</div></div>
-                </div>
+          {/* Tabs */}
+          <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid #e4e7ec', marginBottom: 12 }}>
+            {([['in','📥 Stock In Today'],['out','📤 Stock Out Today'],['movement','📊 Product Movement']] as const).map(([t, l]) => (
+              <button key={t} onClick={() => setTab(t)} style={{ padding: '7px 16px', fontSize: 12, fontWeight: tab === t ? 700 : 500, color: tab === t ? '#2563eb' : '#667085', background: 'none', border: 'none', borderBottom: `2px solid ${tab === t ? '#2563eb' : 'transparent'}`, cursor: 'pointer', transition: 'all .1s' }}>{l}</button>
+            ))}
+          </div>
+
+          {/* Tab: Stock In — grouped by vendor */}
+          {tab === 'in' && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#16a34a', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>RECEIVED — By Vendor</div>
+                {Object.keys(vendorGroups).length === 0 && <div style={{ color: '#98a2b3', fontSize: 13 }}>No stock received on {date}</div>}
+                {Object.entries(vendorGroups).map(([vendor, txns]: any) => {
+                  const total = txns.reduce((s: number, t: any) => s + t.qty, 0);
+                  const products = txns.reduce((acc: any, t: any) => { const k = t.product.split('(')[0].trim(); acc[k] = (acc[k]||0)+t.qty; return acc; }, {});
+                  return (
+                    <div key={vendor} style={{ background: '#fff', border: '1px solid #e4e7ec', borderRadius: 8, marginBottom: 10, overflow: 'hidden' }}>
+                      <div style={{ padding: '8px 12px', background: '#f8fffe', borderBottom: '1px solid #e4e7ec', display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 13 }}>
+                        <span style={{ color: '#101828' }}>{vendor}</span>
+                        <span style={{ color: '#16a34a' }}>+{total} units</span>
+                      </div>
+                      <div style={{ padding: '6px 0' }}>
+                        {Object.entries(products).map(([model, qty]: any) => (
+                          <div key={model} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 12px', fontSize: 12, color: '#344054' }}>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '75%' }}>{model}</span>
+                            <span style={{ fontWeight: 600, color: '#16a34a' }}>+{qty}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 'var(--r-lg)', padding: '16px 20px' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#dc2626', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Stock Out — {date}</div>
-                <div style={{ display: 'flex', gap: 24 }}>
-                  <div><div style={{ fontSize: 28, fontWeight: 700, color: '#dc2626' }}>{fmt(daily.totals.stockOutUnits)}</div><div style={{ fontSize: 11, color: '#f87171' }}>Units dispatched</div></div>
-                  <div><div style={{ fontSize: 28, fontWeight: 700, color: '#dc2626' }}>{daily.totals.imeiOut}</div><div style={{ fontSize: 11, color: '#f87171' }}>IMEIs sold</div></div>
-                  <div><div style={{ fontSize: 28, fontWeight: 700, color: '#dc2626' }}>{daily.totals.stockOutTxns}</div><div style={{ fontSize: 11, color: '#f87171' }}>Transactions</div></div>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#16a34a', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>TOP RECEIVED PRODUCTS</div>
+                <div style={{ background: '#fff', border: '1px solid #e4e7ec', borderRadius: 8, overflow: 'hidden' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead><tr style={{ background: '#f2f4f7' }}>
+                      {['Product','Units In'].map(h => <th key={h} style={{ padding: '7px 10px', textAlign: h === 'Units In' ? 'right' : 'left', fontWeight: 600, color: '#475467', fontSize: 10, textTransform: 'uppercase', borderBottom: '1px solid #e4e7ec' }}>{h}</th>)}
+                    </tr></thead>
+                    <tbody>
+                      {stockInProducts.sort((a,b) => b.inQty - a.inQty).slice(0,15).map((p,i) => (
+                        <tr key={p.productId} style={{ borderBottom: '1px solid #f2f4f7', background: i%2===0?'transparent':'#fafafa' }}>
+                          <td style={{ padding: '6px 10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>{p.model}</td>
+                          <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700, color: '#16a34a' }}>+{p.inQty}</td>
+                        </tr>
+                      ))}
+                      {stockInProducts.length === 0 && <tr><td colSpan={2} style={{ padding: '20px 10px', textAlign: 'center', color: '#98a2b3', fontSize: 12 }}>No inbound products today</td></tr>}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Daily product summary */}
-          {daily && daily.byProduct.length > 0 && (
-            <div className="grid-wrap" style={{ marginBottom: 16 }}>
-              <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--bdr-s)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 13, fontWeight: 600 }}>Product Movement — {date}</span>
-                <span style={{ fontSize: 11, color: 'var(--txt-3)' }}>{daily.byProduct.length} products</span>
+          {/* Tab: Stock Out — grouped by customer */}
+          {tab === 'out' && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#dc2626', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>DISPATCHED — By Customer</div>
+                {Object.keys(customerGroups).length === 0 && <div style={{ color: '#98a2b3', fontSize: 13 }}>No dispatches on {date}</div>}
+                {Object.entries(customerGroups).map(([party, txns]: any) => {
+                  const total = Math.abs(txns.reduce((s: number, t: any) => s + t.qty, 0));
+                  const products = txns.reduce((acc: any, t: any) => { const k = t.product.split('(')[0].trim(); acc[k] = (acc[k]||0)+Math.abs(t.qty); return acc; }, {});
+                  return (
+                    <div key={party} style={{ background: '#fff', border: '1px solid #e4e7ec', borderRadius: 8, marginBottom: 10, overflow: 'hidden' }}>
+                      <div style={{ padding: '8px 12px', background: '#fff8f8', borderBottom: '1px solid #e4e7ec', display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 13 }}>
+                        <span>{party}</span><span style={{ color: '#dc2626' }}>-{total} units</span>
+                      </div>
+                      <div style={{ padding: '6px 0' }}>
+                        {Object.entries(products).map(([model, qty]: any) => (
+                          <div key={model} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 12px', fontSize: 12, color: '#344054' }}>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '75%' }}>{model}</span>
+                            <span style={{ fontWeight: 600, color: '#dc2626' }}>-{qty}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#dc2626', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>TOP DISPATCHED PRODUCTS</div>
+                <div style={{ background: '#fff', border: '1px solid #e4e7ec', borderRadius: 8, overflow: 'hidden' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead><tr style={{ background: '#f2f4f7' }}>
+                      {['Product','Units Out'].map(h => <th key={h} style={{ padding: '7px 10px', textAlign: h === 'Units Out' ? 'right' : 'left', fontWeight: 600, color: '#475467', fontSize: 10, textTransform: 'uppercase', borderBottom: '1px solid #e4e7ec' }}>{h}</th>)}
+                    </tr></thead>
+                    <tbody>
+                      {stockOutProducts.sort((a,b) => b.outQty - a.outQty).slice(0,15).map((p,i) => (
+                        <tr key={p.productId} style={{ borderBottom: '1px solid #f2f4f7', background: i%2===0?'transparent':'#fafafa' }}>
+                          <td style={{ padding: '6px 10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>{p.model}</td>
+                          <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700, color: '#dc2626' }}>-{p.outQty}</td>
+                        </tr>
+                      ))}
+                      {stockOutProducts.length === 0 && <tr><td colSpan={2} style={{ padding: '20px 10px', textAlign: 'center', color: '#98a2b3', fontSize: 12 }}>No dispatches today</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Tab: Full movement */}
+          {tab === 'movement' && (
+            <div style={{ background: '#fff', border: '1px solid #e4e7ec', borderRadius: 8, overflow: 'hidden' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                <thead>
-                  <tr style={{ background: 'var(--surf-1)' }}>
-                    {['EAN', 'Product', 'Brand', 'In ↑', 'Out ↓', 'Vendors'].map(h => (
-                      <th key={h} style={{ padding: '7px 12px', textAlign: h === 'In ↑' || h === 'Out ↓' ? 'right' : 'left', fontWeight: 600, color: 'var(--txt-3)', fontSize: 10, textTransform: 'uppercase', borderBottom: '1px solid var(--bdr)' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {daily.byProduct.map((r, i) => (
-                    <tr key={r.productId} style={{ borderBottom: '1px solid var(--bdr-s)', background: i % 2 === 0 ? 'transparent' : 'var(--surf-1)' }}>
-                      <td style={{ padding: '7px 12px', fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--txt-3)' }}>{r.ean}</td>
-                      <td style={{ padding: '7px 12px', fontWeight: 500, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.model}</td>
-                      <td style={{ padding: '7px 12px', color: 'var(--txt-2)' }}>{r.brand}</td>
-                      <td style={{ padding: '7px 12px', textAlign: 'right', color: '#16a34a', fontWeight: 600 }}>{r.inQty > 0 ? `+${r.inQty}` : '—'}</td>
-                      <td style={{ padding: '7px 12px', textAlign: 'right', color: '#dc2626', fontWeight: 600 }}>{r.outQty > 0 ? `-${r.outQty}` : '—'}</td>
-                      <td style={{ padding: '7px 12px', color: 'var(--txt-3)', fontSize: 11 }}>{r.vendors.join(', ') || '—'}</td>
-                    </tr>
+                <thead><tr style={{ background: '#f2f4f7', position: 'sticky', top: 0 }}>
+                  {['Time','Type','Product','Qty','Warehouse'].map(h => (
+                    <th key={h} style={{ padding: '7px 12px', textAlign: 'left', fontWeight: 600, color: '#475467', fontSize: 10, textTransform: 'uppercase', borderBottom: '1px solid #e4e7ec', whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Recent transactions */}
-          {daily && daily.recentTxns.length > 0 && (
-            <div className="grid-wrap">
-              <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--bdr-s)', fontSize: 13, fontWeight: 600 }}>Recent Transactions</div>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                <thead>
-                  <tr style={{ background: 'var(--surf-1)' }}>
-                    {['Time', 'Type', 'Product', 'Qty', 'Warehouse', 'Vendor'].map(h => (
-                      <th key={h} style={{ padding: '7px 12px', textAlign: 'left', fontWeight: 600, color: 'var(--txt-3)', fontSize: 10, textTransform: 'uppercase', borderBottom: '1px solid var(--bdr)' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
+                </tr></thead>
                 <tbody>
-                  {daily.recentTxns.map((t, i) => (
-                    <tr key={t.id} style={{ borderBottom: '1px solid var(--bdr-s)', background: i % 2 === 0 ? 'transparent' : 'var(--surf-1)' }}>
-                      <td style={{ padding: '7px 12px', color: 'var(--txt-3)', fontSize: 11 }}>{fmtT(t.createdAt)}</td>
-                      <td style={{ padding: '7px 12px' }}>
-                        <span style={{ padding: '2px 8px', borderRadius: 'var(--r-full)', fontSize: 10, fontWeight: 700, background: t.qty > 0 ? '#f0fdf4' : '#fef2f2', color: t.qty > 0 ? '#16a34a' : '#dc2626' }}>{t.type.replace('_', ' ')}</span>
+                  {(daily?.recentTxns ?? []).map((t, i) => (
+                    <tr key={t.id} style={{ borderBottom: '1px solid #f2f4f7', background: i%2===0?'#fff':'#fafafa' }}>
+                      <td style={{ padding: '6px 12px', color: '#667085', fontFamily: 'var(--mono)', fontSize: 11 }}>{fmtT(t.createdAt)}</td>
+                      <td style={{ padding: '6px 12px' }}>
+                        <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 10, fontWeight: 700, background: t.qty > 0 ? '#dcfce7' : '#fee2e2', color: t.qty > 0 ? '#16a34a' : '#dc2626' }}>{t.type.replace(/_/g,' ')}</span>
                       </td>
-                      <td style={{ padding: '7px 12px', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.product}</td>
-                      <td style={{ padding: '7px 12px', fontWeight: 600, color: t.qty > 0 ? '#16a34a' : '#dc2626' }}>{t.qty > 0 ? `+${t.qty}` : t.qty}</td>
-                      <td style={{ padding: '7px 12px', color: 'var(--txt-3)' }}>{t.warehouse}</td>
-                      <td style={{ padding: '7px 12px', color: 'var(--txt-2)' }}>{t.vendor || '—'}</td>
+                      <td style={{ padding: '6px 12px', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.product}</td>
+                      <td style={{ padding: '6px 12px', fontWeight: 700, color: t.qty > 0 ? '#16a34a' : '#dc2626' }}>{t.qty > 0 ? `+${t.qty}` : t.qty}</td>
+                      <td style={{ padding: '6px 12px', color: '#667085' }}>{t.warehouse}</td>
                     </tr>
                   ))}
+                  {!daily?.recentTxns?.length && <tr><td colSpan={5} style={{ padding: '30px 0', textAlign: 'center', color: '#98a2b3', fontSize: 13 }}>No transactions on {date}</td></tr>}
                 </tbody>
               </table>
             </div>
           )}
-
-          {daily && daily.byProduct.length === 0 && (
-            <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--txt-3)' }}>
-              <div style={{ fontSize: 40, marginBottom: 12 }}>📋</div>
-              <div style={{ fontSize: 15, fontWeight: 600 }}>No movements on {date}</div>
-              <div style={{ fontSize: 12, marginTop: 6 }}>Use Stock In or Stock Out to record inventory movements</div>
-            </div>
-          )}
-        </>
+        </div>
       )}
-    </>
+    </div>
   );
 }
