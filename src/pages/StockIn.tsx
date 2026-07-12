@@ -18,6 +18,8 @@ const toTitle = (s:string) => s.trim().replace(/\b\w+/g, w=>w[0].toUpperCase()+w
 
 // Product cache to avoid repeated API calls for same EAN
 const productCache = new Map<string, { productId:string; model:string; brand:string; imeiRequired:boolean }|null>();
+// Sequence counter — if new EAN scan starts before old lookup finishes, ignore stale result
+let lookupSeq = 0;
 
 // ── State creation modal ──────────────────────────────────────────────────────
 const STATES = ['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Delhi','Goa','Gujarat','Haryana','Himachal Pradesh','Jammu & Kashmir','Jharkhand','Karnataka','Kerala','Ladakh','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Puducherry','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Chandigarh','Other'];
@@ -104,44 +106,88 @@ export function StockIn() {
 
   const handleEan = useCallback(async (idx:number, ean:string) => {
     const v = ean.trim(); if (!v) return;
-    // Move cursor to IMEI immediately (non-blocking UX)
+    const mySeq = ++lookupSeq; // capture sequence BEFORE async work
     updateRow(idx, { ean:v, status:'loading', errMsg:'' });
-    setFocusCell('imei');
 
-    // Lookup in background
+    // Lookup product (uses cache — nearly instant on second hit)
     const product = await lookupEan(v);
+
+    // STALE CHECK: if user scanned another EAN before this lookup finished, discard
+    if (mySeq !== lookupSeq) return;
+
     if (!product) {
       setDrawer(v); setDf(d=>({...d, ean:v}));
       updateRow(idx, { status:'not_found', errMsg:'' });
       setFocusCell('ean');
       return;
     }
+
     updateRow(idx, { ...product, status: product.imeiRequired ? 'awaiting_imei' : 'saved', qty: product.imeiRequired ? 0 : 1 });
-    if (!product.imeiRequired) {
-      // Non-IMEI product: add row and go to next EAN immediately
+
+    if (product.imeiRequired) {
+      // IMEI product: move cursor to this row's IMEI field (only now, after lookup confirmed)
+      setActiveRow(idx); setFocusCell('imei');
+    } else {
+      // Non-IMEI: immediately open next EAN row
       if (idx === rows.length-1) setRows(rs=>[...rs, emptyRow()]);
       setActiveRow(idx+1); setFocusCell('ean');
     }
-    // IMEI products: cursor is already on IMEI (moved above)
   }, [rows.length, lookupEan, updateRow]);
 
   const handleImei = useCallback(async (idx:number, imei:string) => {
     const v = imei.trim(); if (!v) return;
     const row = rows[idx];
-    if (!row.productId) { return; }
 
-    // Duplicate check
-    try { await api(`/imei/${encodeURIComponent(v)}`); updateRow(idx, { errMsg:`IMEI ${v} already exists!`, status:'err' }); return; }
-    catch {}
+    // ─── SMART EAN DETECTION ────────────────────────────────────────────────
+    // When staff scans "all EANs first then all IMEIs", the EAN barcode lands
+    // in the IMEI field.  Detect this and route it to a new EAN row instead:
+    //   • Value is already a known EAN in the product cache
+    //   • OR value is EAN-length (8 or 13 digits) which is distinct from IMEI (15 digits)
+    const isKnownEan = productCache.has(v);
+    const isEanLength = /^\d{8}$/.test(v) || /^\d{12,13}$/.test(v);
+    const isImeiLength = /^\d{15}$/.test(v);
 
-    // Valid IMEI: add to row (will be committed on Done)
+    if (isKnownEan || (isEanLength && !isImeiLength)) {
+      // EAN scanned into IMEI field — create a new EAN row and look it up
+      updateRow(idx, { imei:'', errMsg:'' }); // clear accidental entry in IMEI field
+      const newR = { ...emptyRow(), ean: v };
+      const insertIdx = idx + 1;
+      setRows(rs => { const next=[...rs]; if (insertIdx>=rs.length) next.push(newR); else next.splice(insertIdx,0,newR); return next; });
+      setActiveRow(insertIdx);
+      setFocusCell('ean');
+      // Trigger EAN lookup for the new row after React renders it
+      setTimeout(() => handleEanRef.current(insertIdx, v), 0);
+      return;
+    }
+
+    if (!row.productId) {
+      // No product yet — user might be scanning before lookup finished; just wait
+      return;
+    }
+
+    // ─── DUPLICATE IMEI CHECK ────────────────────────────────────────────────
+    try {
+      await api(`/imei/${encodeURIComponent(v)}`);
+      // 200 = IMEI found = duplicate
+      updateRow(idx, { errMsg:`IMEI ${v} already in system!`, status:'err' });
+      setActiveRow(idx); setFocusCell('imei');
+      return;
+    } catch {
+      // 404 = IMEI not found = new IMEI, proceed
+    }
+
+    // ─── SAVE IMEI (DRAFT) ───────────────────────────────────────────────────
     updateRow(idx, { imei:v, qty:row.qty+1, status:'saved', errMsg:'' });
-    // Next row: same product prefilled, focus IMEI (batch scanning)
+    // Next row: same product pre-filled, cursor on IMEI (batch same-model scanning)
     const next = { ...emptyRow(), productId:row.productId, model:row.model, brand:row.brand, imeiRequired:true, status:'awaiting_imei' as RowStatus };
     if (idx === rows.length-1) setRows(rs=>[...rs, next]);
     else setRows(rs => { const u=[...rs]; u.splice(idx+1,0,next); return u; });
     setActiveRow(idx+1); setFocusCell('imei');
   }, [rows]);
+
+  // Ref so handleImei can call handleEan without circular useCallback dependency
+  const handleEanRef = useRef<(idx:number, ean:string)=>void>(()=>{});
+  useEffect(() => { handleEanRef.current = handleEan; }, [handleEan]);
 
   // Handle supplier selection/auto-create
   const resolveSupplier = useCallback(async (name:string, state?:string): Promise<string|null> => {
@@ -185,8 +231,20 @@ export function StockIn() {
   const deleteRow = (idx:number) => { setRows(rs=>rs.length===1?[emptyRow()]:rs.filter((_,i)=>i!==idx)); if (activeRow>=idx&&activeRow>0) setActiveRow(r=>r-1); };
   const clearAll = () => { if (!confirm('Clear all scanned rows?')) return; productCache.clear(); setRows([emptyRow()]); setActiveRow(0); setFocusCell('ean'); };
 
-  const onEanKey = (e:KeyboardEvent<HTMLInputElement>, idx:number) => { if (e.key==='Enter'||e.key==='Tab') { e.preventDefault(); handleEan(idx,(e.target as HTMLInputElement).value); } };
-  const onImeiKey = (e:KeyboardEvent<HTMLInputElement>, idx:number) => { if (e.key==='Enter') { e.preventDefault(); handleImei(idx,(e.target as HTMLInputElement).value); } if (e.key==='Escape') updateRow(idx,{errMsg:''}); };
+  const onEanKey = (e:KeyboardEvent<HTMLInputElement>, idx:number) => {
+    if (e.key==='Enter'||e.key==='Tab') { e.preventDefault(); handleEan(idx,(e.target as HTMLInputElement).value); }
+  };
+  const onImeiKey = (e:KeyboardEvent<HTMLInputElement>, idx:number) => {
+    if (e.key==='Enter') { e.preventDefault(); handleImei(idx,(e.target as HTMLInputElement).value); }
+    if (e.key==='Escape') { updateRow(idx,{errMsg:''}); }
+    // Tab in IMEI field = skip IMEI for now → go to next row's EAN
+    // Supports workflow: "scan all EANs first, then come back for IMEIs"
+    if (e.key==='Tab') {
+      e.preventDefault();
+      if (idx === rows.length-1) setRows(rs=>[...rs, emptyRow()]);
+      setActiveRow(idx+1); setFocusCell('ean');
+    }
+  };
 
   const savedRows = rows.filter(r=>r.status==='saved'&&r.qty>0);
   const summary = Object.values(savedRows.reduce((a:any,r)=>{ const k=r.model||r.ean; if(!a[k]) a[k]={model:k,qty:0}; a[k].qty+=r.qty; return a; },{})) as any[];
@@ -267,7 +325,13 @@ export function StockIn() {
                     {/* EAN */}
                     <td style={{ borderBottom:'1px solid #e2e8f0', borderRight:'1px solid #e2e8f0', padding:0 }}>
                       <div style={{ height:36, outline:isActive&&focusCell==='ean'?'2px solid #2563eb':'2px solid transparent', borderRadius:isActive&&focusCell==='ean'?4:0, display:'flex' }}>
-                        <input ref={setRef(idx,'ean')} value={row.ean} onChange={e=>updateRow(idx,{ean:e.target.value,status:'empty',errMsg:''})} onKeyDown={e=>onEanKey(e,idx)} onFocus={()=>{setActiveRow(idx);setFocusCell('ean');}} placeholder={idx===0?'Scan EAN or barcode…':''} style={{ width:'100%', border:'none', padding:'0 10px', background:'transparent', fontSize:13, outline:'none', fontFamily:'inherit' }} />
+                        <input ref={setRef(idx,'ean')} value={row.ean}
+                          onChange={e=>updateRow(idx,{ean:e.target.value,status:'empty',errMsg:''})}
+                          onKeyDown={e=>onEanKey(e,idx)}
+                          onPaste={e=>{ e.preventDefault(); const v=e.clipboardData.getData('text').trim(); if(v){updateRow(idx,{ean:v,status:'empty',errMsg:''});setTimeout(()=>handleEan(idx,v),50);} }}
+                          onFocus={()=>{setActiveRow(idx);setFocusCell('ean');}}
+                          placeholder={idx===0?'Scan EAN or barcode…':''}
+                          style={{ width:'100%', border:'none', padding:'0 10px', background:'transparent', fontSize:13, outline:'none', fontFamily:'inherit' }} />
                         {row.status==='loading' && <div className="spinner" style={{ width:14, height:14, margin:'11px 8px 0 0' }} />}
                       </div>
                     </td>
@@ -282,7 +346,13 @@ export function StockIn() {
                     {/* IMEI */}
                     <td style={{ borderBottom:'1px solid #e2e8f0', borderRight:'1px solid #e2e8f0', padding:0 }}>
                       <div style={{ height:36, outline:isActive&&focusCell==='imei'?'2px solid #f59e0b':'2px solid transparent', borderRadius:isActive&&focusCell==='imei'?4:0, display:'flex', background:isActive&&focusCell==='imei'?'#fffbeb':'' }}>
-                        <input ref={setRef(idx,'imei')} value={row.imei} onChange={e=>updateRow(idx,{imei:e.target.value,errMsg:''})} onKeyDown={e=>onImeiKey(e,idx)} onFocus={()=>{setActiveRow(idx);setFocusCell('imei');}} readOnly={!row.imeiRequired} placeholder={row.imeiRequired?'Scan IMEI…':'—'}
+                        <input ref={setRef(idx,'imei')} value={row.imei}
+                          onChange={e=>updateRow(idx,{imei:e.target.value,errMsg:''})}
+                          onKeyDown={e=>onImeiKey(e,idx)}
+                          onPaste={e=>{ if(!row.imeiRequired) return; e.preventDefault(); const v=e.clipboardData.getData('text').trim(); if(v){updateRow(idx,{imei:v,errMsg:''});setTimeout(()=>handleImei(idx,v),50);} }}
+                          onFocus={()=>{setActiveRow(idx);setFocusCell('imei');}}
+                          readOnly={!row.imeiRequired}
+                          placeholder={row.imeiRequired?'Scan IMEI…':'—'}
                           style={{ width:'100%', border:'none', padding:'0 10px', background:'transparent', fontSize:12, outline:'none', fontFamily:row.imeiRequired?'monospace':'inherit', color:row.errMsg&&row.imei?'#dc2626':'#0f172a', cursor:row.imeiRequired?'text':'default' }} />
                       </div>
                     </td>
@@ -295,7 +365,7 @@ export function StockIn() {
                     </td>
                     {/* Delete */}
                     <td style={{ borderBottom:'1px solid #e2e8f0', padding:0, textAlign:'center' }}>
-                      <button onClick={e=>{e.stopPropagation();deleteRow(idx);}} style={{ width:32, height:36, border:'none', background:'none', cursor:'pointer', color:'#e2e8f0', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto', transition:'color .1s' }} onMouseEnter={e=>(e.currentTarget as HTMLElement).style.color='#dc2626'} onMouseLeave={e=>(e.currentTarget as HTMLElement).style.color='#e2e8f0'}>
+                      <button onClick={e=>{e.stopPropagation();deleteRow(idx);}} style={{ width:32, height:36, border:'none', background:'none', cursor:'pointer', color:'#94a3b8', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto', transition:'color .1s' }} onMouseEnter={e=>(e.currentTarget as HTMLElement).style.color='#dc2626'} onMouseLeave={e=>(e.currentTarget as HTMLElement).style.color='#94a3b8'}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
                       </button>
                     </td>

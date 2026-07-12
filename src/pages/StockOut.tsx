@@ -13,6 +13,9 @@ const getPartyHistory = (): string[] => { try { return JSON.parse(localStorage.g
 const savePartyHistory = (name: string) => { const h = getPartyHistory().filter(s => s !== name); localStorage.setItem(PARTY_KEY, JSON.stringify([name, ...h].slice(0, 100))); };
 const DEFAULT_PARTIES = ['Amazon','Flipkart','JioMart','Prime','Meesho','Walk In Customer','Service Center','Return'];
 const cellInp: React.CSSProperties = { width:'100%', height:'100%', border:'none', padding:'0 8px', background:'transparent', fontSize:13, color:'#101828', outline:'none', fontFamily:'inherit' };
+// Product EAN cache for instant repeated lookups
+const outProductCache = new Map<string, { id:string; model:string; brand:string; imeiRequired:boolean }|null>();
+let outLookupSeq = 0;
 
 export function StockOut() {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -41,40 +44,70 @@ export function StockOut() {
 
   const handleEan = useCallback(async (idx: number, ean: string) => {
     const v = ean.trim(); if (!v || !warehouseId) return;
+    const mySeq = ++outLookupSeq;
+    updateRow(idx, { ean:v, status:'loading' as any, errMsg:'' });
     try {
-      const res = await api<{ product: any }>(`/inventory/lookup?ean=${encodeURIComponent(v)}`);
-      const p = res.product;
-      if (p.imeiRequired) {
-        updateRow(idx, { productId:p.id, model:p.model, brand:p.brand, imeiRequired:true, qty:0, status:'awaiting_imei', errMsg:'' });
-        setFocusCell('imei');
+      let prod = outProductCache.get(v);
+      if (prod === undefined) {
+        const res = await api<{ product: any }>(`/inventory/lookup?ean=${encodeURIComponent(v)}`);
+        prod = res.product ? { id:res.product.id, model:res.product.model, brand:res.product.brand, imeiRequired:res.product.imeiRequired } : null;
+        outProductCache.set(v, prod);
+      }
+      if (mySeq !== outLookupSeq) return; // stale
+      if (!prod) { updateRow(idx, { ean:v, status:'err', errMsg:'EAN not found' }); return; }
+      if (prod.imeiRequired) {
+        updateRow(idx, { productId:prod.id, model:prod.model, brand:prod.brand, imeiRequired:true, qty:0, status:'awaiting_imei', errMsg:'' });
+        setActiveRow(idx); setFocusCell('imei');
       } else {
-        await api('/inventory/stock-out', { method:'POST', body:JSON.stringify({ productId:p.id, warehouseId, quantity:1, remarks:`${docNumber}${customer ? ' → '+customer : ''}${invoiceNo ? ' | '+invoiceNo : ''}` }) });
-        updateRow(idx, { productId:p.id, model:p.model, brand:p.brand, imeiRequired:false, qty:1, status:'saved', errMsg:'' });
+        updateRow(idx, { productId:prod.id, model:prod.model, brand:prod.brand, imeiRequired:false, qty:1, status:'saved', errMsg:'' });
         addRowAfter(idx, 'ean');
       }
-    } catch (e:any) { updateRow(idx, { ean:v, status:'err', errMsg: e.message?.includes('No active product') ? 'EAN not found' : e.message }); }
+    } catch (e:any) { if (mySeq !== outLookupSeq) return; updateRow(idx, { ean:v, status:'err', errMsg:'EAN not found' }); }
   }, [warehouseId, addRowAfter, updateRow, docNumber, customer, invoiceNo]);
+
+  const outHandleEanRef = useRef<(idx:number, ean:string)=>void>(()=>{});
+  useEffect(() => { outHandleEanRef.current = handleEan; }, [handleEan]);
 
   const handleImei = useCallback(async (idx: number, imei: string) => {
     const v = imei.trim(); if (!v) return;
-    const row = rows[idx]; if (!row.productId) return;
+    const row = rows[idx];
+
+    // Smart EAN detection — same pattern as StockIn
+    const isKnownEan = outProductCache.has(v);
+    const isEanLength = /^\d{8}$/.test(v) || /^\d{12,13}$/.test(v);
+    const isImeiLength = /^\d{15}$/.test(v);
+    if (isKnownEan || (isEanLength && !isImeiLength)) {
+      updateRow(idx, { imei:'', errMsg:'' });
+      const insertIdx = idx + 1;
+      const newR = { id:Math.random().toString(36).slice(2,9), ean:v, productId:'', model:'', brand:'', imeiRequired:false, qty:0, imei:'', status:'empty' as any, errMsg:'' };
+      setRows(rs => { const next=[...rs]; if (insertIdx>=rs.length) next.push(newR); else next.splice(insertIdx,0,newR); return next; });
+      setActiveRow(insertIdx); setFocusCell('ean');
+      setTimeout(() => outHandleEanRef.current(insertIdx, v), 0);
+      return;
+    }
+
+    if (!row.productId) return;
     try {
       const data = await api<{ status: string }>(`/imei/${encodeURIComponent(v)}`);
       if ((data as any).status !== 'IN_STOCK') {
-        updateRow(idx, { errMsg:`IMEI ${v} status: ${(data as any).status}. Cannot dispatch.`, imei:v }); setFocusCell('imei'); return;
+        updateRow(idx, { errMsg:`IMEI ${v} is ${(data as any).status}. Cannot dispatch.`, imei:v }); setActiveRow(idx); setFocusCell('imei'); return;
       }
-    } catch { updateRow(idx, { errMsg:`IMEI ${v} not found`, imei:v }); setFocusCell('imei'); return; }
+    } catch { updateRow(idx, { errMsg:`IMEI ${v} not found in system`, imei:v }); setActiveRow(idx); setFocusCell('imei'); return; }
     try {
       await api('/imei/dispatch', { method:'POST', body:JSON.stringify({ imeis:[v], channel:'STOCK_OUT', remarks:`${docNumber}${customer ? ' → '+customer : ''}` }) });
       updateRow(idx, { imei:v, qty:row.qty+1, status:'saved', errMsg:'' });
       addRowAfter(idx, 'imei', { productId:row.productId, model:row.model, brand:row.brand, imeiRequired:true, status:'awaiting_imei' });
-    } catch (e:any) { updateRow(idx, { errMsg:e.message, imei:v }); setFocusCell('imei'); }
+    } catch (e:any) { updateRow(idx, { errMsg:e.message, imei:v }); setActiveRow(idx); setFocusCell('imei'); }
   }, [rows, addRowAfter, updateRow, docNumber, customer]);
 
   const deleteRow = (idx: number) => { setRows(rs => rs.length===1 ? [emptyRow()] : rs.filter((_,i)=>i!==idx)); if (activeRow >= idx && activeRow > 0) setActiveRow(r => r-1); };
   const clearAll = () => { if (!confirm('Clear all rows?')) return; setRows([emptyRow()]); setActiveRow(0); setFocusCell('ean'); };
   const onEanKey = (e: KeyboardEvent<HTMLInputElement>, idx: number) => { if (e.key==='Enter'||e.key==='Tab') { e.preventDefault(); handleEan(idx, (e.target as HTMLInputElement).value); } };
-  const onImeiKey = (e: KeyboardEvent<HTMLInputElement>, idx: number) => { if (e.key==='Enter') { e.preventDefault(); handleImei(idx, (e.target as HTMLInputElement).value); } if (e.key==='Escape') updateRow(idx, { errMsg:'' }); };
+  const onImeiKey = (e: KeyboardEvent<HTMLInputElement>, idx: number) => {
+    if (e.key==='Enter') { e.preventDefault(); handleImei(idx, (e.target as HTMLInputElement).value); }
+    if (e.key==='Escape') updateRow(idx, { errMsg:'' });
+    if (e.key==='Tab') { e.preventDefault(); if (idx === rows.length-1) setRows(rs=>[...rs, { id:Math.random().toString(36).slice(2,9), ean:'', productId:'', model:'', brand:'', imeiRequired:false, qty:0, imei:'', status:'empty' as any, errMsg:'' }]); setActiveRow(idx+1); setFocusCell('ean'); }
+  };
 
   const allCust = custHistory.filter(c => c.toLowerCase().includes(custSearch.toLowerCase())).slice(0,8);
   const savedRows = rows.filter(r => r.status==='saved' && r.qty>0);
@@ -141,7 +174,10 @@ export function StockOut() {
                     <td style={{ padding:'0 8px', height:36, textAlign:'center', color:'#94a3b8', fontSize:11, fontWeight:600, background:'#f8fafc', borderBottom:'1px solid #e4e7ec', borderRight:'1px solid #e4e7ec' }}>{idx+1}</td>
                     <td style={{ borderBottom:'1px solid #e4e7ec', borderRight:'1px solid #e4e7ec', padding:0 }}>
                       <div style={{ height:36, border:isActive&&focusCell==='ean'?'2px solid #2563eb':'2px solid transparent', borderRadius:isActive&&focusCell==='ean'?4:0 }}>
-                        <input ref={setRef(idx,'ean')} value={row.ean} onChange={e=>updateRow(idx,{ean:e.target.value,errMsg:'',status:'empty'})} onKeyDown={e=>onEanKey(e,idx)} onFocus={()=>{setActiveRow(idx);setFocusCell('ean');}} placeholder={idx===0?'Scan EAN…':''} style={{...cellInp,background:isActive&&focusCell==='ean'?'#fff':'transparent'}} />
+                        <input ref={setRef(idx,'ean')} value={row.ean} onChange={e=>updateRow(idx,{ean:e.target.value,errMsg:'',status:'empty'})}
+                          onKeyDown={e=>onEanKey(e,idx)}
+                          onPaste={e=>{ e.preventDefault(); const v=e.clipboardData.getData('text').trim(); if(v){updateRow(idx,{ean:v,status:'empty' as any,errMsg:''});setTimeout(()=>handleEan(idx,v),50);} }}
+                          onFocus={()=>{setActiveRow(idx);setFocusCell('ean');}} placeholder={idx===0?'Scan EAN…':''} style={{...cellInp,background:isActive&&focusCell==='ean'?'#fff':'transparent'}} />
                       </div>
                     </td>
                     <td style={{ borderBottom:'1px solid #e4e7ec', borderRight:'1px solid #e4e7ec', padding:0 }}>
@@ -152,7 +188,9 @@ export function StockOut() {
                     </td>
                     <td style={{ borderBottom:'1px solid #e4e7ec', borderRight:'1px solid #e4e7ec', padding:0 }}>
                       <div style={{ height:36, border:isActive&&focusCell==='imei'?'2px solid #f59e0b':'2px solid transparent', borderRadius:isActive&&focusCell==='imei'?4:0 }}>
-                        <input ref={setRef(idx,'imei')} value={row.imei} onChange={e=>updateRow(idx,{imei:e.target.value,errMsg:''})} onKeyDown={e=>onImeiKey(e,idx)} onFocus={()=>{setActiveRow(idx);setFocusCell('imei');}} readOnly={!row.imeiRequired} placeholder={row.imeiRequired?'Scan IMEI to dispatch…':'—'} style={{...cellInp,fontFamily:row.imeiRequired?'monospace':'inherit',fontSize:12,color:row.errMsg&&row.imei?'#dc2626':'#101828',background:isActive&&focusCell==='imei'?'#fffbeb':'transparent',cursor:row.imeiRequired?'text':'default'}} />
+                        <input ref={setRef(idx,'imei')} value={row.imei} onChange={e=>updateRow(idx,{imei:e.target.value,errMsg:''})} onKeyDown={e=>onImeiKey(e,idx)}
+                          onPaste={e=>{ if(!row.imeiRequired) return; e.preventDefault(); const v=e.clipboardData.getData('text').trim(); if(v){updateRow(idx,{imei:v,errMsg:''});setTimeout(()=>handleImei(idx,v),50);} }}
+                          onFocus={()=>{setActiveRow(idx);setFocusCell('imei');}} readOnly={!row.imeiRequired} placeholder={row.imeiRequired?'Scan IMEI to dispatch…':'—'} style={{...cellInp,fontFamily:row.imeiRequired?'monospace':'inherit',fontSize:12,color:row.errMsg&&row.imei?'#dc2626':'#101828',background:isActive&&focusCell==='imei'?'#fffbeb':'transparent',cursor:row.imeiRequired?'text':'default'}} />
                       </div>
                     </td>
                     <td style={{ borderBottom:'1px solid #e4e7ec', borderRight:'1px solid #e4e7ec', padding:'0 8px', textAlign:'center' }}>
@@ -161,7 +199,7 @@ export function StockOut() {
                       {row.status==='awaiting_imei' && !row.errMsg && <span style={{ fontSize:10, background:'#fef9c3', color:'#854d0e', padding:'2px 8px', borderRadius:10 }}>Scan IMEI</span>}
                     </td>
                     <td style={{ borderBottom:'1px solid #e4e7ec', padding:0, textAlign:'center' }}>
-                      <button onClick={e=>{e.stopPropagation();deleteRow(idx);}} style={{ width:28, height:28, border:'none', background:'none', cursor:'pointer', color:'#d1d5db', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto' }} onMouseEnter={e=>(e.currentTarget as HTMLElement).style.color='#dc2626'} onMouseLeave={e=>(e.currentTarget as HTMLElement).style.color='#d1d5db'}>
+                      <button onClick={e=>{e.stopPropagation();deleteRow(idx);}} style={{ width:28, height:28, border:'none', background:'none', cursor:'pointer', color:'#94a3b8', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto' }} onMouseEnter={e=>(e.currentTarget as HTMLElement).style.color='#dc2626'} onMouseLeave={e=>(e.currentTarget as HTMLElement).style.color='#94a3b8'}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
                       </button>
                     </td>
