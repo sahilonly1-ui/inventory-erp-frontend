@@ -123,18 +123,41 @@ export function StockIn() {
       return;
     }
 
-    if(!row.productId) return; // No product in this row yet
+    // ── Core helpers ─────────────────────────────────────────────────────────────
+    const allDigits=/^\d+$/.test(v);
+    const len=v.length;
+    // A standard EAN-8/EAN-13/UPC barcode scanned into IMEI field by mistake
+    const looksLikeEan=allDigits&&(len===8||len===12||len===13);
+    // Anything that's all-digits but not a valid IMEI length or standard EAN
+    const looksLikeBadImei=allDigits&&len!==15&&!looksLikeEan;
 
-    // ── IMEI-required products (phones, tablets): strict 15-digit rule ─────────
+    // ── No product on this row yet ────────────────────────────────────────────
+    if(!row.productId){
+      if(looksLikeEan){
+        // Route EAN barcodes to a new EAN row even if no product on current row
+        upd(i,{imei1:'',errMsg:''});
+        const ni=ins(i,{ean:v});moveTo(ni,'ean');setTimeout(()=>ERef.current(ni,v),0);
+      } else if(looksLikeBadImei){
+        // Wrong-length digit string: clearly a malformed IMEI scan — show error
+        upd(i,{errMsg:`Scan the product EAN first. IMEI must be exactly 15 digits (got ${len}).`,status:'err'});
+        moveTo(i,'imei1');
+      }
+      // Other cases (non-digit, etc.): silently ignore
+      return;
+    }
+
+    // ── IMEI-required products (phones, tablets): STRICTLY 15 digits ─────────
     if(row.imeiRequired){
-      // ALL incorrect lengths = error. No EAN detection — IMEI field is IMEI only.
-      if(!/^\d{15}$/.test(v)){
-        const digs=/^\d+$/.test(v);
-        upd(i,{errMsg:digs?`IMEI must be exactly 15 digits — scanned ${v.length} digit${v.length!==1?'s':''} (${v.slice(0,4)}…). Re-scan.`:`Invalid IMEI — must be 15 digits only. Got: "${v.slice(0,8)}…"`,status:'err'});
+      // ANY length other than 15 = hard error. No EAN detection here.
+      if(len!==15||!allDigits){
+        const msg=allDigits
+          ?`IMEI must be exactly 15 digits — scanned ${len} digit${len!==1?'s':''}. Please re-scan.`
+          :`IMEI must be all digits (15 digits required). Got: "${v.slice(0,10)}…". Re-scan.`;
+        upd(i,{errMsg:msg,status:'err'});
         moveTo(i,'imei1');
         return;
       }
-      // Duplicate IMEI check
+      // Valid length: duplicate check
       try{await api(`/imei/${encodeURIComponent(v)}`);upd(i,{errMsg:`IMEI ${v} already in system!`,status:'err'});moveTo(i,'imei1');return;}catch{}
       upd(i,{imei1:v,qty:1,status:'saved',errMsg:''});
       const ni=i+1;
@@ -142,11 +165,14 @@ export function StockIn() {
       return;
     }
 
-    // ── Non-IMEI products (accessories): EAN detection + serial acceptance ─────
-    // If a standard EAN barcode is accidentally scanned in the serial field, handle it
-    const isE=eCache.has(v)||/^\d{8}$|^\d{12,13}$/.test(v);
-    if(isE){upd(i,{imei1:'',errMsg:''});const ni=ins(i,{ean:v});moveTo(ni,'ean');setTimeout(()=>ERef.current(ni,v),0);return;}
-    // Accept anything as serial number
+    // ── Non-IMEI products (accessories, speakers): EAN detection + serial ─────
+    if(looksLikeEan){
+      // Standard EAN accidentally scanned in serial field → route to new EAN row
+      upd(i,{imei1:'',errMsg:''});
+      const ni=ins(i,{ean:v});moveTo(ni,'ean');setTimeout(()=>ERef.current(ni,v),0);
+      return;
+    }
+    // Accept anything else as a serial number (no length restriction)
     upd(i,{imei1:v,qty:1,status:'saved',errMsg:''});
     const ni=i+1;
     if(ni<rows.length){ if(rows[ni].productId) moveTo(ni,'imei1'); else moveTo(ni,'ean'); }

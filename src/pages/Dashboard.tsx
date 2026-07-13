@@ -101,11 +101,9 @@ export function Dashboard() {
             {Object.entries(byProd).map(([model,txnList])=>{
               const qty=txnList.reduce((s,t)=>s+Math.abs(t.qty),0);
               return (
-                <div key={model} style={{display:'flex',alignItems:'center',padding:'8px 14px',borderBottom:'1px solid #f1f5f9',gap:10}}>
+                <div key={model} style={{display:'flex',alignItems:'center',padding:'8px 14px',borderBottom:'1px solid #f1f5f9',gap:8}}>
                   <span style={{flex:1,fontSize:12,color:'#374151',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{model}</span>
-                  <span style={{fontWeight:700,fontSize:13,color,flexShrink:0,minWidth:32,textAlign:'right'}}>{sign}{qty}</span>
-                  {/* Per-product Edit & Delete */}
-                  <ActionBtns ids={txnList.map(t=>t.id)} model={model} color={color} />
+                  <span style={{fontWeight:700,fontSize:13,color,flexShrink:0}}>{sign}{qty}</span>
                 </div>
               );
             })}
