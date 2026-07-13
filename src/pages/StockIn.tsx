@@ -15,7 +15,7 @@ const saveH=(n:string)=>{const h=getH().filter(x=>x!==n);localStorage.setItem(SK
 const toT=(s:string)=>s.trim().replace(/\b\w+/g,w=>w[0].toUpperCase()+w.slice(1).toLowerCase());
 const eCache=new Map<string,{productId:string;model:string;brand:string;imeiRequired:boolean}|null>();
 let seq=0;
-const STATES=['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Delhi','Goa','Gujarat','Haryana','Himachal Pradesh','Jammu & Kashmir','Jharkhand','Karnataka','Kerala','Ladakh','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Puducherry','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Other'];
+const STATES=['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chandigarh','Chhattisgarh','Dadra & Nagar Haveli','Daman & Diu','Delhi','Goa','Gujarat','Haryana','Himachal Pradesh','Jammu & Kashmir','Jharkhand','Karnataka','Kerala','Ladakh','Lakshadweep','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Puducherry','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Other'];
 
 function SM({name,onSave,onSkip}:{name:string;onSave:(s:string)=>void;onSkip:()=>void}){
   const[st,setSt]=useState('');
@@ -82,7 +82,9 @@ export function StockIn(){
     if(p===undefined){try{const r=await api<{product:{id:string;model:string;brand:string;imeiRequired:boolean}}>(`/inventory/lookup?ean=${encodeURIComponent(v)}`);p={productId:r.product.id,model:r.product.model,brand:r.product.brand,imeiRequired:r.product.imeiRequired};eCache.set(v,p);}catch{eCache.set(v,null);p=null;}}
     if(mSeq!==seq)return;
     if(!p){upd(i,{status:'not_found',errMsg:''});setDrawer(v);setDf(d=>({...d,ean:v}));moveTo(i,'ean');return;}
-    upd(i,{...p,status:'found',qty:1});
+    // Non-IMEI products (accessories, cables) auto-save immediately — serial is truly optional
+    // IMEI-required products (phones) show 'found' to indicate IMEI still needed
+    upd(i,{...p,status:p.imeiRequired?'found':'saved',qty:1});
     const ni=ins(i);moveTo(ni,'ean');
   },[upd,ins,moveTo]);
   useEffect(()=>{ERef.current=handleEan;},[handleEan]);
@@ -155,7 +157,7 @@ export function StockIn(){
       }
       eCache.clear();setRows([mk()]);moveTo(0,'ean');setSupp('');setSuppId('');setInv('');localStorage.removeItem(DK);
       alert(`✓ ${sv.length} item(s) committed — ${doc}`);
-    }catch(e:any){alert('Error: '+e.message);}
+    }catch(e:any){alert('Commit failed: '+e.message+'\n\nCheck that IMEIs are not duplicates and supplier exists.');}
     finally{setBusy(false);}
   },[rows,whId,suppId,supp,inv,doc,moveTo]);
 
@@ -260,7 +262,11 @@ export function StockIn(){
                     <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',padding:0,background:row.errField==='imei'?'#fff5f5':''}}>
                       <div style={{height:38,outline:eOL('imei'),background:isA&&fc==='imei'?'#fff5f5':'',display:'flex'}}>
                         <input ref={R(i,'imei')} value={row.imei}
-                          onChange={e=>upd(i,{imei:e.target.value,errMsg:'',errField:''})}
+                          onChange={e=>{
+                            const v=e.target.value;upd(i,{imei:v,errMsg:'',errField:''});
+                            // Auto-submit when scanner finishes (exactly 15 digits entered)
+                            if(/^\d{15}$/.test(v.trim()))setTimeout(()=>handleImei(i,v.trim()),60);
+                          }}
                           onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();handleImei(i,(e.target as HTMLInputElement).value);}if(e.key==='Tab'){e.preventDefault();handleImei(i,(e.target as HTMLInputElement).value);}if(e.key==='Escape')upd(i,{errMsg:'',errField:'',imei:'',status:row.productId?'found':'empty'});}}
                           onPaste={e=>{e.preventDefault();const v=e.clipboardData.getData('text').trim();if(v){upd(i,{imei:v});setTimeout(()=>handleImei(i,v),30);}}}
                           onFocus={()=>{setAr(i);setFc('imei');}}

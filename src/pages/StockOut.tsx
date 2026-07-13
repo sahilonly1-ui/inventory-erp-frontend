@@ -59,7 +59,8 @@ export function StockOut(){
     }
     if(mSeq!==seq)return;
     if(!p){upd(i,{status:'not_found',errMsg:'EAN not found in product master'});return;}
-    upd(i,{productId:p.id,model:p.model,brand:p.brand,imeiRequired:p.imeiRequired,status:'found',qty:1});
+    // Non-IMEI products auto-save — serial is optional; phones show 'found' to await IMEI
+    upd(i,{productId:p.id,model:p.model,brand:p.brand,imeiRequired:p.imeiRequired,status:p.imeiRequired?'found':'saved',qty:1});
     const ni=ins(i);moveTo(ni,'ean'); // EAN → next EAN
   },[whId,upd,ins,moveTo]);
   useEffect(()=>{ERef.current=handleEan;},[handleEan]);
@@ -238,7 +239,7 @@ export function StockOut(){
                         <input ref={R(i,'ean')} value={row.ean}
                           onChange={e=>upd(i,{ean:e.target.value,status:'empty',errMsg:'',errField:''})}
                           onKeyDown={e=>{if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();handleEan(i,(e.target as HTMLInputElement).value);}}}
-                          onPaste={e=>{e.preventDefault();const v=e.clipboardData.getData('text').trim();if(v){upd(i,{ean:v});setTimeout(()=>handleEan(i,v),30);}}}
+                          onPaste={e=>{e.preventDefault();const v=e.clipboardData.getData('text').trim();if(v){upd(i,{ean:v,status:'loading',errMsg:'',errField:''});setTimeout(()=>handleEan(i,v),80);}}}
                           onFocus={()=>{setAr(i);setFc('ean');}}
                           placeholder={i===0?'Scan EAN to dispatch…':''} style={CI()}/>
                         {row.status==='loading'&&<div className="spinner" style={{width:13,height:13,margin:'0 6px',flexShrink:0}}/>}
@@ -254,7 +255,11 @@ export function StockOut(){
                     <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',padding:0,background:row.errField==='imei'?'#fff5f5':''}}>
                       <div style={{height:38,outline:eOL('imei'),background:isA&&fc==='imei'?'#fff5f5':'',display:'flex'}}>
                         <input ref={R(i,'imei')} value={row.imei}
-                          onChange={e=>upd(i,{imei:e.target.value,errMsg:'',errField:''})}
+                          onChange={e=>{
+                            const v=e.target.value;upd(i,{imei:v,errMsg:'',errField:''});
+                            // Auto-submit when scanner finishes (exactly 15 digits entered)
+                            if(/^\d{15}$/.test(v.trim()))setTimeout(()=>handleImei(i,v.trim()),60);
+                          }}
                           onKeyDown={e=>{
                             if(e.key==='Enter'){e.preventDefault();handleImei(i,(e.target as HTMLInputElement).value);}
                             if(e.key==='Tab'){e.preventDefault();handleImei(i,(e.target as HTMLInputElement).value);}
