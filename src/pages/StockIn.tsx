@@ -115,47 +115,41 @@ export function StockIn() {
     const v=imei.trim();
     const row=rows[i];
 
-    // Smart EAN detection in IMEI field
-    const isE=eCache.has(v)||(/^\d{8}$|^\d{12,13}$/.test(v)&&!/^\d{15}$/.test(v));
-    if(v&&isE){upd(i,{imei1:'',errMsg:''});const ni=ins(i,{ean:v});moveTo(ni,'ean');setTimeout(()=>ERef.current(ni,v),0);return;}
-
-    if(!row.productId){
-      // No product yet, skip
-      if(!v){const ni=ins(i);moveTo(ni,'ean');}
-      return;
-    }
-
-    // Empty IMEI/Sr.No. — serial is optional, save row and go to next IMEI
+    // ── Empty field: save if product exists, move to next ──────────────────────
     if(!v){
-      upd(i,{status:'saved',qty:1,errMsg:''});
-      const nextIdx=i+1;
-      if(nextIdx<rows.length){
-        if(rows[nextIdx].productId) moveTo(nextIdx,'imei1');
-        else moveTo(nextIdx,'ean');
-      }
+      if(row.productId) upd(i,{status:'saved',qty:1,errMsg:''});
+      const ni=i+1;
+      if(ni<rows.length){ if(rows[ni].productId) moveTo(ni,'imei1'); else moveTo(ni,'ean'); }
       return;
     }
 
-    // Length validation: ONLY for IMEI-required products (not serial numbers)
-    if(row.imeiRequired&&!/^\d{15}$/.test(v)){
-      upd(i,{errMsg:`IMEI must be exactly 15 digits (got ${v.length}). Please re-scan.`,status:'err'});
-      moveTo(i,'imei1');
-      return;
-    }
+    if(!row.productId) return; // No product in this row yet
 
-    // Duplicate check — only for IMEI-tracked products
+    // ── IMEI-required products (phones, tablets): strict 15-digit rule ─────────
     if(row.imeiRequired){
+      // ALL incorrect lengths = error. No EAN detection — IMEI field is IMEI only.
+      if(!/^\d{15}$/.test(v)){
+        const digs=/^\d+$/.test(v);
+        upd(i,{errMsg:digs?`IMEI must be exactly 15 digits — scanned ${v.length} digit${v.length!==1?'s':''} (${v.slice(0,4)}…). Re-scan.`:`Invalid IMEI — must be 15 digits only. Got: "${v.slice(0,8)}…"`,status:'err'});
+        moveTo(i,'imei1');
+        return;
+      }
+      // Duplicate IMEI check
       try{await api(`/imei/${encodeURIComponent(v)}`);upd(i,{errMsg:`IMEI ${v} already in system!`,status:'err'});moveTo(i,'imei1');return;}catch{}
+      upd(i,{imei1:v,qty:1,status:'saved',errMsg:''});
+      const ni=i+1;
+      if(ni<rows.length){ if(rows[ni].productId) moveTo(ni,'imei1'); else moveTo(ni,'ean'); }
+      return;
     }
 
+    // ── Non-IMEI products (accessories): EAN detection + serial acceptance ─────
+    // If a standard EAN barcode is accidentally scanned in the serial field, handle it
+    const isE=eCache.has(v)||/^\d{8}$|^\d{12,13}$/.test(v);
+    if(isE){upd(i,{imei1:'',errMsg:''});const ni=ins(i,{ean:v});moveTo(ni,'ean');setTimeout(()=>ERef.current(ni,v),0);return;}
+    // Accept anything as serial number
     upd(i,{imei1:v,qty:1,status:'saved',errMsg:''});
-    // Go to NEXT ROW's IMEI (IMEI-scan phase: all IMEIs scanned in sequence)
-    const nextIdx=i+1;
-    if(nextIdx<rows.length){
-      // If next row has a product, focus its IMEI; otherwise focus its EAN
-      if(rows[nextIdx].productId) moveTo(nextIdx,'imei1');
-      else moveTo(nextIdx,'ean');
-    }
+    const ni=i+1;
+    if(ni<rows.length){ if(rows[ni].productId) moveTo(ni,'imei1'); else moveTo(ni,'ean'); }
   },[rows,upd,ins,moveTo]);
 
   const del=(i:number)=>{
