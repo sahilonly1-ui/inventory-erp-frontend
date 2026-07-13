@@ -146,18 +146,51 @@ export function StockIn(){
     const sv=rows.filter(r=>r.status==='saved'&&r.productId);
     if(!sv.length||!whId)return;
     setBusy(true);
+    const rmk=`${doc}${supp?' | '+supp:''}${inv?' | INV:'+inv:''}`;
     try{
-      for(const r of sv){
-        if(r.imei){
-          // Has IMEI in the IMEI column — always send to IMEI tracker (force:true bypasses imeiRequired check)
-          await api('/imei/receive',{method:'POST',body:JSON.stringify({productId:r.productId,warehouseId:whId,imeis:[{imei1:r.imei,imeiType:r.imeiType||'NIL'}],vendorId:suppId||undefined,force:true,remarks:`${doc}${supp?' | '+supp:''}${inv?' | INV:'+inv:''}${r.srno?' | S/N:'+r.srno:''}`})});
-        }else{
-          await api('/inventory/stock-in',{method:'POST',body:JSON.stringify({productId:r.productId,warehouseId:whId,quantity:r.qty||1,vendorId:suppId||undefined,remarks:`${doc}${inv?' | INV:'+inv:''}${r.srno?' | S/N:'+r.srno:''}`})});
-        }
+      // ── Batch all IMEIs by productId (1 API call per unique product, not per row) ──
+      // This prevents multiple concurrent transactions causing 500 errors.
+      const imeiRows=sv.filter(r=>r.imei);
+      const imeiByProduct=imeiRows.reduce((a:any,r)=>{
+        if(!a[r.productId])a[r.productId]=[];
+        a[r.productId].push({imei1:r.imei,imeiType:r.imeiType||'NIL'});
+        return a;
+      },{});
+      for(const[productId,imeis] of Object.entries(imeiByProduct) as any[]){
+        await api('/imei/receive',{method:'POST',body:JSON.stringify({
+          productId,warehouseId:whId,
+          imeis,               // all IMEIs for this product in ONE call
+          vendorId:suppId||undefined,
+          force:true,          // bypass imeiRequired check
+          remarks:rmk,
+        })});
       }
-      eCache.clear();setRows([mk()]);moveTo(0,'ean');setSupp('');setSuppId('');setInv('');localStorage.removeItem(DK);
+
+      // ── Batch non-IMEI rows by productId (1 call per unique product) ─────────────
+      const nonImeiRows=sv.filter(r=>!r.imei);
+      const nonImeiByProduct=nonImeiRows.reduce((a:any,r)=>{
+        if(!a[r.productId])a[r.productId]={productId:r.productId,qty:0,srNos:[] as string[]};
+        a[r.productId].qty+=(r.qty||1);
+        if(r.srno)a[r.productId].srNos.push(r.srno);
+        return a;
+      },{});
+      for(const[productId,data] of Object.entries(nonImeiByProduct) as any[]){
+        await api('/inventory/stock-in',{method:'POST',body:JSON.stringify({
+          productId,warehouseId:whId,
+          quantity:data.qty,
+          vendorId:suppId||undefined,
+          remarks:`${rmk}${data.srNos.length?' | S/N:'+data.srNos.join(','):''}`,
+        })});
+      }
+
+      eCache.clear();setRows([mk()]);moveTo(0,'ean');
+      setSupp('');setSuppId('');setInv('');
+      localStorage.removeItem(DK);
       alert(`✓ ${sv.length} item(s) committed — ${doc}`);
-    }catch(e:any){alert('Commit failed: '+e.message+'\n\nCheck that IMEIs are not duplicates and supplier exists.');}
+    }catch(e:any){
+      const msg=e.message||'Unknown error';
+      alert(`Commit failed: ${msg}\n\nTip: Check if any IMEI was previously scanned (use IMEI Tracker to verify).`);
+    }
     finally{setBusy(false);}
   },[rows,whId,suppId,supp,inv,doc,moveTo]);
 

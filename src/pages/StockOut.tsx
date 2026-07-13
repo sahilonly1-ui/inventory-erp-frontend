@@ -135,26 +135,37 @@ export function StockOut(){
     setBusy(true);
     const rmk=`${doc}${cust?' → '+cust:''}${inv?' | INV:'+inv:''}`;
     try{
-      // 1. Dispatch all IMEI rows in one call (batch dispatch)
+      // ── Batch dispatch all IMEIs in one call ──────────────────────────────────────
       const imeiRows=sv.filter(r=>r.imei);
       if(imeiRows.length){
         await api('/imei/dispatch',{method:'POST',body:JSON.stringify({
-          imeis:imeiRows.map(r=>r.imei),
+          imeis:imeiRows.map(r=>r.imei), // all IMEIs in ONE dispatch call
           channel:'STOCK_OUT',
           remarks:rmk,
         })});
       }
-      // 2. Stock-out non-IMEI rows individually
-      for(const r of sv.filter(r=>!r.imei)){
+
+      // ── Batch non-IMEI rows by productId (1 call per unique product) ─────────────
+      const nonImeiByProduct=sv.filter(r=>!r.imei).reduce((a:any,r)=>{
+        if(!a[r.productId])a[r.productId]={productId:r.productId,qty:0,srNos:[] as string[]};
+        a[r.productId].qty+=(r.qty||1);
+        if(r.srno)a[r.productId].srNos.push(r.srno);
+        return a;
+      },{});
+      for(const[productId,data] of Object.entries(nonImeiByProduct) as any[]){
         await api('/inventory/stock-out',{method:'POST',body:JSON.stringify({
-          productId:r.productId,warehouseId:whId,quantity:r.qty||1,
-          remarks:`${rmk}${r.srno?' | S/N:'+r.srno:''}`,
+          productId,warehouseId:whId,
+          quantity:data.qty,
+          remarks:`${rmk}${data.srNos.length?' | S/N:'+data.srNos.join(','):''}`,
         })});
       }
+
       if(cust)saveC(cust);
       pCache.clear();setRows([mk()]);moveTo(0,'ean');
       alert(`✓ ${sv.length} item(s) dispatched — ${doc}`);
-    }catch(e:any){alert('Dispatch error: '+e.message);}
+    }catch(e:any){
+      alert(`Dispatch failed: ${e.message||'Unknown error'}\n\nCheck IMEI status in IMEI Tracker.`);
+    }
     finally{setBusy(false);}
   },[rows,whId,cust,inv,doc,moveTo]);
 
