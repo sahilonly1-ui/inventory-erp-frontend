@@ -4,11 +4,11 @@ import { api } from '../api/client';
 interface Warehouse { id: string; name: string; }
 type FCell = 'ean'|'imei1'|'imei2';
 type RS = 'empty'|'loading'|'not_found'|'awaiting_imei'|'saved'|'err';
-interface Row { id:string; ean:string; productId:string; model:string; brand:string; imeiRequired:boolean; qty:number; imei1:string; imei2:string; status:RS; errMsg:string; }
+interface Row { id:string; ean:string; productId:string; model:string; brand:string; imeiRequired:boolean; qty:number; imei1:string; imei2:string; imeiType:string; status:RS; errMsg:string; }
 
 const uid = () => Math.random().toString(36).slice(2,9);
 const genDoc = () => `SIN-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.floor(Math.random()*9000+1000)}`;
-const mkRow = (): Row => ({ id:uid(), ean:'', productId:'', model:'', brand:'', imeiRequired:false, qty:0, imei1:'', imei2:'', status:'empty', errMsg:'' });
+const mkRow = (): Row => ({ id:uid(), ean:'', productId:'', model:'', brand:'', imeiRequired:false, qty:0, imei1:'', imei2:'', imeiType:'NIL', status:'empty', errMsg:'' });
 const SHKEY = 'erp_supp_v3';
 const getH = (): string[] => { try { return JSON.parse(localStorage.getItem(SHKEY)||'[]'); } catch { return []; } };
 const saveH = (n:string) => { const h=getH().filter(x=>x!==n); localStorage.setItem(SHKEY,JSON.stringify([n,...h].slice(0,100))); };
@@ -135,7 +135,7 @@ export function StockIn() {
     try{
       for(const r of sv){
         if(r.imeiRequired&&r.imei1)
-          await api('/imei/receive',{method:'POST',body:JSON.stringify({productId:r.productId,warehouseId:whId,imeis:[{imei1:r.imei1,imei2:r.imei2||undefined}],vendorId:suppId||undefined,remarks:`${doc}${supp?' | '+supp:''}${inv?' | INV:'+inv:''}`})});
+          await api('/imei/receive',{method:'POST',body:JSON.stringify({productId:r.productId,warehouseId:whId,imeis:[{imei1:r.imei1,imei2:r.imei2||undefined,imeiType:r.imeiType||'NIL'}],vendorId:suppId||undefined,remarks:`${doc}${supp?' | '+supp:''}${inv?' | INV:'+inv:''}`})});
         else if(!r.imeiRequired)
           await api('/inventory/stock-in',{method:'POST',body:JSON.stringify({productId:r.productId,warehouseId:whId,quantity:r.qty,vendorId:suppId||undefined,remarks:`${doc}${inv?' | INV:'+inv:''}`})});
       }
@@ -167,7 +167,7 @@ export function StockIn() {
     <div style={{display:'flex',flexDirection:'column',height:'100vh',background:'#fff',overflow:'hidden'}}>
       <div style={{background:'#fff',borderBottom:'1px solid #e2e8f0',padding:'8px 16px',flexShrink:0}}>
         <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
-          <span style={{fontSize:11,fontWeight:700,color:'#2563eb',background:'#eff6ff',padding:'3px 12px',borderRadius:20,border:'1px solid #bfdbfe'}}>{doc}</span>
+          <span style={{fontSize:11,fontWeight:700,color:'#2563eb',background:'#eff6ff',padding:'3px 12px',borderRadius:20,border:'1px solid #bfdbfe'}}>{doc}</span><span style={{fontSize:10,fontWeight:700,color:'#f59e0b',background:'#fffbeb',padding:'2px 8px',borderRadius:10,border:'1px solid #fde68a',letterSpacing:'.05em'}}>DRAFT</span>
           <span style={{fontSize:13,fontWeight:700,color:'#0f172a'}}>Stock In Entry</span>
           <div style={{flex:1}}/>
           <span style={{fontSize:11,color:'#94a3b8'}}>{sv.length} items · {tot} units</span>
@@ -214,10 +214,10 @@ export function StockIn() {
       <div style={{flex:1,display:'flex',overflow:'hidden'}}>
         <div style={{flex:1,overflowY:'auto',overflowX:'auto'}}>
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:13,tableLayout:'fixed',minWidth:920}}>
-            <colgroup><col style={{width:36}}/><col style={{width:145}}/><col/><col style={{width:50}}/><col style={{width:165}}/><col style={{width:165}}/><col style={{width:85}}/><col style={{width:42}}/></colgroup>
+            <colgroup><col style={{width:36}}/><col style={{width:145}}/><col/><col style={{width:50}}/><col style={{width:155}}/><col style={{width:155}}/><col style={{width:110}}/><col style={{width:85}}/><col style={{width:42}}/></colgroup>
             <thead>
               <tr style={{background:'#f8fafc',position:'sticky',top:0,zIndex:5,boxShadow:'0 1px 0 #e2e8f0'}}>
-                {['#','EAN / BARCODE','PRODUCT NAME','QTY','IMEI 1','IMEI 2 (optional)','STATUS',''].map((h,i)=>(
+                {['#','EAN / BARCODE','PRODUCT NAME','QTY','IMEI 1','IMEI 2 (optional)','IMEI TYPE','STATUS',''].map((h,i)=>(
                   <th key={i} style={{padding:'0 10px',height:34,textAlign:i===3?'center':'left',fontWeight:700,color:'#64748b',fontSize:10,textTransform:'uppercase',letterSpacing:'.07em',whiteSpace:'nowrap'}}>{h}</th>
                 ))}
               </tr>
@@ -267,6 +267,19 @@ export function StockIn() {
                           style={CI({fontFamily:row.imeiRequired?'monospace':'inherit',fontSize:12,color:'#475569',cursor:row.imeiRequired?'text':'default'})} />
                       </div>
                     </td>
+                    {/* IMEI Type */}
+                    <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',padding:'0 4px'}}>
+                      {row.imeiRequired ? (
+                        <select value={row.imeiType} onChange={e=>upd(i,{imeiType:e.target.value})}
+                          style={{width:'100%',height:36,border:'none',background:'transparent',fontSize:12,outline:'none',cursor:'pointer',color:row.imeiType!=='NIL'?'#2563eb':'#94a3b8'}}>
+                          <option value="NIL">— NIL</option>
+                          <option value="OPEN_BOX">📦 Open Box</option>
+                          <option value="DEMO">🎯 Demo</option>
+                          <option value="SECOND_IMEI">2️⃣ 2nd IMEI</option>
+                        </select>
+                      ) : <span style={{padding:'0 8px',color:'#cbd5e1',fontSize:12}}>—</span>}
+                    </td>
+                    {/* Status */}
                     <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',padding:'0 8px',textAlign:'center'}}>
                       {row.errMsg&&<span style={{fontSize:10,background:'#fef2f2',color:'#dc2626',padding:'2px 8px',borderRadius:10,fontWeight:700}} title={row.errMsg}>✕</span>}
                       {!row.errMsg&&row.status==='saved'&&<span style={{fontSize:10,background:'#dcfce7',color:'#15803d',padding:'2px 8px',borderRadius:10,fontWeight:700}}>✓</span>}
