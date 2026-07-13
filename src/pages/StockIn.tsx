@@ -102,9 +102,11 @@ export function StockIn() {
     }
     if(mSeq!==seq)return;
     if(!p){upd(i,{status:'not_found',errMsg:''});setDrawer(v);setDf(d=>({...d,ean:v}));moveTo(i,'ean');return;}
-    // Always go to IMEI/Sr.No. field so user can enter serial if needed
+    // Product found — go to NEXT ROW's EAN immediately (EAN-first workflow)
+    // User scans all EANs first, then goes back to scan all IMEIs
     upd(i,{...p,status:'found',qty:1});
-    moveTo(i,'imei1');
+    const ni=ins(i);
+    moveTo(ni,'ean');
   },[upd,ins,moveTo]);
 
   useEffect(()=>{ERef.current=handleEan;},[handleEan]);
@@ -123,10 +125,14 @@ export function StockIn() {
       return;
     }
 
-    // Empty IMEI/Sr.No. — just save the row (serial is optional)
+    // Empty IMEI/Sr.No. — serial is optional, save row and go to next IMEI
     if(!v){
       upd(i,{status:'saved',qty:1,errMsg:''});
-      const ni=ins(i);moveTo(ni,'ean');
+      const nextIdx=i+1;
+      if(nextIdx<rows.length){
+        if(rows[nextIdx].productId) moveTo(nextIdx,'imei1');
+        else moveTo(nextIdx,'ean');
+      }
       return;
     }
 
@@ -143,8 +149,13 @@ export function StockIn() {
     }
 
     upd(i,{imei1:v,qty:1,status:'saved',errMsg:''});
-    const ni=ins(i);
-    moveTo(ni,'ean');
+    // Go to NEXT ROW's IMEI (IMEI-scan phase: all IMEIs scanned in sequence)
+    const nextIdx=i+1;
+    if(nextIdx<rows.length){
+      // If next row has a product, focus its IMEI; otherwise focus its EAN
+      if(rows[nextIdx].productId) moveTo(nextIdx,'imei1');
+      else moveTo(nextIdx,'ean');
+    }
   },[rows,upd,ins,moveTo]);
 
   const del=(i:number)=>{
@@ -311,7 +322,8 @@ export function StockIn() {
                     <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',padding:'0 8px',textAlign:'center'}}>
                       {row.errMsg&&<span style={{fontSize:10,background:'#fef2f2',color:'#dc2626',padding:'2px 7px',borderRadius:10,fontWeight:700}} title={row.errMsg}>✕ Error</span>}
                       {!row.errMsg&&row.status==='saved'&&<span style={{fontSize:10,background:'#dcfce7',color:'#15803d',padding:'2px 7px',borderRadius:10,fontWeight:700}}>✓</span>}
-                      {!row.errMsg&&(row.status==='awaiting_imei'||row.status==='found')&&<span style={{fontSize:10,background:'#fef9c3',color:'#854d0e',padding:'2px 7px',borderRadius:10}}>Sr/IMEI↓</span>}
+                      {!row.errMsg&&row.status==='found'&&!row.imei1&&<span style={{fontSize:10,background:'#dbeafe',color:'#1d4ed8',padding:'2px 7px',borderRadius:10}}>Ready</span>}
+                      {!row.errMsg&&row.status==='awaiting_imei'&&<span style={{fontSize:10,background:'#fef9c3',color:'#854d0e',padding:'2px 7px',borderRadius:10}}>IMEI↓</span>}
                       {!row.errMsg&&row.status==='not_found'&&<span style={{fontSize:10,background:'#fef2f2',color:'#dc2626',padding:'2px 7px',borderRadius:10}}>New EAN</span>}
                     </td>
                     {/* Delete — bigger icon */}

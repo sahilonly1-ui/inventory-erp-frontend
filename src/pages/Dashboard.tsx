@@ -51,17 +51,32 @@ export function Dashboard() {
   const inGroups=byVendor(inTxns);
   const outGroups=byVendor(outTxns);
 
+  const bulkDelete=async(ids:string[],label:string)=>{
+    if(!confirm(`Permanently delete all ${ids.length} transaction(s) for "${label}"?\nStock levels will be corrected. This cannot be undone.`))return;
+    setDeleting(ids[0]);
+    try{
+      for(const id of ids) await api(`/inventory/transactions/${id}`,{method:'DELETE'});
+      load();
+    }catch(e:any){alert('Delete failed: '+e.message);}
+    finally{setDeleting(null);}
+  };
+
   const VendorCard=({vendor,txns,color,sign}:{vendor:string;txns:Txn[];color:string;sign:'+'|'-'})=>{
     const total=txns.reduce((s,t)=>s+Math.abs(t.qty),0);
     const [open,setOpen]=useState(true);
     const byProd=txns.reduce((a:Record<string,Txn[]>,t)=>{const k=t.product.split('(')[0].trim();if(!a[k])a[k]=[];a[k].push(t);return a;},{});
     return (
       <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:10,marginBottom:8,overflow:'hidden'}}>
-        <div onClick={()=>setOpen(x=>!x)} style={{padding:'9px 14px',display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer',background:'#f8fafc',borderBottom:open?'1px solid #e2e8f0':'none'}}>
-          <div style={{fontWeight:700,fontSize:13,color:'#0f172a'}}>{vendor}</div>
-          <div style={{display:'flex',alignItems:'center',gap:10}}>
+        <div style={{padding:'9px 14px',display:'flex',alignItems:'center',justifyContent:'space-between',background:'#f8fafc',borderBottom:open?'1px solid #e2e8f0':'none'}}>
+          <div onClick={()=>setOpen(x=>!x)} style={{fontWeight:700,fontSize:13,color:'#0f172a',cursor:'pointer',flex:1}}>{vendor}</div>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
             <span style={{fontWeight:800,fontSize:13,color}}>{sign}{total} units</span>
-            <span style={{color:'#94a3b8',fontSize:12}}>{open?'▲':'▼'}</span>
+            <button onClick={()=>bulkDelete(txns.map(t=>t.id),`all items from ${vendor}`)} disabled={!!deleting}
+              style={{height:28,padding:'0 12px',border:'1px solid #fca5a5',borderRadius:6,background:'#fef2f2',cursor:'pointer',color:'#dc2626',fontSize:11,fontWeight:700,display:'flex',alignItems:'center',gap:5}}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+              Delete All
+            </button>
+            <span onClick={()=>setOpen(x=>!x)} style={{color:'#94a3b8',fontSize:12,cursor:'pointer',userSelect:'none'}}>{open?'▲':'▼'}</span>
           </div>
         </div>
         {open&&(
@@ -69,16 +84,16 @@ export function Dashboard() {
             {Object.entries(byProd).map(([model,txnList])=>{
               const qty=txnList.reduce((s,t)=>s+Math.abs(t.qty),0);
               return (
-                <div key={model} style={{display:'flex',alignItems:'center',padding:'6px 14px',borderBottom:'1px solid #f1f5f9',gap:8}}>
+                <div key={model} style={{display:'flex',alignItems:'center',padding:'7px 14px',borderBottom:'1px solid #f1f5f9',gap:10}}>
                   <span style={{flex:1,fontSize:12,color:'#374151',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{model}</span>
-                  <span style={{fontWeight:700,fontSize:12,color,flexShrink:0}}>{sign}{qty}</span>
-                  {txnList.map(t=>(
-                    <button key={t.id} onClick={()=>deleteTxn(t.id,model)} disabled={deleting===t.id}
-                      title={`Reverse this entry (${fmtDate(t.createdAt)})`}
-                      style={{width:24,height:24,border:'1px solid #fca5a5',borderRadius:5,background:'#fff5f5',cursor:'pointer',color:'#dc2626',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:10,opacity:deleting===t.id?.5:1}}>
-                      {deleting===t.id?'…':<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>}
-                    </button>
-                  ))}
+                  <span style={{fontWeight:700,fontSize:13,color,flexShrink:0,minWidth:36,textAlign:'right'}}>{sign}{qty}</span>
+                  {/* ONE delete button per product — deletes ALL qty transactions for this product */}
+                  <button onClick={()=>bulkDelete(txnList.map(t=>t.id),model)} disabled={!!deleting}
+                    title={`Delete all ${qty} unit(s) of "${model}" — removes from stock permanently`}
+                    style={{height:26,padding:'0 10px',border:'1px solid #fca5a5',borderRadius:5,background:'#fef2f2',cursor:'pointer',color:'#dc2626',fontSize:11,fontWeight:600,display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+                    Delete {qty > 1 ? `(${qty})` : ''}
+                  </button>
                 </div>
               );
             })}
