@@ -91,28 +91,48 @@ export function StockIn(){
   const handleImei=useCallback(async(i:number,val:string)=>{
     const v=val.trim();
     const row=rows[i];
-    if(!v){
-      // Empty IMEI → skip to next IMEI
-      const ni=i+1;if(ni<rows.length)moveTo(ni,'imei');
-      return;
-    }
-    const allDigs=/^\d+$/.test(v);
-    if(!allDigs||v.length!==15){
-      upd(i,{errMsg:allDigs?`IMEI must be exactly 15 digits — scanned ${v.length}. Re-scan.`:`IMEI must be digits only (15 required). Re-scan.`,status:'err',errField:'imei'});
+    if(!v){const ni=i+1;if(ni<rows.length)moveTo(ni,'imei');return;}
+
+    // 1. Length check — always 15 digits
+    if(!/^\d{15}$/.test(v)){
+      upd(i,{errMsg:/^\d+$/.test(v)?`IMEI must be exactly 15 digits — scanned ${v.length}. Re-scan.`:`IMEI must be digits only (15 required). Re-scan.`,status:'err',errField:'imei'});
       moveTo(i,'imei');return;
     }
     if(!row.productId){upd(i,{errMsg:'Scan the EAN barcode first, then IMEI.',status:'err',errField:'imei'});moveTo(i,'imei');return;}
-    // Duplicate check
-    try{await api(`/imei/${encodeURIComponent(v)}`);upd(i,{errMsg:`IMEI ${v} already in system!`,status:'err',errField:'imei'});moveTo(i,'imei');return;}catch{}
+
+    // 2. Within-session duplicate (same IMEI scanned twice in this draft)
+    const sessDup=rows.findIndex((r,ri)=>ri!==i&&r.imei===v);
+    if(sessDup!==-1){
+      upd(i,{errMsg:`Duplicate scan! IMEI already entered in row ${sessDup+1} of this entry.`,status:'err',errField:'imei'});
+      moveTo(i,'imei');return;
+    }
+
+    // 3. Cross-session duplicate (already in IMEI database)
+    try{
+      const existing=await api<any>(`/imei/${encodeURIComponent(v)}`);
+      const dt=new Date(existing.createdAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+      const sup=existing.supplier?.name||'unknown supplier';
+      upd(i,{errMsg:`Already stocked in on ${dt} from ${sup}. Duplicate scan!`,status:'err',errField:'imei'});
+      moveTo(i,'imei');return;
+    }catch{}
+
     upd(i,{imei:v,qty:1,status:'saved',errMsg:'',errField:''});
     const ni=i+1;if(ni<rows.length)moveTo(ni,'imei');
   },[rows,upd,moveTo]);
 
-  // Sr. No. column — no restriction, any text/number
+  // Sr. No. column — no length restriction but duplicate detection
   const handleSrno=useCallback((i:number,val:string)=>{
     const v=val.trim();
     const row=rows[i];
     if(!row.productId){const ni=i+1;if(ni<rows.length)moveTo(ni,'srno');return;}
+    // Empty Sr.No. is fine — just move on
+    if(!v){upd(i,{qty:1,status:'saved',errMsg:'',errField:''});const ni=i+1;if(ni<rows.length)moveTo(ni,'srno');return;}
+    // Within-session duplicate Sr.No.
+    const sessDup=rows.findIndex((r,ri)=>ri!==i&&r.srno===v);
+    if(sessDup!==-1){
+      upd(i,{errMsg:`Duplicate! Sr.No. "${v}" already in row ${sessDup+1} of this entry.`,status:'err',errField:'srno'});
+      moveTo(i,'srno');return;
+    }
     upd(i,{srno:v,qty:row.imei?row.qty:1,status:'saved',errMsg:'',errField:''});
     const ni=i+1;if(ni<rows.length)moveTo(ni,'srno');
   },[rows,upd,moveTo]);
