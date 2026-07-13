@@ -73,28 +73,39 @@ export function Versions() {
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [toast, setToast] = useState('');
 
+  const [entityF, setEntityF] = useState('');
+
   const load = useCallback(async () => {
     setLoading(true); setError('');
     try {
-      const qp = new URLSearchParams({ page: String(page), limit: '30', entityName: 'products' });
+      const qp = new URLSearchParams({ page: String(page), limit: '30' }); // Show all entities
+      if (entityF) qp.set('entityName', entityF);
       if (actionF) qp.set('action', actionF);
       const d = await api<Paged>(`/audit?${qp.toString()}`);
       setData(d);
     } catch (e: any) { setError(e.message || 'Failed to load'); }
     finally { setLoading(false); }
-  }, [page, actionF]);
+  }, [page, actionF, entityF]);
 
   useEffect(() => { load(); }, [load]);
 
   const showToast = (text: string) => { setToast(text); setTimeout(() => setToast(''), 4000); };
 
   const restore = async (entry: AuditEntry) => {
-    const lines = formatLines(entry).join('; ');
-    if (!window.confirm(`Restore this change?\n\n${lines}\n\nThis will revert the product to this earlier state.`)) return;
+    const isTransactionDelete = entry.action === 'DELETE' && entry.entityName === 'inventory_transactions';
+    const confirmMsg = isTransactionDelete
+      ? `Restore this deleted stock entry?\n\nProduct: ${(entry.oldValue as any)?.product ?? ''}\nQty: ${(entry.oldValue as any)?.quantity ?? ''}\nType: ${(entry.oldValue as any)?.type ?? ''}\n\nThis will recreate the transaction and restore the stock level.`
+      : `Restore this change?\n\n${formatLines(entry).join('; ')}\n\nThis will revert the product to this earlier state.`;
+    if (!window.confirm(confirmMsg)) return;
     setRestoringId(entry.id);
     try {
-      await api(`/audit/${entry.id}/restore`, { method: 'POST' });
-      showToast('✓ Restored successfully');
+      if (isTransactionDelete) {
+        await api(`/inventory/transactions/restore/${entry.id}`, { method: 'POST' });
+        showToast('✓ Stock entry restored! Stock level corrected.');
+      } else {
+        await api(`/audit/${entry.id}/restore`, { method: 'POST' });
+        showToast('✓ Restored successfully');
+      }
       load();
     } catch (e: any) { showToast('Restore failed: ' + e.message); }
     finally { setRestoringId(null); }
@@ -110,8 +121,14 @@ export function Versions() {
           <div className="page-subtitle">{data ? `${data.total.toLocaleString()} changes recorded` : 'Loading…'}</div>
         </div>
         <div className="page-actions">
-          <select className="f-select" value={actionF} onChange={e => { setActionF(e.target.value); setPage(1); }} style={{ width: 160 }}>
-            <option value="">All changes</option>
+          <select className="f-select" value={entityF} onChange={e => { setEntityF(e.target.value); setPage(1); }} style={{ width: 160 }}>
+            <option value="">All entities</option>
+            <option value="products">Products</option>
+            <option value="inventory_transactions">Stock Movements</option>
+            <option value="vendors">Suppliers</option>
+          </select>
+          <select className="f-select" value={actionF} onChange={e => { setActionF(e.target.value); setPage(1); }} style={{ width: 140 }}>
+            <option value="">All actions</option>
             <option value="CREATE">Created</option>
             <option value="UPDATE">Updated</option>
             <option value="DELETE">Deleted</option>
@@ -133,7 +150,8 @@ export function Versions() {
             {items.map((h, i) => {
               const meta = ACTION_META[h.action] || ACTION_META.UPDATE;
               const lines = formatLines(h);
-              const canRestore = h.action !== 'CREATE' && h.action !== 'LOGIN';
+              const isTxnDelete = h.action === 'DELETE' && h.entityName === 'inventory_transactions';
+              const canRestore = isTxnDelete || (h.action !== 'CREATE' && h.action !== 'LOGIN' && h.entityName === 'products');
               const title = h.entity ? `${h.entity.model} · ${h.entity.ean}` : (h.oldValue?.model || h.newValue?.model || 'Product');
               const batchLabel = h.newValue?.batchLabel;
               return (

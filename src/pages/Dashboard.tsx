@@ -89,7 +89,7 @@ export function Dashboard() {
         <div style={{padding:'10px 14px',display:'flex',alignItems:'center',gap:10,background:'#f8fafc',borderBottom:open?'1px solid #e2e8f0':'none'}}>
           <div onClick={()=>setOpen(x=>!x)} style={{flex:1,cursor:'pointer'}}>
             <div style={{fontWeight:700,fontSize:13,color:'#0f172a'}}>{vendor}</div>
-            <div style={{fontSize:11,color:'#94a3b8',marginTop:1}}>{txns.length} transaction{txns.length!==1?'s':''} · {sign}{total} units · {fmtD(txns[0].createdAt)}</div>
+            <div style={{fontSize:11,color:'#94a3b8',marginTop:1}}>{txns.length} transaction{txns.length!==1?'s':''} · {sign}{total} units · {new Date(txns[0].createdAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})} {new Date(txns[0].createdAt).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</div>
           </div>
           <span style={{fontWeight:800,fontSize:14,color}}>{sign}{total}</span>
           {/* Entry-level Edit & Delete (for whole vendor block) */}

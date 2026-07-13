@@ -1,206 +1,235 @@
-import { useState, useEffect, useRef, useCallback, KeyboardEvent } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../api/client';
 
-interface Warehouse { id: string; name: string; }
-type RowStatus = 'empty' | 'found' | 'awaiting_imei' | 'saved' | 'err';
-interface Row { id: string; ean: string; productId: string; model: string; brand: string; imeiRequired: boolean; qty: number; imei: string; status: RowStatus; errMsg: string; }
+interface Warehouse { id:string; name:string; }
+type FC='ean'|'imei'|'srno';
+type RS='empty'|'loading'|'not_found'|'found'|'saved'|'err';
+interface Row { id:string; ean:string; productId:string; model:string; brand:string; imeiRequired:boolean; qty:number; imei:string; srno:string; status:RS; errMsg:string; errField:'imei'|'srno'|''; }
 
-const uid = () => Math.random().toString(36).slice(2, 9);
-const genDoc = () => `SOUT-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${String(Math.floor(Math.random()*9000+1000))}`;
-const emptyRow = (): Row => ({ id:uid(), ean:'', productId:'', model:'', brand:'', imeiRequired:false, qty:0, imei:'', status:'empty', errMsg:'' });
-const PARTY_KEY = 'erp_customers_v1';
-const getPartyHistory = (): string[] => { try { return JSON.parse(localStorage.getItem(PARTY_KEY)||'[]'); } catch { return []; } };
-const savePartyHistory = (name: string) => { const h = getPartyHistory().filter(s => s !== name); localStorage.setItem(PARTY_KEY, JSON.stringify([name, ...h].slice(0, 100))); };
-const DEFAULT_PARTIES = ['Amazon','Flipkart','JioMart','Prime','Meesho','Walk In Customer','Service Center','Return'];
-const cellInp: React.CSSProperties = { width:'100%', height:'100%', border:'none', padding:'0 8px', background:'transparent', fontSize:13, color:'#101828', outline:'none', fontFamily:'inherit' };
-// Product EAN cache for instant repeated lookups
-const outProductCache = new Map<string, { id:string; model:string; brand:string; imeiRequired:boolean }|null>();
-let outLookupSeq = 0;
+const uid=()=>Math.random().toString(36).slice(2,9);
+const genDoc=()=>`SOUT-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.floor(Math.random()*9000+1000)}`;
+const mk=():Row=>({id:uid(),ean:'',productId:'',model:'',brand:'',imeiRequired:false,qty:0,imei:'',srno:'',status:'empty',errMsg:'',errField:''});
+const CK='erp_customers_v1';
+const getC=():string[]=>{try{return JSON.parse(localStorage.getItem(CK)||'[]');}catch{return[];}};
+const saveC=(n:string)=>{const h=getC().filter(x=>x!==n);localStorage.setItem(CK,JSON.stringify([n,...h].slice(0,100)));};
+const DEF=['Amazon','Flipkart','JioMart','Meesho','Walk In Customer','Service Center','Return'];
+const pCache=new Map<string,{id:string;model:string;brand:string;imeiRequired:boolean}|null>();
+let seq=0;
 
-export function StockOut() {
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [warehouseId, setWarehouseId] = useState('');
-  const [customer, setCustomer] = useState('');
-  const [sessionDate, setSessionDate] = useState(new Date().toISOString().slice(0,10));
-  const [invoiceNo, setInvoiceNo] = useState('');
-  const [custSearch, setCustSearch] = useState('');
-  const [custDrop, setCustDrop] = useState(false);
-  const [custHistory, setCustHistory] = useState<string[]>(() => [...new Set([...DEFAULT_PARTIES, ...getPartyHistory()])]);
-  const [docNumber] = useState(genDoc);
-  const [rows, setRows] = useState<Row[]>([emptyRow()]);
-  const [activeRow, setActiveRow] = useState(0);
-  const [focusCell, setFocusCell] = useState<'ean'|'imei'>('ean');
-  const refs = useRef<Record<string, HTMLInputElement|null>>({});
-  const setRef = (i: number, c: 'ean'|'imei') => (el: HTMLInputElement|null) => { refs.current[`${i}-${c}`] = el; };
+export function StockOut(){
+  const[whs,setWhs]=useState<Warehouse[]>([]);
+  const[whId,setWhId]=useState('');
+  const[cust,setCust]=useState('');
+  const[inv,setInv]=useState('');
+  const[date,setDate]=useState(new Date().toISOString().slice(0,10));
+  const[cs,setCs]=useState('');
+  const[cDrop,setCDrop]=useState(false);
+  const[cHist,setCHist]=useState<string[]>(()=>[...new Set([...DEF,...getC()])]);
+  const[doc]=useState(genDoc);
+  const[rows,setRows]=useState<Row[]>([mk()]);
+  const[ar,setAr]=useState(0);
+  const[fc,setFc]=useState<FC>('ean');
+  const refs=useRef<Record<string,HTMLInputElement|null>>({});
+  const R=(i:number,c:FC)=>(el:HTMLInputElement|null)=>{refs.current[`${i}-${c}`]=el;};
+  const ERef=useRef<(i:number,e:string)=>void>(()=>{});
 
-  useEffect(() => { api<Warehouse[]>('/warehouses').then(ws => { setWarehouses(ws); if (ws.length) setWarehouseId(ws[0].id); }).catch(()=>{}); }, []);
-  useEffect(() => { const el = refs.current[`${activeRow}-${focusCell}`]; if (el) setTimeout(() => el.focus(), 30); }, [activeRow, focusCell]);
+  useEffect(()=>{api<Warehouse[]>('/warehouses').then(ws=>{setWhs(ws);if(ws.length)setWhId(ws[0].id);}).catch(()=>{});}, []);
 
-  const updateRow = useCallback((idx: number, p: Partial<Row>) => setRows(rs => rs.map((r,i) => i===idx ? {...r,...p} : r)), []);
-  const addRowAfter = useCallback((idx: number, next: 'ean'|'imei', pre?: Partial<Row>) => {
-    setRows(rs => { const n = {...emptyRow(),...pre}; const u = [...rs]; u.splice(idx+1,0,n); return u; });
-    setActiveRow(idx+1); setFocusCell(next);
-  }, []);
+  const moveTo=useCallback((ri:number,cell:FC)=>{
+    setAr(ri);setFc(cell);
+    let n=0;const go=()=>{const el=refs.current[`${ri}-${cell}`];if(el){try{el.focus();if(cell==='ean')el.select();}catch{}return;}if(++n<12)setTimeout(go,40);};
+    setTimeout(go,20);
+  },[]);
+  const upd=useCallback((i:number,p:Partial<Row>)=>setRows(rs=>rs.map((r,x)=>x===i?{...r,...p}:r)),[]);
+  const ins=useCallback((i:number,pre:Partial<Row>={})=>{const nr={...mk(),...pre};setRows(rs=>{const n=[...rs];if(i>=rs.length-1)n.push(nr);else n.splice(i+1,0,nr);return n;});return i+1;},[]);
 
-  const handleEan = useCallback(async (idx: number, ean: string) => {
-    const v = ean.trim(); if (!v || !warehouseId) return;
-    const mySeq = ++outLookupSeq;
-    updateRow(idx, { ean:v, status:'loading' as any, errMsg:'' });
-    try {
-      let prod = outProductCache.get(v);
-      if (prod === undefined) {
-        const res = await api<{ product: any }>(`/inventory/lookup?ean=${encodeURIComponent(v)}`);
-        prod = res.product ? { id:res.product.id, model:res.product.model, brand:res.product.brand, imeiRequired:res.product.imeiRequired } : null;
-        outProductCache.set(v, prod);
-      }
-      if (mySeq !== outLookupSeq) return; // stale
-      if (!prod) { updateRow(idx, { ean:v, status:'err', errMsg:'EAN not found' }); return; }
-      if (prod.imeiRequired) {
-        updateRow(idx, { productId:prod.id, model:prod.model, brand:prod.brand, imeiRequired:true, qty:0, status:'awaiting_imei', errMsg:'' });
-        setActiveRow(idx); setFocusCell('imei');
-      } else {
-        updateRow(idx, { productId:prod.id, model:prod.model, brand:prod.brand, imeiRequired:false, qty:1, status:'saved', errMsg:'' });
-        addRowAfter(idx, 'ean');
-      }
-    } catch (e:any) { if (mySeq !== outLookupSeq) return; updateRow(idx, { ean:v, status:'err', errMsg:'EAN not found' }); }
-  }, [warehouseId, addRowAfter, updateRow, docNumber, customer, invoiceNo]);
+  const handleEan=useCallback(async(i:number,ean:string)=>{
+    const v=ean.trim();if(!v||!whId)return;
+    const mSeq=++seq;upd(i,{ean:v,status:'loading',errMsg:'',errField:''});
+    let p=pCache.get(v);
+    if(p===undefined){try{const r=await api<{product:{id:string;model:string;brand:string;imeiRequired:boolean}}>(`/inventory/lookup?ean=${encodeURIComponent(v)}`);p={id:r.product.id,model:r.product.model,brand:r.product.brand,imeiRequired:r.product.imeiRequired};pCache.set(v,p);}catch{pCache.set(v,null);p=null;}}
+    if(mSeq!==seq)return;
+    if(!p){upd(i,{status:'not_found',errMsg:'EAN not found in product master'});return;}
+    upd(i,{productId:p.id,model:p.model,brand:p.brand,imeiRequired:p.imeiRequired,status:'found',qty:1});
+    const ni=ins(i);moveTo(ni,'ean');
+  },[whId,upd,ins,moveTo]);
+  useEffect(()=>{ERef.current=handleEan;},[handleEan]);
 
-  const outHandleEanRef = useRef<(idx:number, ean:string)=>void>(()=>{});
-  useEffect(() => { outHandleEanRef.current = handleEan; }, [handleEan]);
-
-  const handleImei = useCallback(async (idx: number, imei: string) => {
-    const v = imei.trim(); if (!v) return;
-    const row = rows[idx];
-
-    // Smart EAN detection — same pattern as StockIn
-    const isKnownEan = outProductCache.has(v);
-    const isEanLength = /^\d{8}$/.test(v) || /^\d{12,13}$/.test(v);
-    const isImeiLength = /^\d{15}$/.test(v);
-    if (isKnownEan || (isEanLength && !isImeiLength)) {
-      updateRow(idx, { imei:'', errMsg:'' });
-      const insertIdx = idx + 1;
-      const newR = { id:Math.random().toString(36).slice(2,9), ean:v, productId:'', model:'', brand:'', imeiRequired:false, qty:0, imei:'', status:'empty' as any, errMsg:'' };
-      setRows(rs => { const next=[...rs]; if (insertIdx>=rs.length) next.push(newR); else next.splice(insertIdx,0,newR); return next; });
-      setActiveRow(insertIdx); setFocusCell('ean');
-      setTimeout(() => outHandleEanRef.current(insertIdx, v), 0);
-      return;
+  // IMEI column — strict 15 digits, validates IN_STOCK status
+  const handleImei=useCallback(async(i:number,val:string)=>{
+    const v=val.trim();
+    const row=rows[i];
+    if(!v){const ni=i+1;if(ni<rows.length)moveTo(ni,'imei');return;}
+    const allDigs=/^\d+$/.test(v);
+    if(!allDigs||v.length!==15){
+      upd(i,{errMsg:allDigs?`IMEI must be exactly 15 digits — scanned ${v.length}. Re-scan.`:`IMEI must be digits only. Re-scan.`,status:'err',errField:'imei'});
+      moveTo(i,'imei');return;
     }
-
-    if (!row.productId) return;
-    try {
-      const data = await api<{ status: string }>(`/imei/${encodeURIComponent(v)}`);
-      if ((data as any).status !== 'IN_STOCK') {
-        updateRow(idx, { errMsg:`IMEI ${v} is ${(data as any).status}. Cannot dispatch.`, imei:v }); setActiveRow(idx); setFocusCell('imei'); return;
+    if(!row.productId){upd(i,{errMsg:'Scan EAN barcode first.',status:'err',errField:'imei'});moveTo(i,'imei');return;}
+    // Validate IMEI exists and is IN_STOCK
+    try{
+      const d=await api<{status:string}>(`/imei/${encodeURIComponent(v)}`);
+      if((d as any).status!=='IN_STOCK'){
+        upd(i,{errMsg:`IMEI ${v}: status is ${(d as any).status} — cannot dispatch.`,status:'err',errField:'imei'});
+        moveTo(i,'imei');return;
       }
-    } catch { updateRow(idx, { errMsg:`IMEI ${v} not found in system`, imei:v }); setActiveRow(idx); setFocusCell('imei'); return; }
-    try {
-      await api('/imei/dispatch', { method:'POST', body:JSON.stringify({ imeis:[v], channel:'STOCK_OUT', remarks:`${docNumber}${customer ? ' → '+customer : ''}` }) });
-      updateRow(idx, { imei:v, qty:row.qty+1, status:'saved', errMsg:'' });
-      addRowAfter(idx, 'imei', { productId:row.productId, model:row.model, brand:row.brand, imeiRequired:true, status:'awaiting_imei' });
-    } catch (e:any) { updateRow(idx, { errMsg:e.message, imei:v }); setActiveRow(idx); setFocusCell('imei'); }
-  }, [rows, addRowAfter, updateRow, docNumber, customer]);
+    }catch{
+      upd(i,{errMsg:`IMEI ${v} not found in system.`,status:'err',errField:'imei'});
+      moveTo(i,'imei');return;
+    }
+    upd(i,{imei:v,qty:1,status:'saved',errMsg:'',errField:''});
+    const ni=i+1;if(ni<rows.length)moveTo(ni,'imei');
+  },[rows,upd,moveTo]);
 
-  const deleteRow = (idx: number) => { setRows(rs => rs.length===1 ? [emptyRow()] : rs.filter((_,i)=>i!==idx)); if (activeRow >= idx && activeRow > 0) setActiveRow(r => r-1); };
-  const clearAll = () => { if (!confirm('Clear all rows?')) return; setRows([emptyRow()]); setActiveRow(0); setFocusCell('ean'); };
-  const onEanKey = (e: KeyboardEvent<HTMLInputElement>, idx: number) => { if (e.key==='Enter'||e.key==='Tab') { e.preventDefault(); handleEan(idx, (e.target as HTMLInputElement).value); } };
-  const onImeiKey = (e: KeyboardEvent<HTMLInputElement>, idx: number) => {
-    if (e.key==='Enter') { e.preventDefault(); handleImei(idx, (e.target as HTMLInputElement).value); }
-    if (e.key==='Escape') updateRow(idx, { errMsg:'' });
-    if (e.key==='Tab') { e.preventDefault(); if (idx === rows.length-1) setRows(rs=>[...rs, { id:Math.random().toString(36).slice(2,9), ean:'', productId:'', model:'', brand:'', imeiRequired:false, qty:0, imei:'', status:'empty' as any, errMsg:'' }]); setActiveRow(idx+1); setFocusCell('ean'); }
-  };
+  // Sr. No. — no restriction
+  const handleSrno=useCallback((i:number,val:string)=>{
+    const row=rows[i];
+    if(!row.productId){const ni=i+1;if(ni<rows.length)moveTo(ni,'srno');return;}
+    upd(i,{srno:val.trim(),qty:row.imei?row.qty:1,status:'saved',errMsg:'',errField:''});
+    const ni=i+1;if(ni<rows.length)moveTo(ni,'srno');
+  },[rows,upd,moveTo]);
 
-  const allCust = custHistory.filter(c => c.toLowerCase().includes(custSearch.toLowerCase())).slice(0,8);
-  const savedRows = rows.filter(r => r.status==='saved' && r.qty>0);
-  const summary = Object.values(savedRows.reduce((a:any,r)=>{ const k=r.model||r.ean; if(!a[k]) a[k]={model:k,qty:0}; a[k].qty+=r.qty; return a; },{})) as any[];
-  const total = summary.reduce((s,r)=>s+r.qty,0);
+  const del=(i:number)=>{setRows(rs=>rs.length===1?[mk()]:rs.filter((_,x)=>x!==i));moveTo(Math.max(0,ar>=i?ar-1:ar),'ean');};
+  const clear=()=>{if(!confirm('Clear all rows?'))return;pCache.clear();setRows([mk()]);moveTo(0,'ean');};
 
-  return (
-    <div style={{ display:'flex', flexDirection:'column', height:'calc(100vh - 0px)', background:'#f5f7fa' }}>
-      {/* Header */}
-      <div style={{ background:'#fff', borderBottom:'1px solid #e4e7ec', padding:'10px 16px', flexShrink:0 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}>
-          <span style={{ fontSize:11, fontWeight:700, color:'#dc2626', background:'#fff1f2', padding:'3px 10px', borderRadius:20, border:'1px solid #fecdd3', letterSpacing:'.02em' }}>{docNumber}</span>
-          <span style={{ fontSize:12, fontWeight:600, color:'#475467', marginLeft:4 }}>Stock Out Entry</span>
-          <div style={{ flex:1 }} />
-          <span style={{ fontSize:11, color:'#98a2b3' }}>{savedRows.length} items · {total} units</span>
-          <button onClick={clearAll} style={{ height:28, padding:'0 10px', border:'1px solid #fca5a5', borderRadius:6, background:'#fef2f2', color:'#dc2626', fontSize:11, fontWeight:600, cursor:'pointer' }}>Clear All</button>
-          <button style={{ height:28, padding:'0 14px', border:'none', borderRadius:6, background:'#dc2626', color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer', opacity:savedRows.length?1:.4 }} disabled={!savedRows.length}>✓ Done</button>
+  const commit=useCallback(async()=>{
+    const sv=rows.filter(r=>r.status==='saved'&&r.productId);
+    if(!sv.length||!whId)return;
+    const rmk=`${doc}${cust?' → '+cust:''}${inv?' | INV:'+inv:''}`;
+    try{
+      // Process IMEI dispatches
+      const imeiRows=sv.filter(r=>r.imei);
+      if(imeiRows.length){
+        await api('/imei/dispatch',{method:'POST',body:JSON.stringify({imeis:imeiRows.map(r=>r.imei),channel:'STOCK_OUT',remarks:rmk})});
+      }
+      // Non-IMEI stock outs
+      for(const r of sv.filter(r=>!r.imei)){
+        await api('/inventory/stock-out',{method:'POST',body:JSON.stringify({productId:r.productId,warehouseId:whId,quantity:r.qty||1,remarks:`${rmk}${r.srno?' | S/N:'+r.srno:''}`})});
+      }
+      if(cust)saveC(cust);
+      pCache.clear();setRows([mk()]);moveTo(0,'ean');
+      alert(`✓ ${sv.length} item(s) dispatched — ${doc}`);
+    }catch(e:any){alert('Error: '+e.message);}
+  },[rows,whId,cust,inv,doc,moveTo]);
+
+  const sv=rows.filter(r=>r.status==='saved'&&r.qty>0);
+  const tot=sv.reduce((s,r)=>s+r.qty,0);
+  const cSug=[...new Set([...DEF,...cHist])].filter(x=>x.toLowerCase().includes(cs.toLowerCase())).slice(0,8);
+  const CI=(ex:React.CSSProperties={}):React.CSSProperties=>({width:'100%',height:'100%',border:'none',padding:'0 10px',background:'transparent',fontSize:13,color:'#101828',outline:'none',fontFamily:'inherit',...ex});
+
+  return(
+    <div style={{display:'flex',flexDirection:'column',height:'100vh',background:'#fff',overflow:'hidden'}}>
+      <div style={{background:'#fff',borderBottom:'1px solid #e2e8f0',padding:'8px 16px',flexShrink:0}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+          <span style={{fontSize:11,fontWeight:700,color:'#f59e0b',background:'#fffbeb',padding:'3px 12px',borderRadius:20,border:'1px solid #fde68a'}}>{doc}</span>
+          <span style={{fontSize:13,fontWeight:700,color:'#0f172a'}}>Stock Out Entry</span>
+          <div style={{flex:1}}/>
+          <span style={{fontSize:11,color:'#94a3b8'}}>{sv.length} items · {tot} units</span>
+          <button onClick={clear} style={{height:28,padding:'0 10px',border:'1px solid #fecdd3',borderRadius:6,background:'#fff5f5',color:'#dc2626',fontSize:11,fontWeight:600,cursor:'pointer'}}>Clear All</button>
+          <button onClick={commit} disabled={!sv.length} style={{height:30,padding:'0 18px',border:'none',borderRadius:7,background:!sv.length?'#94a3b8':'#dc2626',color:'#fff',fontSize:12,fontWeight:700,cursor:!sv.length?'not-allowed':'pointer'}}>
+            {`↑ Dispatch (${sv.length})`}
+          </button>
         </div>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 160px 180px 160px', gap:8 }}>
-          {/* Customer */}
-          <div style={{ position:'relative' }}>
-            <label style={{ fontSize:10, fontWeight:700, color:'#98a2b3', textTransform:'uppercase', letterSpacing:'.06em', display:'block', marginBottom:3 }}>Issued To / Customer *</label>
-            <input value={custSearch || customer} placeholder="Amazon, Walk In Customer…"
-              onChange={e => { setCustSearch(e.target.value); setCustomer(''); setCustDrop(true); }}
-              onFocus={() => { setCustSearch(customer); setCustDrop(true); }}
-              onBlur={() => setTimeout(()=>{ setCustDrop(false); if (custSearch && !customer) { setCustomer(custSearch); savePartyHistory(custSearch); setCustHistory(h => [...new Set([custSearch,...h])]); } },200)}
-              onKeyDown={e => { if (e.key==='Enter'&&custSearch) { setCustomer(custSearch); savePartyHistory(custSearch); setCustHistory(h=>[...new Set([custSearch,...h])]); setCustSearch(''); setCustDrop(false); } }}
-              style={{ width:'100%', height:34, padding:'0 10px', border:`1.5px solid ${customer?'#dc2626':'#d0d5dd'}`, borderRadius:7, fontSize:13, outline:'none', boxSizing:'border-box' }} />
-            {custDrop && allCust.length > 0 && (
-              <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'#fff', border:'1px solid #e4e7ec', borderRadius:8, boxShadow:'0 8px 24px rgba(0,0,0,.1)', zIndex:200, marginTop:2, overflow:'hidden' }}>
-                {allCust.map(c=>(
-                  <div key={c} onMouseDown={()=>{ setCustomer(c); savePartyHistory(c); setCustHistory(h=>[...new Set([c,...h])]); setCustSearch(''); setCustDrop(false); }} style={{ padding:'8px 12px', fontSize:13, cursor:'pointer' }} onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background='#f5f7fa'} onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background='transparent'}>{c}</div>
-                ))}
-                {custSearch && !allCust.find(c=>c.toLowerCase()===custSearch.toLowerCase()) && (
-                  <div onMouseDown={()=>{ setCustomer(custSearch); savePartyHistory(custSearch); setCustHistory(h=>[...new Set([custSearch,...h])]); setCustSearch(''); setCustDrop(false); }} style={{ padding:'8px 12px', fontSize:13, cursor:'pointer', color:'#dc2626', fontWeight:600, borderTop:'1px solid #f2f4f7' }}>＋ Add "{custSearch}"</div>
-                )}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 148px 200px 180px',gap:8}}>
+          <div style={{position:'relative'}}>
+            <label style={{fontSize:9,fontWeight:800,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'.08em',display:'block',marginBottom:3}}>ISSUED TO / CUSTOMER</label>
+            <input value={cs||(cust?cust:'')} placeholder="Walk In Customer, Amazon, Flipkart…"
+              onChange={e=>{setCs(e.target.value);setCust('');setCDrop(true);}}
+              onFocus={()=>{setCs(cust);setCDrop(true);}}
+              onBlur={()=>setTimeout(()=>{setCDrop(false);if(cs&&!cust){setCust(cs);setCs('');}},200)}
+              onKeyDown={e=>{if(e.key==='Enter'&&cs){setCust(cs);setCs('');setCDrop(false);}}}
+              style={{width:'100%',height:34,padding:'0 10px',border:`1.5px solid ${cust?'#dc2626':'#d0d5dd'}`,borderRadius:7,fontSize:13,outline:'none',boxSizing:'border-box'}}/>
+            {cDrop&&(cSug.length>0||cs)&&(
+              <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:'1px solid #e2e8f0',borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:200,marginTop:2,overflow:'hidden'}}>
+                {cSug.map(c=><div key={c} onMouseDown={()=>{setCust(c);setCs('');setCDrop(false);}} style={{padding:'8px 12px',fontSize:13,cursor:'pointer'}} onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background='#f8fafc'} onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background='transparent'}>{c}</div>)}
               </div>
             )}
           </div>
-          <div><label style={{ fontSize:10, fontWeight:700, color:'#98a2b3', textTransform:'uppercase', letterSpacing:'.06em', display:'block', marginBottom:3 }}>Date</label><input type="date" value={sessionDate} onChange={e=>setSessionDate(e.target.value)} style={{ width:'100%', height:34, padding:'0 10px', border:'1.5px solid #d0d5dd', borderRadius:7, fontSize:13, outline:'none', boxSizing:'border-box' }} /></div>
-          <div><label style={{ fontSize:10, fontWeight:700, color:'#98a2b3', textTransform:'uppercase', letterSpacing:'.06em', display:'block', marginBottom:3 }}>Invoice No. <span style={{ color:'#c4c8d0', fontWeight:400 }}>(optional)</span></label><input value={invoiceNo} onChange={e=>setInvoiceNo(e.target.value)} placeholder="e.g. SO-2026-001" style={{ width:'100%', height:34, padding:'0 10px', border:'1.5px solid #d0d5dd', borderRadius:7, fontSize:13, outline:'none', boxSizing:'border-box' }} /></div>
-          <div><label style={{ fontSize:10, fontWeight:700, color:'#98a2b3', textTransform:'uppercase', letterSpacing:'.06em', display:'block', marginBottom:3 }}>Warehouse</label><select value={warehouseId} onChange={e=>setWarehouseId(e.target.value)} style={{ width:'100%', height:34, padding:'0 10px', border:'1.5px solid #d0d5dd', borderRadius:7, fontSize:13, outline:'none', background:'#fff', boxSizing:'border-box' }}>{warehouses.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select></div>
+          <div>
+            <label style={{fontSize:9,fontWeight:800,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'.08em',display:'block',marginBottom:3}}>DATE</label>
+            <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{width:'100%',height:34,padding:'0 10px',border:'1.5px solid #d0d5dd',borderRadius:7,fontSize:13,outline:'none',boxSizing:'border-box'}}/>
+          </div>
+          <div>
+            <label style={{fontSize:9,fontWeight:800,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'.08em',display:'block',marginBottom:3}}>INVOICE / REF (OPTIONAL)</label>
+            <input value={inv} onChange={e=>setInv(e.target.value)} placeholder="INV-OUT-001" style={{width:'100%',height:34,padding:'0 10px',border:'1.5px solid #d0d5dd',borderRadius:7,fontSize:13,outline:'none',boxSizing:'border-box'}}/>
+          </div>
+          <div>
+            <label style={{fontSize:9,fontWeight:800,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'.08em',display:'block',marginBottom:3}}>WAREHOUSE</label>
+            <select value={whId} onChange={e=>setWhId(e.target.value)} style={{width:'100%',height:34,padding:'0 8px',border:'1.5px solid #d0d5dd',borderRadius:7,fontSize:13,outline:'none',background:'#fff',boxSizing:'border-box'}}>
+              {whs.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+          </div>
         </div>
       </div>
 
-      <div style={{ flex:1, display:'flex', overflow:'hidden' }}>
-        {/* Grid */}
-        <div style={{ flex:1, overflowY:'auto', overflowX:'auto' }}>
-          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13, tableLayout:'fixed' }}>
-            <colgroup><col style={{width:40}}/><col style={{width:160}}/><col /><col style={{width:60}}/><col style={{width:200}}/><col style={{width:110}}/><col style={{width:38}}/></colgroup>
+      <div style={{flex:1,display:'flex',overflow:'hidden'}}>
+        <div style={{flex:1,overflowY:'auto',overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:13,tableLayout:'fixed',minWidth:940}}>
+            <colgroup><col style={{width:36}}/><col style={{width:140}}/><col/><col style={{width:50}}/><col style={{width:162}}/><col style={{width:148}}/><col style={{width:80}}/><col style={{width:42}}/></colgroup>
             <thead>
-              <tr style={{ background:'#f8fafc', position:'sticky', top:0, zIndex:5 }}>
-                {['#','EAN / Barcode','Product Name','Qty','IMEI / Serial No.','Status',''].map((h,i)=>(
-                  <th key={i} style={{ padding:'0 8px', height:32, textAlign:i===3?'center':'left', fontWeight:600, color:'#64748b', fontSize:11, textTransform:'uppercase', letterSpacing:'.06em', borderBottom:'2px solid #e4e7ec', whiteSpace:'nowrap' }}>{h}</th>
+              <tr style={{background:'#f8fafc',position:'sticky',top:0,zIndex:5,boxShadow:'0 1px 0 #e2e8f0'}}>
+                {['#','EAN / BARCODE','PRODUCT NAME','QTY','IMEI (15 digits)','Sr. No. (any)','STATUS',''].map((h,i)=>(
+                  <th key={i} style={{padding:'0 10px',height:34,textAlign:i===3?'center':'left',fontWeight:700,color:i===4?'#dc2626':i===5?'#2563eb':'#64748b',fontSize:10,textTransform:'uppercase',letterSpacing:'.07em',whiteSpace:'nowrap'}}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {rows.map((row, idx) => {
-                const isActive = idx===activeRow;
-                const bg = row.status==='saved'?'#f0fdf4':row.errMsg?'#fff8f8':isActive?'#f0f9ff':idx%2===0?'#fff':'#fafafa';
-                return (
-                  <tr key={row.id} style={{ background:bg }} onClick={()=>setActiveRow(idx)}>
-                    <td style={{ padding:'0 8px', height:36, textAlign:'center', color:'#94a3b8', fontSize:11, fontWeight:600, background:'#f8fafc', borderBottom:'1px solid #e4e7ec', borderRight:'1px solid #e4e7ec' }}>{idx+1}</td>
-                    <td style={{ borderBottom:'1px solid #e4e7ec', borderRight:'1px solid #e4e7ec', padding:0 }}>
-                      <div style={{ height:36, border:isActive&&focusCell==='ean'?'2px solid #2563eb':'2px solid transparent', borderRadius:isActive&&focusCell==='ean'?4:0 }}>
-                        <input ref={setRef(idx,'ean')} value={row.ean} onChange={e=>updateRow(idx,{ean:e.target.value,errMsg:'',status:'empty'})}
-                          onKeyDown={e=>onEanKey(e,idx)}
-                          onPaste={e=>{ e.preventDefault(); const v=e.clipboardData.getData('text').trim(); if(v){updateRow(idx,{ean:v,status:'empty' as any,errMsg:''});setTimeout(()=>handleEan(idx,v),50);} }}
-                          onFocus={()=>{setActiveRow(idx);setFocusCell('ean');}} placeholder={idx===0?'Scan EAN…':''} style={{...cellInp,background:isActive&&focusCell==='ean'?'#fff':'transparent'}} />
+              {rows.map((row,i)=>{
+                const isA=i===ar;
+                const bg=row.status==='saved'?'#fef2f2':row.errMsg?'#fff5f5':isA?'#fffbeb':i%2===0?'#fff':'#fafafa';
+                const eOL=(f:FC)=>isA&&fc===f?`2px solid ${f==='imei'?'#dc2626':f==='srno'?'#2563eb':'#f59e0b'}`:'2px solid transparent';
+                return(
+                  <tr key={row.id} style={{background:bg}}>
+                    <td style={{padding:'0 8px',height:38,textAlign:'center',color:'#cbd5e1',fontSize:11,fontWeight:700,background:'#f8fafc',borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0'}}>{i+1}</td>
+                    <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',padding:0}}>
+                      <div style={{height:38,outline:eOL('ean'),display:'flex',alignItems:'center'}}>
+                        <input ref={R(i,'ean')} value={row.ean}
+                          onChange={e=>upd(i,{ean:e.target.value,status:'empty',errMsg:'',errField:''})}
+                          onKeyDown={e=>{if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();handleEan(i,(e.target as HTMLInputElement).value);}}}
+                          onPaste={e=>{e.preventDefault();const v=e.clipboardData.getData('text').trim();if(v){upd(i,{ean:v});setTimeout(()=>handleEan(i,v),30);}}}
+                          onFocus={()=>{setAr(i);setFc('ean');}} placeholder={i===0?'Scan EAN to dispatch…':''} style={CI()}/>
+                        {row.status==='loading'&&<div className="spinner" style={{width:13,height:13,margin:'0 6px',flexShrink:0}}/>}
                       </div>
                     </td>
-                    <td style={{ borderBottom:'1px solid #e4e7ec', borderRight:'1px solid #e4e7ec', padding:0 }}>
-                      <input value={row.model} readOnly tabIndex={-1} placeholder="Auto-filled" style={{...cellInp,color:row.model?'#101828':'#94a3b8',fontWeight:row.model?500:400,cursor:'default'}} />
+                    <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',padding:'0 10px',color:row.model?'#0f172a':'#cbd5e1',fontWeight:row.model?500:400,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                      {row.model||'Auto-filled after EAN scan'}
                     </td>
-                    <td style={{ borderBottom:'1px solid #e4e7ec', borderRight:'1px solid #e4e7ec', textAlign:'center' }}>
-                      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:36, fontSize:14, fontWeight:700, color:row.qty>0?'#dc2626':'#94a3b8' }}>{row.qty>0?row.qty:'—'}</div>
-                    </td>
-                    <td style={{ borderBottom:'1px solid #e4e7ec', borderRight:'1px solid #e4e7ec', padding:0 }}>
-                      <div style={{ height:36, border:isActive&&focusCell==='imei'?'2px solid #f59e0b':'2px solid transparent', borderRadius:isActive&&focusCell==='imei'?4:0 }}>
-                        <input ref={setRef(idx,'imei')} value={row.imei} onChange={e=>updateRow(idx,{imei:e.target.value,errMsg:''})} onKeyDown={e=>onImeiKey(e,idx)}
-                          onPaste={e=>{ if(!row.imeiRequired) return; e.preventDefault(); const v=e.clipboardData.getData('text').trim(); if(v){updateRow(idx,{imei:v,errMsg:''});setTimeout(()=>handleImei(idx,v),50);} }}
-                          onFocus={()=>{setActiveRow(idx);setFocusCell('imei');}} readOnly={!row.imeiRequired} placeholder={row.imeiRequired?'Scan IMEI to dispatch…':'—'} style={{...cellInp,fontFamily:row.imeiRequired?'monospace':'inherit',fontSize:12,color:row.errMsg&&row.imei?'#dc2626':'#101828',background:isActive&&focusCell==='imei'?'#fffbeb':'transparent',cursor:row.imeiRequired?'text':'default'}} />
+                    <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',textAlign:'center',fontWeight:700,fontSize:14,color:row.qty>0?'#dc2626':'#cbd5e1'}}>{row.qty>0?row.qty:'—'}</td>
+                    {/* IMEI — strict 15 digits, must be IN_STOCK */}
+                    <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',padding:0,background:row.errField==='imei'?'#fff5f5':''}}>
+                      <div style={{height:38,outline:eOL('imei'),background:isA&&fc==='imei'?'#fff5f5':'',display:'flex'}}>
+                        <input ref={R(i,'imei')} value={row.imei}
+                          onChange={e=>upd(i,{imei:e.target.value,errMsg:'',errField:''})}
+                          onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();handleImei(i,(e.target as HTMLInputElement).value);}if(e.key==='Tab'){e.preventDefault();handleImei(i,(e.target as HTMLInputElement).value);}if(e.key==='Escape')upd(i,{errMsg:'',errField:'',imei:'',status:row.productId?'found':'empty'});}}
+                          onPaste={e=>{e.preventDefault();const v=e.clipboardData.getData('text').trim();if(v){upd(i,{imei:v});setTimeout(()=>handleImei(i,v),30);}}}
+                          onFocus={()=>{setAr(i);setFc('imei');}}
+                          placeholder="Scan IMEI (IN_STOCK only)…"
+                          style={CI({fontFamily:'monospace',fontSize:12,color:row.errField==='imei'?'#dc2626':'#0f172a'})}/>
                       </div>
                     </td>
-                    <td style={{ borderBottom:'1px solid #e4e7ec', borderRight:'1px solid #e4e7ec', padding:'0 8px', textAlign:'center' }}>
-                      {row.errMsg && <span style={{ fontSize:10, background:'#fef2f2', color:'#dc2626', padding:'2px 8px', borderRadius:10, fontWeight:600 }} title={row.errMsg}>✕ Error</span>}
-                      {row.status==='saved' && !row.errMsg && <span style={{ fontSize:10, background:'#dcfce7', color:'#15803d', padding:'2px 8px', borderRadius:10, fontWeight:600 }}>✓ Out</span>}
-                      {row.status==='awaiting_imei' && !row.errMsg && <span style={{ fontSize:10, background:'#fef9c3', color:'#854d0e', padding:'2px 8px', borderRadius:10 }}>Scan IMEI</span>}
+                    {/* Sr. No. */}
+                    <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',padding:0}}>
+                      <div style={{height:38,outline:eOL('srno'),background:isA&&fc==='srno'?'#eff6ff':'',display:'flex'}}>
+                        <input ref={R(i,'srno')} value={row.srno}
+                          onChange={e=>upd(i,{srno:e.target.value})}
+                          onKeyDown={e=>{if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();handleSrno(i,(e.target as HTMLInputElement).value);}}}
+                          onPaste={e=>{e.preventDefault();const v=e.clipboardData.getData('text').trim();if(v){upd(i,{srno:v});setTimeout(()=>handleSrno(i,v),30);}}}
+                          onFocus={()=>{setAr(i);setFc('srno');}} placeholder="Serial / any text…"
+                          style={CI({fontSize:12,color:'#374151'})}/>
+                      </div>
                     </td>
-                    <td style={{ borderBottom:'1px solid #e4e7ec', padding:0, textAlign:'center' }}>
-                      <button onClick={e=>{e.stopPropagation();deleteRow(idx);}} style={{ width:28, height:28, border:'none', background:'none', cursor:'pointer', color:'#94a3b8', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto' }} onMouseEnter={e=>(e.currentTarget as HTMLElement).style.color='#dc2626'} onMouseLeave={e=>(e.currentTarget as HTMLElement).style.color='#94a3b8'}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                    {/* Status */}
+                    <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',padding:'0 8px',textAlign:'center'}}>
+                      {row.errMsg&&<span style={{fontSize:9,background:'#fef2f2',color:'#dc2626',padding:'2px 6px',borderRadius:8,fontWeight:700,cursor:'help',display:'block',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:72}} title={row.errMsg}>✕ Error</span>}
+                      {!row.errMsg&&row.status==='saved'&&<span style={{fontSize:10,background:'#fee2e2',color:'#dc2626',padding:'2px 8px',borderRadius:10,fontWeight:700}}>✓</span>}
+                      {!row.errMsg&&row.status==='found'&&<span style={{fontSize:10,background:'#fef9c3',color:'#854d0e',padding:'2px 8px',borderRadius:10}}>Ready</span>}
+                      {!row.errMsg&&row.status==='not_found'&&<span style={{fontSize:10,background:'#fef2f2',color:'#dc2626',padding:'2px 8px',borderRadius:10}}>Not Found</span>}
+                    </td>
+                    <td style={{borderBottom:'1px solid #e2e8f0',padding:0,textAlign:'center'}}>
+                      <button onClick={()=>del(i)} title="Delete row"
+                        style={{width:40,height:38,border:'none',background:'none',cursor:'pointer',color:'#94a3b8',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto',transition:'color .1s'}}
+                        onMouseEnter={e=>(e.currentTarget as HTMLElement).style.color='#dc2626'} onMouseLeave={e=>(e.currentTarget as HTMLElement).style.color='#94a3b8'}>
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
                       </button>
                     </td>
                   </tr>
@@ -209,23 +238,23 @@ export function StockOut() {
             </tbody>
           </table>
         </div>
-        {/* Right panel */}
-        <div style={{ width:260, borderLeft:'1px solid #e4e7ec', background:'#fff', display:'flex', flexDirection:'column', flexShrink:0 }}>
-          <div style={{ padding:'10px 12px 8px', borderBottom:'1px solid #f2f4f7' }}>
-            <div style={{ fontSize:10, fontWeight:700, color:'#98a2b3', textTransform:'uppercase', letterSpacing:'.08em' }}>Dispatched — {sessionDate}</div>
-            {customer && <div style={{ fontSize:11, fontWeight:600, color:'#dc2626', marginTop:2 }}>To: {customer}</div>}
+
+        {/* Live Summary */}
+        <div style={{width:220,borderLeft:'1px solid #e2e8f0',background:'#fff',display:'flex',flexDirection:'column',flexShrink:0}}>
+          <div style={{padding:'10px 14px 8px',borderBottom:'1px solid #f1f5f9'}}>
+            <div style={{fontSize:9,fontWeight:800,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'.1em'}}>DISPATCHING — {date}</div>
+            {cust?<div style={{fontSize:11,color:'#dc2626',fontWeight:600,marginTop:2}}>→ {cust}</div>:<div style={{fontSize:10,color:'#cbd5e1',marginTop:2}}>No customer selected</div>}
           </div>
-          <div style={{ flex:1, overflowY:'auto', padding:'6px 0' }}>
-            {summary.length===0 ? <div style={{ padding:'24px 12px', textAlign:'center', color:'#c4c8d0', fontSize:12 }}>Scan products to see summary</div>
-              : summary.map((s:any)=>(
-                <div key={s.model} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'5px 14px', fontSize:12 }}>
-                  <span style={{ color:'#344054', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:175 }}>{s.model}</span>
-                  <span style={{ fontWeight:700, color:'#dc2626', flexShrink:0, marginLeft:6 }}>{s.qty}</span>
-                </div>
-              ))
-            }
+          <div style={{flex:1,overflowY:'auto',padding:'6px 0'}}>
+            {sv.length===0?<div style={{padding:'20px 14px',textAlign:'center',color:'#cbd5e1',fontSize:12}}>Scan products to dispatch</div>
+              :sv.map(r=>(
+              <div key={r.id} style={{display:'flex',justifyContent:'space-between',padding:'5px 14px',fontSize:12}}>
+                <span style={{color:'#374151',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:145}}>{r.model}</span>
+                <span style={{fontWeight:700,color:'#dc2626',flexShrink:0,marginLeft:6}}>-{r.qty}</span>
+              </div>
+            ))}
           </div>
-          {total>0 && <div style={{ padding:'10px 14px', borderTop:'1px solid #f2f4f7', display:'flex', justifyContent:'space-between', fontSize:13, fontWeight:700 }}><span style={{ color:'#344054' }}>Grand Total</span><span style={{ color:'#dc2626' }}>{total} units</span></div>}
+          {tot>0&&<div style={{padding:'10px 14px',borderTop:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',fontSize:13,fontWeight:800}}><span style={{color:'#0f172a'}}>Grand Total</span><span style={{color:'#dc2626'}}>{tot}</span></div>}
         </div>
       </div>
     </div>
