@@ -14,7 +14,7 @@ const getH=():string[]=>{try{return JSON.parse(localStorage.getItem(SK)||'[]');}
 const saveH=(n:string)=>{const h=getH().filter(x=>x!==n);localStorage.setItem(SK,JSON.stringify([n,...h].slice(0,100)));};
 const toT=(s:string)=>s.trim().replace(/\w+/g,w=>w[0].toUpperCase()+w.slice(1).toLowerCase());
 const eCache=new Map<string,{productId:string;model:string;brand:string;imeiRequired:boolean}|null>();
-let seq=0;
+// seq removed — per-row race safety handled inside handleEan via setRows guard
 const STATES=['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chandigarh','Chhattisgarh','Dadra & Nagar Haveli','Daman & Diu','Delhi','Goa','Gujarat','Haryana','Himachal Pradesh','Jammu & Kashmir','Jharkhand','Karnataka','Kerala','Ladakh','Lakshadweep','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Puducherry','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Other'];
 
 function SM({name,onSave,onSkip}:{name:string;onSave:(s:string)=>void;onSkip:()=>void}){
@@ -77,16 +77,31 @@ export function StockIn(){
 
   const handleEan=useCallback(async(i:number,ean:string)=>{
     const v=ean.trim();if(!v)return;
-    const mSeq=++seq;upd(i,{ean:v,status:'loading',errMsg:'',errField:''});
+    upd(i,{ean:v,status:'loading',errMsg:'',errField:''});
     let p=eCache.get(v);
-    if(p===undefined){try{const r=await api<{product:{id:string;model:string;brand:string;imeiRequired:boolean}}>(`/inventory/lookup?ean=${encodeURIComponent(v)}`);p={productId:r.product.id,model:r.product.model,brand:r.product.brand,imeiRequired:r.product.imeiRequired};eCache.set(v,p);}catch{eCache.set(v,null);p=null;}}
-    if(mSeq!==seq)return;
-    if(!p){upd(i,{status:'not_found',errMsg:''});setDrawer(v);setDf(d=>({...d,ean:v}));moveTo(i,'ean');return;}
-    // Non-IMEI products (accessories, cables) auto-save immediately — serial is truly optional
-    // IMEI-required products (phones) show 'found' to indicate IMEI still needed
-    upd(i,{...p,status:p.imeiRequired?'found':'saved',qty:1});
-    const ni=ins(i);moveTo(ni,'ean');
-  },[upd,ins,moveTo]);
+    if(p===undefined){
+      // Use a row-local stamp so concurrent bulk lookups don't cancel each other.
+      // Each row updates only its own index so cross-row races are safe.
+      try{
+        const r=await api<{product:{id:string;model:string;brand:string;imeiRequired:boolean}}>(`/inventory/lookup?ean=${encodeURIComponent(v)}`);
+        p={productId:r.product.id,model:r.product.model,brand:r.product.brand,imeiRequired:r.product.imeiRequired};
+        eCache.set(v,p);
+      }catch{eCache.set(v,null);p=null;}
+    }
+    // Verify row still has this EAN (user may have cleared it during lookup)
+    setRows(rs=>{
+      if(rs[i]?.ean!==v)return rs; // row was changed — skip update
+      if(!p){
+        const next=rs.map((r,x)=>x===i?{...r,status:'not_found' as const,errMsg:''}:r);
+        // Open new product drawer (deferred so state settles first)
+        setTimeout(()=>{setDrawer(v);setDf(d=>({...d,ean:v}));moveTo(i,'ean');},0);
+        return next;
+      }
+      // IMEI-required products ALWAYS go to 'found' — never auto-save without IMEI
+      return rs.map((r,x)=>x===i?{...r,...p!,status:p!.imeiRequired?'found':'saved',qty:1}:r);
+    });
+    if(p){const ni=ins(i);moveTo(ni,'ean');}
+  },[upd,ins,moveTo,setDrawer,setDf]);
   useEffect(()=>{ERef.current=handleEan;},[handleEan]);
 
   // IMEI column — ALWAYS strict 15 digits, regardless of imeiRequired flag
@@ -150,11 +165,11 @@ export function StockIn(){
         if(r.vendor){resolvedSuppId=r.vendor.id;setSuppId(r.vendor.id);}}catch{}
     }
     // Block rows that still need IMEI (status='found') — phones not yet scanned
-    const needsImei=rows.filter(r=>r.status==='found'&&r.productId);
+    const needsImei=rows.filter(r=>r.productId&&(r.status==='found'||(r.imeiRequired&&!r.imei&&r.status==='saved')));
     if(needsImei.length){
       alert(`⚠ ${needsImei.length} row(s) are missing IMEI:\n${needsImei.map(r=>`  • ${r.model}`).join('\n')}\n\nPlease scan the IMEI for each product before saving.`);
       // Move cursor to first row needing IMEI
-      const fi=rows.findIndex(r=>r.status==='found');
+      const fi=rows.findIndex(r=>r.productId&&(r.status==='found'||(r.imeiRequired&&!r.imei)));
       if(fi>=0)moveTo(fi,'imei');
       return;
     }
@@ -313,7 +328,9 @@ Tip: Check if any IMEI was previously scanned (use IMEI Tracker to verify).`);
                           onPaste={e=>{e.preventDefault();const raw=e.clipboardData.getData('text');const lines=raw.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);if(lines.length>1){// Multi-line EAN paste (Excel column) — fill consecutive rows
                             // First ensure we have enough rows
                             setRows(rs=>{const needed=i+lines.length;const cur=[...rs];while(cur.length<needed)cur.push(mk());return cur;});
-                            lines.forEach((line,offset)=>{setTimeout(()=>{const ri=i+offset;setRows(rs=>rs.map((r,x)=>x===ri?{...r,ean:line,status:'loading',errMsg:'',errField:''}:r));ERef.current(ri,line);},60*offset);});
+                            // Fire all EAN lookups concurrently — seq race is gone, each updates its own row.
+                            // Small stagger (20ms) just to avoid hammering API with 20 simultaneous calls.
+                            lines.forEach((line,offset)=>{setTimeout(()=>{const ri=i+offset;setRows(rs=>rs.map((r,x)=>x===ri?{...r,ean:line,status:'loading',errMsg:'',errField:''}:r));ERef.current(ri,line);},20*offset);});
                           }else if(lines[0]){upd(i,{ean:lines[0]});setTimeout(()=>handleEan(i,lines[0]),30);}}}
                           onFocus={()=>{setAr(i);setFc('ean');}} placeholder={i===0?'Scan EAN…':''} style={CI()}/>
                         {row.status==='loading'&&<div className="spinner" style={{width:13,height:13,margin:'0 6px',flexShrink:0}}/>}
