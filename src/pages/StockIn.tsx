@@ -51,6 +51,12 @@ interface EditMode {
 export function StockIn(){
   const[searchParams]=useSearchParams();
   const[whs,setWhs]=useState<Warehouse[]>([]);
+  const[isMobile,setIsMobile]=useState(()=>window.innerWidth<768);
+  useEffect(()=>{
+    const fn=()=>setIsMobile(window.innerWidth<768);
+    window.addEventListener('resize',fn);
+    return()=>window.removeEventListener('resize',fn);
+  },[]);
   const[whId,setWhId]=useState('');
   const[supp,setSupp]=useState('');
   const[suppId,setSuppId]=useState('');
@@ -380,7 +386,7 @@ export function StockIn(){
       </div>
 
       <div style={{flex:1,display:'flex',overflow:'hidden'}}>
-        <div style={{flex:1,overflowY:'auto',overflowX:'auto',WebkitOverflowScrolling:'touch' as any}}>
+        <div style={{flex:1,overflowY:'auto',overflowX:'auto',display:isMobile?'none':'block'}}>
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:13,tableLayout:'fixed',minWidth:1020}}>
             <colgroup><col style={{width:36}}/><col style={{width:140}}/><col/><col style={{width:50}}/><col style={{width:162}}/><col style={{width:148}}/><col style={{width:108}}/><col style={{width:80}}/><col style={{width:42}}/></colgroup>
             <thead>
@@ -403,11 +409,11 @@ export function StockIn(){
                     <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',padding:0}}>
                       <div style={{height:38,outline:eOL('ean'),display:'flex',alignItems:'center'}}>
                         <input ref={R(i,'ean')} value={row.ean}
-                          inputMode="numeric" autoComplete="off"
                           onChange={e=>{
                             const v=e.target.value;
                             upd(i,{ean:v,status:'empty',errMsg:'',errField:''});
                             // Mobile scanner auto-submit: EAN-8 (8), UPC-A (12), EAN-13 (13)
+                            // Scanners paste full code without Enter — auto-trigger on known lengths
                             if(v.length===8||v.length===12||v.length===13){
                               setTimeout(()=>handleEan(i,v.trim()),80);
                             }
@@ -447,7 +453,6 @@ export function StockIn(){
                     <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',padding:0,background:row.errField==='imei'?'#fff5f5':''}}>
                       <div style={{height:38,outline:eOL('imei'),background:isA&&fc==='imei'?'#fff5f5':'',display:'flex'}}>
                         <input ref={R(i,'imei')} value={row.imei}
-                          inputMode="numeric" autoComplete="off"
                           onChange={e=>{
                             const v=e.target.value;upd(i,{imei:v,errMsg:'',errField:''});
                             // Auto-submit when scanner finishes (exactly 15 digits entered)
@@ -506,7 +511,77 @@ export function StockIn(){
             </tbody>
           </table>
 
-                  {/* Live Summary */}
+          {/* ── MOBILE CARD VIEW ── */}
+          {isMobile&&(
+            <div style={{padding:'8px 4px'}}>
+              {rows.map((row,i)=>{
+                const isDone=row.status==='saved';
+                const hasErr=!!row.errMsg;
+                const needsImei=row.status==='found'&&row.imeiRequired;
+                const needsSrno=row.status==='found'&&row.srnoRequired&&!row.imeiRequired;
+                if(row.status==='empty'&&i>0&&!rows[i-1]?.productId)return null;
+                return(
+                  <div key={row.id} style={{margin:'0 0 12px 0',border:`2px solid ${hasErr?'#fca5a5':isDone?'#86efac':'#e2e8f0'}`,borderRadius:14,background:hasErr?'#fff5f5':isDone?'#f0fdf4':'#fff',overflow:'hidden'}}>
+                    <div style={{padding:'8px 14px',background:isDone?'#dcfce7':hasErr?'#fee2e2':'#f8fafc',display:'flex',alignItems:'center',gap:8,borderBottom:'1px solid rgba(0,0,0,.06)'}}>
+                      <span style={{fontSize:12,fontWeight:700,color:'#94a3b8'}}>#{i+1}</span>
+                      {isDone&&<span style={{fontSize:11,background:'#16a34a',color:'#fff',padding:'2px 10px',borderRadius:20,fontWeight:700}}>{row.imei?'✓ IMEI':'✓ Done'}</span>}
+                      {needsImei&&<span style={{fontSize:11,background:'#f59e0b',color:'#fff',padding:'2px 10px',borderRadius:20,fontWeight:700}}>⚠ Scan IMEI</span>}
+                      {needsSrno&&<span style={{fontSize:11,background:'#f97316',color:'#fff',padding:'2px 10px',borderRadius:20,fontWeight:700}}>⚠ Sr. No.</span>}
+                      {hasErr&&<span style={{fontSize:11,background:'#dc2626',color:'#fff',padding:'2px 10px',borderRadius:20,fontWeight:700}}>✕ Error</span>}
+                      <div style={{flex:1}}/>
+                      <button onClick={()=>setRows(rs=>{const n=[...rs];n.splice(i,1);return n.length?n:[mk()];})} style={{width:30,height:30,border:'1px solid #fca5a5',borderRadius:8,background:'#fef2f2',color:'#dc2626',fontSize:14,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
+                    </div>
+                    <div style={{padding:'12px 14px',borderBottom:row.productId?'1px solid #f1f5f9':'none'}}>
+                      <div style={{fontSize:10,fontWeight:700,color:'#94a3b8',marginBottom:5,textTransform:'uppercase',letterSpacing:'.06em'}}>EAN / Barcode</div>
+                      <input ref={R(i,'ean')} value={row.ean} inputMode="numeric" autoComplete="off"
+                        onChange={e=>{const v=e.target.value;upd(i,{ean:v,status:'empty',errMsg:'',errField:''});if(v.length===8||v.length===12||v.length===13){setTimeout(()=>handleEan(i,v.trim()),80);}}}
+                        onBlur={e=>{const v=e.target.value.trim();if(v&&row.status==='empty')handleEan(i,v);}}
+                        onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();handleEan(i,(e.target as HTMLInputElement).value);}}}
+                        placeholder="Scan or type barcode..."
+                        style={{width:'100%',height:52,fontSize:18,padding:'0 14px',border:'1.5px solid #d0d5dd',borderRadius:10,boxSizing:'border-box',fontFamily:'monospace',outline:'none',WebkitAppearance:'none'}}
+                      />
+                      {row.model&&<div style={{marginTop:8,fontSize:14,fontWeight:700,color:'#0f172a'}}>{row.model}</div>}
+                      {row.brand&&<div style={{fontSize:12,color:'#64748b'}}>{row.brand} · EAN: {row.ean}</div>}
+                      {row.status==='not_found'&&<div style={{marginTop:6,fontSize:13,color:'#dc2626'}}>✕ Not found in Product Master</div>}
+                      {row.status==='loading'&&<div style={{marginTop:6,fontSize:13,color:'#2563eb'}}>🔍 Looking up...</div>}
+                    </div>
+                    {row.productId&&(
+                      <div style={{padding:'12px 14px'}}>
+                        {row.imeiRequired&&(
+                          <>
+                            <div style={{fontSize:10,fontWeight:700,color:'#dc2626',marginBottom:5,textTransform:'uppercase',letterSpacing:'.06em'}}>IMEI (15 digits)</div>
+                            <input ref={R(i,'imei')} value={row.imei} inputMode="numeric" autoComplete="off"
+                              onChange={e=>{const v=e.target.value;upd(i,{imei:v,errMsg:'',errField:''});if(/^\d{15}$/.test(v.trim()))setTimeout(()=>handleImei(i,v.trim()),60);}}
+                              onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();handleImei(i,(e.target as HTMLInputElement).value);}}}
+                              placeholder="Scan IMEI..."
+                              style={{width:'100%',height:52,fontSize:18,padding:'0 14px',border:`1.5px solid ${row.errField==='imei'?'#dc2626':'#d0d5dd'}`,borderRadius:10,boxSizing:'border-box',fontFamily:'monospace',outline:'none',WebkitAppearance:'none'}}
+                            />
+                          </>
+                        )}
+                        {row.srnoRequired&&(
+                          <>
+                            <div style={{fontSize:10,fontWeight:700,color:'#0ea5e9',marginBottom:5,marginTop:row.imeiRequired?10:0,textTransform:'uppercase',letterSpacing:'.06em'}}>Serial / Sr. No.</div>
+                            <input ref={R(i,'srno')} value={row.srno} autoComplete="off"
+                              onChange={e=>upd(i,{srno:e.target.value})}
+                              onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();handleSrno(i,(e.target as HTMLInputElement).value);}}}
+                              onBlur={e=>{if(e.target.value.trim())handleSrno(i,e.target.value.trim());}}
+                              placeholder="Enter serial/box number..."
+                              style={{width:'100%',height:52,fontSize:16,padding:'0 14px',border:`1.5px solid ${row.errField==='srno'?'#dc2626':'#d0d5dd'}`,borderRadius:10,boxSizing:'border-box',outline:'none',WebkitAppearance:'none'}}
+                            />
+                          </>
+                        )}
+                        {row.errMsg&&<div style={{marginTop:8,fontSize:13,color:'#dc2626',fontWeight:600}}>✕ {row.errMsg}</div>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              <button onClick={()=>setRows(r=>[...r,mk()])} style={{width:'100%',height:56,border:'2px dashed #cbd5e1',borderRadius:14,background:'#f8fafc',fontSize:16,color:'#64748b',cursor:'pointer',fontWeight:600,marginTop:4}}>+ Add Next Product</button>
+            </div>
+          )}
+        </div>
+
+        {/* Live Summary */}
         <div style={{width:240,borderLeft:'1px solid #e2e8f0',background:'#fff',display:'flex',flexDirection:'column',flexShrink:0}}>
           <div style={{padding:'10px 14px 8px',borderBottom:'1px solid #f1f5f9'}}>
             <div style={{fontSize:9,fontWeight:800,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'.1em'}}>STOCK RECEIVED — {date}</div>
