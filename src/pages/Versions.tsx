@@ -152,7 +152,11 @@ export function Versions() {
               const lines = formatLines(h);
               const isTxnDelete = h.action === 'DELETE' && h.entityName === 'inventory_transactions';
               const canRestore = isTxnDelete || (h.action !== 'CREATE' && h.action !== 'LOGIN' && h.entityName === 'products');
-              const title = h.entity ? `${h.entity.model} · ${h.entity.ean}` : (h.oldValue?.model || h.newValue?.model || 'Product');
+              // For bulk inventory deletions, show vendor + product summary
+              const isBulkTxn = h.entityName === 'inventory_transactions' && (h.oldValue as any)?.bulk;
+              const title = isBulkTxn
+                ? `${(h.oldValue as any).vendor} — ${(h.oldValue as any).txnIds?.length ?? 1} transaction(s), ${(h.oldValue as any).totalQty} units`
+                : h.entity ? `${h.entity.model} · ${h.entity.ean}` : (h.oldValue?.model || h.newValue?.model || 'Product');
               const batchLabel = h.newValue?.batchLabel;
               return (
                 <div key={h.id} style={{
@@ -210,3 +214,4 @@ export function Versions() {
   );
 }
 export default Versions;
+
