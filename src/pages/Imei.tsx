@@ -73,10 +73,11 @@ export function Imei() {
     load(search,ns,nt,nsw,1);
   };
 
-  const toggleSwiped=async(id:string,cur:boolean)=>{
+  const toggleSwiped=async(id:string,imei1:string,cur:boolean)=>{
     setUpdatingId(id);
     try{
-      await api(`/imei/${id}/status`,{method:'PATCH',body:JSON.stringify({status:'IN_STOCK',swiped:!cur})});
+      // PATCH uses /:imei (the imei1 value) not /:id
+      await api(`/imei/${encodeURIComponent(imei1)}/status`,{method:'PATCH',body:JSON.stringify({status:'IN_STOCK',swiped:!cur})});
       setData(d=>d?{...d,items:d.items.map(i=>i.id===id?{...i,swiped:!cur}:i)}:d);
     }catch(e:any){alert(e.message);}
     finally{setUpdatingId(null);}
@@ -227,7 +228,7 @@ export function Imei() {
                     </td>
                     {/* Swiped toggle */}
                     <td style={{padding:'8px 12px'}} onClick={e=>e.stopPropagation()}>
-                      <button onClick={()=>toggleSwiped(item.id,item.swiped)} disabled={updatingId===item.id} title={item.swiped?'Mark unswiped':'Mark swiped'}
+                      <button onClick={()=>toggleSwiped(item.id,item.imei1,item.swiped)} disabled={updatingId===item.id} title={item.swiped?'Mark unswiped':'Mark swiped'}
                         style={{width:44,height:22,borderRadius:11,border:'none',background:item.swiped?'#2563eb':'#e2e8f0',cursor:'pointer',position:'relative',transition:'background .2s',display:'inline-block',flexShrink:0,opacity:updatingId===item.id?.5:1}}>
                         <span style={{width:16,height:16,borderRadius:'50%',background:'#fff',position:'absolute',top:3,left:item.swiped?25:3,transition:'left .2s',boxShadow:'0 1px 3px rgba(0,0,0,.2)',display:'block'}}/>
                       </button>
