@@ -31,10 +31,16 @@ export function Dashboard() {
   useEffect(()=>{api<Supplier[]>('/vendors').then(setSuppliers).catch(()=>{});},[]);
 
   const bulkDelete=async(ids:string[],label:string)=>{
-    if(!confirm(`Permanently delete all ${ids.length} transaction(s) for "${label}"?\n\nThis removes the stock entry as if it was never scanned.`))return;
+    if(!confirm(`Permanently delete all ${ids.length} transaction(s) for "${label}"?
+
+This removes the stock entry as if it was never scanned.`))return;
     setDeleting(ids[0]);
     try{
-      for(const id of ids) await api(`/inventory/transactions/${id}`,{method:'DELETE'});
+      if(ids.length>1){
+        await api('/inventory/transactions/bulk-delete',{method:'POST',body:JSON.stringify({ids})});
+      }else{
+        await api(`/inventory/transactions/${ids[0]}`,{method:'DELETE'});
+      }
       load();
     }catch(e:any){alert('Delete failed: '+e.message);}
     finally{setDeleting(null);}
@@ -81,7 +87,7 @@ export function Dashboard() {
   const VendorCard=({vendor,txns,color,sign}:{vendor:string;txns:Txn[];color:string;sign:'+'|'-'})=>{
     const total=txns.reduce((s,t)=>s+Math.abs(t.qty),0);
     const [open,setOpen]=useState(true);
-    const byProd=txns.reduce((a:Record<string,Txn[]>,t)=>{const k=t.product.split('(')[0].trim();if(!a[k])a[k]=[];a[k].push(t);return a;},{});
+    const byProd=txns.reduce((a:Record<string,Txn[]>,t)=>{const k=t.product.trim();if(!a[k])a[k]=[];a[k].push(t);return a;},{});
     const allIds=txns.map(t=>t.id);
     return (
       <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:10,marginBottom:8,overflow:'hidden',boxShadow:'0 1px 3px rgba(0,0,0,.04)'}}>
@@ -250,12 +256,12 @@ export function Dashboard() {
                       <td style={{padding:'6px 12px',color:'#64748b'}}>{t.warehouse}</td>
                       <td style={{padding:'6px 12px'}}>
                         <div style={{display:'flex',gap:6}}>
-                          <button onClick={()=>openEdit([t.id],t.product.split('(')[0],'')}
+                          <button onClick={()=>openEdit([t.id],t.product,'')}
                             style={{height:24,padding:'0 8px',border:'1px solid #bfdbfe',borderRadius:5,background:'#eff6ff',cursor:'pointer',color:'#2563eb',fontSize:10,fontWeight:600,display:'flex',alignItems:'center',gap:3}}>
                             <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                             Edit
                           </button>
-                          <button onClick={()=>bulkDelete([t.id],t.product.split('(')[0])} disabled={!!deleting}
+                          <button onClick={()=>bulkDelete([t.id],t.product)} disabled={!!deleting}
                             style={{height:24,padding:'0 8px',border:'1px solid #fca5a5',borderRadius:5,background:'#fef2f2',cursor:'pointer',color:'#dc2626',fontSize:10,fontWeight:600,display:'flex',alignItems:'center',gap:3,opacity:deleting?0.6:1}}>
                             <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
                             Delete
@@ -272,13 +278,16 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* Edit Modal */}
+      {/* Edit Modal — reassign supplier for this batch of transactions */}
       {editModal&&(
         <div style={{position:'fixed',inset:0,background:'rgba(15,23,42,.5)',zIndex:500,display:'flex',alignItems:'center',justifyContent:'center'}}>
-          <div style={{background:'#fff',borderRadius:14,padding:28,width:440,boxShadow:'0 24px 60px rgba(0,0,0,.2)'}}>
+          <div style={{background:'#fff',borderRadius:14,padding:28,width:460,boxShadow:'0 24px 60px rgba(0,0,0,.2)'}}>
             <div style={{fontSize:16,fontWeight:800,color:'#0f172a',marginBottom:4}}>Edit Entry</div>
-            <div style={{fontSize:12,color:'#64748b',marginBottom:20}}>{editModal.label}</div>
-            <label style={{fontSize:11,fontWeight:700,color:'#64748b',textTransform:'uppercase',letterSpacing:'.07em',display:'block',marginBottom:6}}>Assign Supplier</label>
+            <div style={{fontSize:12,color:'#64748b',marginBottom:6}}>{editModal.ids.length} transaction{editModal.ids.length!==1?'s':''} · <strong style={{color:'#0f172a'}}>{editModal.label}</strong></div>
+            <div style={{background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:8,padding:'10px 14px',marginBottom:20,fontSize:12,color:'#64748b'}}>
+              💡 Use this to re-assign the supplier for this stock entry. To change products or quantities, delete this entry and create a new Stock In.
+            </div>
+            <label style={{fontSize:11,fontWeight:700,color:'#64748b',textTransform:'uppercase',letterSpacing:'.07em',display:'block',marginBottom:6}}>Reassign Supplier</label>
             <select value={editVendorId} onChange={e=>setEditVendorId(e.target.value)}
               style={{width:'100%',height:40,padding:'0 12px',border:'1.5px solid #d0d5dd',borderRadius:8,fontSize:13,background:'#fff',outline:'none',marginBottom:20,boxSizing:'border-box'}}>
               <option value="">— No Supplier</option>
