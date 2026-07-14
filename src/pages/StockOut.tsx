@@ -16,7 +16,7 @@ const CK='erp_customers_v1';
 const getC=():string[]=>{try{return JSON.parse(localStorage.getItem(CK)||'[]');}catch{return[];}};
 const saveC=(n:string)=>{const h=getC().filter(x=>x!==n);localStorage.setItem(CK,JSON.stringify([n,...h].slice(0,100)));};
 const DEF=['Amazon','Flipkart','JioMart','Meesho','Walk In Customer','Service Center','Return'];
-const pCache=new Map<string,{id:string;model:string;brand:string;imeiRequired:boolean}|null>();
+const pCache=new Map<string,{id:string;model:string;brand:string;imeiRequired:boolean;srnoRequired:boolean}|null>();
 // seq removed — per-row safety via setRows guard
 
 // Edit mode context stored in server session by Dashboard
@@ -79,8 +79,8 @@ export function StockOut(){
     upd(i,{ean:v,status:'loading',errMsg:'',errField:''});
     let p=pCache.get(v);
     if(p===undefined){
-      try{const r=await api<{product:{id:string;model:string;brand:string;imeiRequired:boolean}}>(`/inventory/lookup?ean=${encodeURIComponent(v)}`);
-        p={id:r.product.id,model:r.product.model,brand:r.product.brand,imeiRequired:r.product.imeiRequired};pCache.set(v,p);
+      try{const r=await api<{product:{id:string;model:string;brand:string;imeiRequired:boolean;srnoRequired:boolean}}>(`/inventory/lookup?ean=${encodeURIComponent(v)}`);
+        p={id:r.product.id,model:r.product.model,brand:r.product.brand,imeiRequired:r.product.imeiRequired,srnoRequired:r.product.srnoRequired||false};pCache.set(v,p);
       }catch{pCache.set(v,null);p=null;}
     }
     setRows(rs=>{
