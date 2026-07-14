@@ -129,7 +129,7 @@ export function StockIn(){
       }
       // IMEI-required products ALWAYS go to 'found' — never auto-save without IMEI
       const needsImei=p!.imeiRequired;
-      const needsSrno=(p as any).srnoRequired||false;
+      const needsSrno=p!.srnoRequired||false;
       // imeiRequired → 'found' (need IMEI); srnoRequired only → 'found' as well (need SrNo); else auto-save
       return rs.map((r,x)=>x===i?{...r,...p!,srnoRequired:needsSrno,status:(needsImei||needsSrno)?'found':'saved',qty:1}:r);
     });
@@ -140,7 +140,7 @@ export function StockIn(){
         const nextHasEan=nextRow&&nextRow.ean.trim()!=='';
         if(!nextHasEan){
           // No row below or it's empty — insert one
-          const nr={id:Math.random().toString(36).slice(2,9),...{ean:'',productId:'',model:'',brand:'',imeiRequired:false,qty:0,imei:'',srno:'',imeiType:'NIL',status:'empty' as const,errMsg:'',errField:'' as const}};
+          const nr={id:Math.random().toString(36).slice(2,9),...{ean:'',productId:'',model:'',brand:'',imeiRequired:false,srnoRequired:false,qty:0,imei:'',srno:'',imeiType:'NIL',status:'empty' as const,errMsg:'',errField:'' as const}};
           const next=[...rs];
           if(i>=rs.length-1)next.push(nr);else next.splice(i+1,0,nr);
           return next;
