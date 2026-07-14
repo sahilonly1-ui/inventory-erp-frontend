@@ -1373,7 +1373,7 @@ export default function Products(){
     // lowStock = products with stock 1-3; outOfStock = 0
     lowStock:lowStock||undefined,outOfStock:outOfStock||undefined,withStock:withStock||undefined,
     sortBy:sortBy||undefined,sortDir,
-  }),[search,brandF,catF,statusF,lowStock,outOfStock,sortBy,sortDir]);
+  }),[search,brandF,catF,statusF,lowStock,outOfStock,withStock,sortBy,sortDir]);
 
   const loadProducts=useCallback(async()=>{
     setBgLoad(true);setError('');
