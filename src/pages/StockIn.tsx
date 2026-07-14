@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 
 interface Warehouse { id: string; name: string; }
@@ -48,6 +49,7 @@ interface EditMode {
 }
 
 export function StockIn(){
+  const[searchParams]=useSearchParams();
   const[whs,setWhs]=useState<Warehouse[]>([]);
   const[whId,setWhId]=useState('');
   const[supp,setSupp]=useState('');
@@ -73,25 +75,26 @@ export function StockIn(){
   useEffect(()=>{
     api<Warehouse[]>('/warehouses').then(ws=>{setWhs(ws);const m=ws.find(w=>w.name.toLowerCase().includes('main'));setWhId(m?.id||ws[0]?.id||'');}).catch(()=>{});
 
-    // Check for edit mode (redirected from Dashboard)
-    const em=localStorage.getItem('sin_edit_mode');
-    if(em){
-      try{
-        const parsed:EditMode=JSON.parse(em);
-        setEditMode(parsed);
-        // Supplier pre-fill
-        if(parsed.supplierName)setSupp(parsed.supplierName);
-        if(parsed.supplierVendorId)setSuppId(parsed.supplierVendorId);
-        if(parsed.originalDate)setDate(parsed.originalDate);
-        // Rows come from sin_draft_v2 (written by Dashboard before redirect)
-      }catch{}
-      localStorage.removeItem('sin_edit_mode'); // consume it
+    const sessionId=searchParams.get('editSession');
+    if(sessionId){
+      // Edit mode: fetch session from server (no localStorage dependency)
+      api<{draft:{r:Row[];s:string;iv:string;dt:string};editMeta:EditMode}>(`/inventory/edit-sessions/${sessionId}`)
+        .then(({draft,editMeta})=>{
+          setEditMode(editMeta);
+          if(editMeta.supplierName)setSupp(editMeta.supplierName);
+          if(editMeta.supplierVendorId)setSuppId(editMeta.supplierVendorId);
+          if(editMeta.originalDate)setDate(editMeta.originalDate);
+          if(draft.r?.some((x:Row)=>x.status!=='empty'))setRows(draft.r);
+          if(draft.iv)setInv(draft.iv);
+        })
+        .catch(e=>alert('Could not load edit session: '+(e.message||'expired')));
+      return; // skip localStorage draft
     }
 
-    // Load draft rows (written either by Dashboard edit redirect or by previous session)
+    // Normal mode: load local draft
     const d=localStorage.getItem(DK);
-    if(d){try{const{r,s,iv,dt}=JSON.parse(d);if(r?.some((x:Row)=>x.status!=='empty')){setRows(r);if(s&&!em)setSupp(s);if(iv)setInv(iv);if(dt&&!em)setDate(dt);}}catch{}}
-  },[]);
+    if(d){try{const{r,s,iv,dt}=JSON.parse(d);if(r?.some((x:Row)=>x.status!=='empty')){setRows(r);if(s)setSupp(s);if(iv)setInv(iv);if(dt)setDate(dt);}}catch{}}
+  },[searchParams]);
   useEffect(()=>{if(rows.some(r=>r.status!=='empty'))localStorage.setItem(DK,JSON.stringify({r:rows,s:supp,iv:inv,dt:date}));},[rows,supp,inv,date]);
 
   const moveTo=useCallback((ri:number,cell:FC)=>{
@@ -127,7 +130,22 @@ export function StockIn(){
       // IMEI-required products ALWAYS go to 'found' — never auto-save without IMEI
       return rs.map((r,x)=>x===i?{...r,...p!,status:p!.imeiRequired?'found':'saved',qty:1}:r);
     });
-    if(p){const ni=ins(i);moveTo(ni,'ean');}
+    if(p){
+      // Only insert a new blank row if the next slot is truly empty (not pre-filled by bulk paste)
+      setRows(rs=>{
+        const nextRow=rs[i+1];
+        const nextHasEan=nextRow&&nextRow.ean.trim()!=='';
+        if(!nextHasEan){
+          // No row below or it's empty — insert one
+          const nr={id:Math.random().toString(36).slice(2,9),...{ean:'',productId:'',model:'',brand:'',imeiRequired:false,qty:0,imei:'',srno:'',imeiType:'NIL',status:'empty' as const,errMsg:'',errField:'' as const}};
+          const next=[...rs];
+          if(i>=rs.length-1)next.push(nr);else next.splice(i+1,0,nr);
+          return next;
+        }
+        return rs; // next row already has EAN — don't insert
+      });
+      moveTo(i+1,'ean');
+    }
   },[upd,ins,moveTo,setDrawer,setDf]);
   useEffect(()=>{ERef.current=handleEan;},[handleEan]);
 
