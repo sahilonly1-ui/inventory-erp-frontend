@@ -130,6 +130,8 @@ export function StockOut(){
 
   // ── Commit — dispatch IMEIs and non-IMEI stock out ─────────────────────────
   const commit=useCallback(async()=>{
+    const needsImei=rows.filter(r=>(r.status==='found'||(r.status==='saved'&&r.imeiRequired&&!r.imei))&&r.productId);
+    if(needsImei.length){alert(`⚠ ${needsImei.length} row(s) are missing IMEI:\n${needsImei.map(r=>`  • ${r.model}`).join('\n')}\n\nPlease scan the IMEI for each product before dispatching.`);const fi=rows.findIndex(r=>r.status==='found'||(r.status==='saved'&&r.imeiRequired&&!r.imei));if(fi>=0)moveTo(fi,'imei');return;}
     const sv=rows.filter(r=>r.status==='saved'&&r.productId);
     if(!sv.length||!whId)return;
     setBusy(true);
@@ -238,7 +240,8 @@ export function StockOut(){
             <tbody>
               {rows.map((row,i)=>{
                 const isA=i===ar;
-                const bg=row.status==='saved'?'#fef2f2':row.errMsg?'#fff5f5':isA?'#fffbeb':i%2===0?'#fff':'#fafafa';
+                const needsImei=(row.status==='found')||(row.status==='saved'&&row.imeiRequired&&!row.imei);
+                const bg=row.errMsg?'#fff5f5':needsImei?'#fffbeb':row.status==='saved'?'#fef2f2':isA?'#fff7ed':i%2===0?'#fff':'#fafafa';
                 const eOL=(f:FC)=>isA&&fc===f?`2px solid ${f==='imei'?'#dc2626':f==='srno'?'#2563eb':'#f59e0b'}`:'2px solid transparent';
                 return(
                   <tr key={row.id} style={{background:bg}}>
@@ -249,8 +252,8 @@ export function StockOut(){
                       <div style={{height:38,outline:eOL('ean'),display:'flex',alignItems:'center'}}>
                         <input ref={R(i,'ean')} value={row.ean}
                           onChange={e=>upd(i,{ean:e.target.value,status:'empty',errMsg:'',errField:''})}
-                          onKeyDown={e=>{if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();handleEan(i,(e.target as HTMLInputElement).value);}}}
-                          onPaste={e=>{e.preventDefault();const v=e.clipboardData.getData('text').trim();if(v){upd(i,{ean:v,status:'loading',errMsg:'',errField:''});setTimeout(()=>handleEan(i,v),80);}}}
+                          onKeyDown={e=>{if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();handleEan(i,(e.target as HTMLInputElement).value);return;}if((e.ctrlKey||e.metaKey)&&e.key==='d'){e.preventDefault();const v=row.ean.trim();if(!v)return;setRows(rs=>{const next=[...rs];let j=i+1;while(j<next.length&&!next[j].ean){next[j]={...next[j],ean:v,status:'loading',errMsg:'',errField:''};j++;}if(j===i+1)next.push({...mk(),ean:v,status:'loading',errMsg:'',errField:''});return next;});let j=i+1;const cur=rows;while(j<cur.length&&(!cur[j].ean||cur[j].ean==='')){setTimeout(()=>ERef.current(j,v),80*(j-i));j++;}}}}
+                          onPaste={e=>{e.preventDefault();const raw=e.clipboardData.getData('text');const lines=raw.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);if(lines.length>1){setRows(rs=>{const needed=i+lines.length;const cur=[...rs];while(cur.length<needed)cur.push(mk());return cur;});lines.forEach((line,offset)=>{setTimeout(()=>{const ri=i+offset;setRows(rs=>rs.map((r,x)=>x===ri?{...r,ean:line,status:'loading',errMsg:'',errField:''}:r));ERef.current(ri,line);},60*offset);});}else if(lines[0]){upd(i,{ean:lines[0],status:'loading',errMsg:'',errField:''});setTimeout(()=>handleEan(i,lines[0]),80);}}}
                           onFocus={()=>{setAr(i);setFc('ean');}}
                           placeholder={i===0?'Scan EAN to dispatch…':''} style={CI()}/>
                         {row.status==='loading'&&<div className="spinner" style={{width:13,height:13,margin:'0 6px',flexShrink:0}}/>}
@@ -276,7 +279,7 @@ export function StockOut(){
                             if(e.key==='Tab'){e.preventDefault();handleImei(i,(e.target as HTMLInputElement).value);}
                             if(e.key==='Escape')upd(i,{errMsg:'',errField:'',imei:'',status:row.productId?'found':'empty'});
                           }}
-                          onPaste={e=>{e.preventDefault();const v=e.clipboardData.getData('text').trim();if(v){upd(i,{imei:v});setTimeout(()=>handleImei(i,v),30);}}}
+                          onPaste={e=>{e.preventDefault();const raw=e.clipboardData.getData('text');const lines=raw.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);if(lines.length>1){lines.forEach((line,offset)=>{const ri=i+offset;if(ri<rows.length){upd(ri,{imei:line,errMsg:'',errField:''});setTimeout(()=>handleImei(ri,line),30+offset*80);}});}else if(lines[0]){upd(i,{imei:lines[0]});setTimeout(()=>handleImei(i,lines[0]),30);}}}
                           onFocus={()=>{setAr(i);setFc('imei');}}
                           placeholder="Scan IMEI (IN_STOCK only)…"
                           style={CI({fontFamily:'monospace',fontSize:12,color:row.errField==='imei'?'#dc2626':'#0f172a'})}/>
@@ -288,7 +291,7 @@ export function StockOut(){
                         <input ref={R(i,'srno')} value={row.srno}
                           onChange={e=>upd(i,{srno:e.target.value,errField:row.errField==='srno'?'':row.errField,errMsg:row.errField==='srno'?'':row.errMsg})}
                           onKeyDown={e=>{if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();handleSrno(i,(e.target as HTMLInputElement).value);}}}
-                          onPaste={e=>{e.preventDefault();const v=e.clipboardData.getData('text').trim();if(v){upd(i,{srno:v});setTimeout(()=>handleSrno(i,v),30);}}}
+                          onPaste={e=>{e.preventDefault();const raw=e.clipboardData.getData('text');const lines=raw.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);if(lines.length>1){lines.forEach((line,offset)=>{const ri=i+offset;if(ri<rows.length){upd(ri,{srno:line});setTimeout(()=>handleSrno(ri,line),30+offset*80);}});}else if(lines[0]){upd(i,{srno:lines[0]});setTimeout(()=>handleSrno(i,lines[0]),30);}}}
                           onFocus={()=>{setAr(i);setFc('srno');}}
                           placeholder="Serial / any text…"
                           style={CI({fontSize:12,color:row.errField==='srno'?'#dc2626':'#374151'})}/>
@@ -297,8 +300,8 @@ export function StockOut(){
                     {/* Status */}
                     <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',padding:'0 6px',textAlign:'center'}}>
                       {row.errMsg&&<span style={{fontSize:9,background:'#fef2f2',color:'#dc2626',padding:'2px 6px',borderRadius:8,fontWeight:700,cursor:'help',display:'block',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={row.errMsg}>✕ Error</span>}
-                      {!row.errMsg&&row.status==='saved'&&<span style={{fontSize:10,background:'#fee2e2',color:'#dc2626',padding:'2px 8px',borderRadius:10,fontWeight:700}}>✓</span>}
-                      {!row.errMsg&&row.status==='found'&&<span style={{fontSize:10,background:'#fef9c3',color:'#854d0e',padding:'2px 8px',borderRadius:10}}>Ready</span>}
+                      {!row.errMsg&&row.status==='saved'&&(!row.imeiRequired||row.imei)&&<span style={{fontSize:10,background:'#fee2e2',color:'#dc2626',padding:'2px 8px',borderRadius:10,fontWeight:700}}>✓</span>}
+                      {!row.errMsg&&(row.status==='found'||(row.status==='saved'&&row.imeiRequired&&!row.imei))&&<span style={{fontSize:10,background:'#fef9c3',color:'#92400e',padding:'2px 8px',borderRadius:10,fontWeight:700}}>⚠ IMEI</span>}
                       {!row.errMsg&&row.status==='not_found'&&<span style={{fontSize:10,background:'#fef2f2',color:'#dc2626',padding:'2px 8px',borderRadius:10}}>Not Found</span>}
                     </td>
                     {/* Delete */}
