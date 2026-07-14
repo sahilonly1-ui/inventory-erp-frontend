@@ -98,33 +98,67 @@ export function Dashboard() {
     finally{setDeleting(null);}
   };
 
-  // ── Open full edit panel: fetch detail, build rows ───────────────────────
+  // ── Edit: fetch full entry detail → write to StockIn draft → redirect ──────
   const openEditPanel=async(ids:string[], vendorLabel:string, sign:'+'|'-')=>{
-    setEditPanel(p=>({...p, open:true, vendorLabel, allTxnIds:ids, rows:[], supplierId:'', supplierName:vendorLabel, sign, loadingDetail:true, newEan:'', newEanStatus:'idle', newEanProduct:null}));
+    // Show loading state on the button (use a simple flag via editPanel.loadingDetail)
+    setEditPanel(p=>({...p,open:false,loadingDetail:true}));
     try{
       const detail=await api<{transactions:EntryTxn[]}>(`/inventory/transactions/entry-detail?ids=${ids.join(',')}`);
       const txns=detail.transactions;
-      const rows:EditRow[]=txns.map(t=>({
-        txnId:t.id,
-        productId:t.productId,
-        ean:t.ean,
-        model:t.model,
-        imeiRequired:t.imeiRequired,
-        quantity:Math.abs(t.quantity),
-        imeis:t.imeis.map(im=>({id:im.id,imei1:im.imei1,imeiType:im.imeiType,deleted:false})),
-        warehouseId:t.warehouseId,
-        deleted:false,
-        isNew:false,
+
+      // Build Row[] in the exact shape StockIn expects (sin_draft_v2)
+      // Each transaction becomes one row per IMEI (phones) or one row with qty (accessories)
+      const uid=()=>Math.random().toString(36).slice(2,9);
+      const rows:any[]=[];
+      for(const t of txns){
+        if(t.imeiRequired&&t.imeis.length){
+          // One row per IMEI
+          for(const im of t.imeis){
+            rows.push({
+              id:uid(),ean:t.ean,productId:t.productId,model:t.model,brand:t.brand,
+              imeiRequired:true,qty:1,imei:im.imei1,srno:'',imeiType:im.imeiType||'NIL',
+              status:'saved',errMsg:'',errField:'',
+              _origTxnId:t.id,_origImeiId:im.id, // track for cleanup
+            });
+          }
+        }else{
+          // One row with full quantity
+          rows.push({
+            id:uid(),ean:t.ean,productId:t.productId,model:t.model,brand:t.brand,
+            imeiRequired:t.imeiRequired,qty:Math.abs(t.quantity),imei:'',srno:'',imeiType:'NIL',
+            status:'saved',errMsg:'',errField:'',
+            _origTxnId:t.id,
+          });
+        }
+      }
+      // Add one blank row at the end for new additions
+      rows.push({id:uid(),ean:'',productId:'',model:'',brand:'',imeiRequired:false,qty:0,imei:'',srno:'',imeiType:'NIL',status:'empty',errMsg:'',errField:''});
+
+      const supplierName=txns[0]?.vendorName??vendorLabel;
+      const dateStr=txns[0]?.createdAt?.slice(0,10)??new Date().toISOString().slice(0,10);
+
+      // Write the edit context to localStorage — StockIn reads this on mount
+      localStorage.setItem('sin_draft_v2', JSON.stringify({
+        r:rows, s:supplierName, iv:'', dt:dateStr,
       }));
-      // Supplier from first txn
-      const firstVendorId=txns[0]?.vendorId??'';
-      const firstVendorName=txns[0]?.vendorName??vendorLabel;
-      const warehouseId=txns[0]?.warehouseId??'';
-      setEditPanel(p=>({...p,rows,supplierId:firstVendorId,supplierName:firstVendorName,warehouseId,loadingDetail:false}));
+      // Also store the original txn IDs so StockIn knows to delete them on save
+      localStorage.setItem('sin_edit_mode', JSON.stringify({
+        txnIds:ids,
+        supplierName,
+        supplierVendorId:txns[0]?.vendorId??'',
+        sign,
+        originalDate:dateStr,
+      }));
+
     }catch(e:any){
-      alert('Failed to load entry detail: '+e.message);
-      setEditPanel(p=>({...p,open:false,loadingDetail:false}));
+      alert('Failed to load entry: '+e.message);
+      setEditPanel(p=>({...p,loadingDetail:false}));
+      return;
     }
+
+    setEditPanel(p=>({...p,loadingDetail:false}));
+    // Navigate to Stock In — React Router navigate
+    window.location.href='/stock-in';
   };
 
   // ── Look up new EAN for adding a product ────────────────────────────────
@@ -283,10 +317,10 @@ export function Dashboard() {
 
   const ActionBtns=({ids,label,sign}:{ids:string[];label:string;sign:'+'|'-'})=>(
     <div style={{display:'flex',gap:6,flexShrink:0}}>
-      <button onClick={()=>openEditPanel(ids,label,sign)}
-        style={{height:26,padding:'0 10px',border:'1px solid #bfdbfe',borderRadius:5,background:'#eff6ff',cursor:'pointer',color:'#2563eb',fontSize:11,fontWeight:600,display:'flex',alignItems:'center',gap:4}}>
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-        Edit
+      <button onClick={()=>openEditPanel(ids,label,sign)} disabled={editPanel.loadingDetail}
+        style={{height:26,padding:'0 10px',border:'1px solid #bfdbfe',borderRadius:5,background:'#eff6ff',cursor:editPanel.loadingDetail?'wait':'pointer',color:'#2563eb',fontSize:11,fontWeight:600,display:'flex',alignItems:'center',gap:4,opacity:editPanel.loadingDetail?0.6:1}}>
+        {editPanel.loadingDetail?<div className="spinner" style={{width:10,height:10}}/>:<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>}
+        {editPanel.loadingDetail?'Loading…':'Edit'}
       </button>
       <button onClick={()=>bulkDelete(ids,label)} disabled={!!deleting}
         style={{height:26,padding:'0 10px',border:'1px solid #fca5a5',borderRadius:5,background:'#fef2f2',cursor:'pointer',color:'#dc2626',fontSize:11,fontWeight:600,display:'flex',alignItems:'center',gap:4,opacity:deleting?0.6:1}}>
@@ -493,235 +527,8 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* ── FULL EDIT PANEL (slide-in from right) ───────────────────────── */}
-      {EP.open&&(
-        <div style={{position:'fixed',inset:0,zIndex:600,display:'flex'}}>
-          {/* Backdrop */}
-          <div style={{flex:1,background:'rgba(15,23,42,.45)'}} onClick={()=>!EP.saving&&setEditPanel(p=>({...p,open:false}))}/>
-          {/* Panel */}
-          <div style={{width:660,background:'#fff',display:'flex',flexDirection:'column',boxShadow:'-8px 0 40px rgba(0,0,0,.18)',overflowY:'auto'}}>
-
-            {/* Panel header */}
-            <div style={{padding:'16px 20px',borderBottom:'1px solid #e2e8f0',background:'#fff',position:'sticky',top:0,zIndex:2}}>
-              <div style={{display:'flex',alignItems:'center',gap:10}}>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:15,fontWeight:800,color:'#0f172a'}}>Edit Stock Entry</div>
-                  <div style={{fontSize:11,color:'#94a3b8',marginTop:1}}>
-                    {EP.sign==='+' ? '📥 Stock In' : '📤 Stock Out'} · {EP.vendorLabel} · {EP.allTxnIds.length} original transaction{EP.allTxnIds.length!==1?'s':''}
-                  </div>
-                </div>
-                <button onClick={()=>!EP.saving&&setEditPanel(p=>({...p,open:false}))}
-                  style={{width:30,height:30,border:'1px solid #e2e8f0',borderRadius:7,background:'#f8fafc',cursor:'pointer',fontSize:16,color:'#64748b',display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
-              </div>
-
-              {/* Supplier selector */}
-              <div style={{marginTop:14}}>
-                <label style={{fontSize:10,fontWeight:700,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'.07em',display:'block',marginBottom:5}}>
-                  {EP.sign==='+' ? 'SUPPLIER / RECEIVED FROM' : 'ISSUED TO / CUSTOMER'}
-                </label>
-                <select value={EP.supplierId} onChange={e=>{
-                    const sel=suppliers.find(s=>s.id===e.target.value);
-                    setEditPanel(p=>({...p,supplierId:e.target.value,supplierName:sel?.name||''}));
-                  }}
-                  style={{width:'100%',height:38,padding:'0 12px',border:'1.5px solid #d0d5dd',borderRadius:8,fontSize:13,background:'#fff',outline:'none',boxSizing:'border-box'}}>
-                  <option value="">— No Supplier</option>
-                  {suppliers.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </div>
-            </div>
-
-            {/* Loading state */}
-            {EP.loadingDetail&&(
-              <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:12,color:'#94a3b8',fontSize:13}}>
-                <div className="spinner" style={{width:20,height:20}}/>
-                Loading entry details…
-              </div>
-            )}
-
-            {/* Product rows */}
-            {!EP.loadingDetail&&(
-              <div style={{flex:1,padding:'12px 20px'}}>
-
-                {/* Active rows */}
-                {activeRows.length===0&&(
-                  <div style={{textAlign:'center',padding:'24px',color:'#94a3b8',fontSize:13,background:'#f8fafc',borderRadius:8,marginBottom:12}}>
-                    All products removed. Add a product below or save to delete this entry.
-                  </div>
-                )}
-
-                {EP.rows.map((row,rowIdx)=>{
-                  if(row.deleted) return null;
-                  const activeImeis=row.imeis.filter(im=>!im.deleted);
-                  const deletedImeis=row.imeis.filter(im=>im.deleted);
-                  return(
-                    <div key={row.txnId} style={{border:'1px solid #e2e8f0',borderRadius:10,marginBottom:10,overflow:'hidden',background:row.isNew?'#f0fdf4':'#fff'}}>
-                      {/* Row header */}
-                      <div style={{padding:'10px 14px',display:'flex',alignItems:'center',gap:10,background:row.isNew?'#dcfce7':'#f8fafc',borderBottom:'1px solid #e2e8f0'}}>
-                        <div style={{flex:1}}>
-                          <div style={{fontWeight:700,fontSize:13,color:'#0f172a'}}>{row.model}</div>
-                          <div style={{fontSize:11,color:'#94a3b8',marginTop:1}}>
-                            EAN: {row.ean}
-                            {row.isNew&&<span style={{marginLeft:8,fontSize:10,fontWeight:700,color:'#16a34a',background:'#dcfce7',padding:'1px 7px',borderRadius:10}}>NEW</span>}
-                          </div>
-                        </div>
-
-                        {/* Quantity (non-IMEI only) */}
-                        {!row.imeiRequired&&(
-                          <div style={{display:'flex',alignItems:'center',gap:6}}>
-                            <label style={{fontSize:11,color:'#64748b',fontWeight:600}}>Qty:</label>
-                            <div style={{display:'flex',alignItems:'center',border:'1px solid #d0d5dd',borderRadius:6,overflow:'hidden'}}>
-                              <button onClick={()=>setRowQty(rowIdx,row.quantity-1)}
-                                style={{width:28,height:28,border:'none',background:'#f8fafc',cursor:'pointer',fontSize:14,color:'#374151',display:'flex',alignItems:'center',justifyContent:'center'}}>−</button>
-                              <input type="number" value={row.quantity} min={1}
-                                onChange={e=>setRowQty(rowIdx,parseInt(e.target.value)||1)}
-                                style={{width:44,height:28,border:'none',textAlign:'center',fontSize:13,fontWeight:700,color:'#0f172a',outline:'none'}}/>
-                              <button onClick={()=>setRowQty(rowIdx,row.quantity+1)}
-                                style={{width:28,height:28,border:'none',background:'#f8fafc',cursor:'pointer',fontSize:14,color:'#374151',display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Delete row button */}
-                        <button onClick={()=>toggleRowDeleted(rowIdx)} title="Remove this product"
-                          style={{height:28,padding:'0 10px',border:'1px solid #fca5a5',borderRadius:6,background:'#fef2f2',color:'#dc2626',fontSize:11,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:4}}>
-                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
-                          Remove
-                        </button>
-                      </div>
-
-                      {/* IMEI list */}
-                      {row.imeiRequired&&(
-                        <div style={{padding:'10px 14px'}}>
-                          <div style={{fontSize:10,fontWeight:700,color:'#dc2626',textTransform:'uppercase',letterSpacing:'.07em',marginBottom:8}}>
-                            IMEIs ({activeImeis.length} active{deletedImeis.length>0?`, ${deletedImeis.length} removed`:''})
-                          </div>
-
-                          {/* Active IMEIs */}
-                          {activeImeis.map((im,imIdx)=>{
-                            const realIdx=row.imeis.indexOf(im);
-                            return(
-                              <div key={im.id||im.imei1} style={{display:'flex',alignItems:'center',gap:8,marginBottom:6,padding:'6px 10px',background:'#f8fafc',borderRadius:6,border:'1px solid #e2e8f0'}}>
-                                <span style={{fontFamily:'monospace',fontSize:12,fontWeight:600,color:'#0f172a',flex:1}}>{im.imei1}</span>
-                                <span style={{fontSize:10,color:'#64748b',background:'#e2e8f0',padding:'1px 7px',borderRadius:10}}>{im.imeiType==='NIL'?'Standard':im.imeiType}</span>
-                                {im.id===null&&<span style={{fontSize:10,fontWeight:700,color:'#16a34a',background:'#dcfce7',padding:'1px 7px',borderRadius:10}}>NEW</span>}
-                                <button onClick={()=>toggleImeiDeleted(rowIdx,realIdx)}
-                                  style={{width:22,height:22,border:'1px solid #fca5a5',borderRadius:4,background:'#fef2f2',color:'#dc2626',cursor:'pointer',fontSize:12,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700}}>✕</button>
-                              </div>
-                            );
-                          })}
-
-                          {/* Removed IMEIs preview */}
-                          {deletedImeis.length>0&&(
-                            <div style={{marginTop:6}}>
-                              {deletedImeis.map((im,imIdx)=>{
-                                const realIdx=row.imeis.indexOf(im);
-                                return(
-                                  <div key={im.id||im.imei1} style={{display:'flex',alignItems:'center',gap:8,marginBottom:4,padding:'5px 10px',background:'#fff5f5',borderRadius:6,border:'1px dashed #fca5a5',opacity:0.7}}>
-                                    <span style={{fontFamily:'monospace',fontSize:12,color:'#dc2626',flex:1,textDecoration:'line-through'}}>{im.imei1}</span>
-                                    <span style={{fontSize:10,color:'#dc2626'}}>will be removed</span>
-                                    <button onClick={()=>toggleImeiDeleted(rowIdx,realIdx)}
-                                      style={{height:20,padding:'0 8px',border:'1px solid #d0d5dd',borderRadius:4,background:'#fff',color:'#374151',cursor:'pointer',fontSize:10,fontWeight:600}}>Undo</button>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-
-                          {/* Add new IMEI input */}
-                          <AddImeiInput onAdd={(imei1)=>addImeiToRow(rowIdx,imei1)}/>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-
-                {/* Removed rows (collapsed) */}
-                {deletedRows.length>0&&(
-                  <div style={{marginTop:8,padding:'8px 12px',background:'#fff5f5',border:'1px dashed #fca5a5',borderRadius:8}}>
-                    <div style={{fontSize:11,fontWeight:700,color:'#dc2626',marginBottom:4}}>Will be removed ({deletedRows.length})</div>
-                    {deletedRows.map((row,_)=>{
-                      const rowIdx=EP.rows.indexOf(row);
-                      return(
-                        <div key={row.txnId} style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
-                          <span style={{fontSize:12,color:'#dc2626',flex:1,textDecoration:'line-through'}}>{row.model} ({row.imeiRequired?`${row.imeis.filter(im=>!im.deleted).length} IMEIs`:`qty ${row.quantity}`})</span>
-                          <button onClick={()=>toggleRowDeleted(rowIdx)}
-                            style={{height:22,padding:'0 8px',border:'1px solid #d0d5dd',borderRadius:4,background:'#fff',color:'#374151',cursor:'pointer',fontSize:10,fontWeight:600}}>Undo</button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Add new product section */}
-                <div style={{marginTop:16,padding:'14px',background:'#f8fafc',borderRadius:10,border:'2px dashed #e2e8f0'}}>
-                  <div style={{fontSize:11,fontWeight:700,color:'#374151',marginBottom:10,textTransform:'uppercase',letterSpacing:'.06em'}}>＋ Add Product to This Entry</div>
-                  <div style={{display:'flex',gap:8,alignItems:'flex-start'}}>
-                    <div style={{flex:1}}>
-                      <input
-                        ref={newEanRef}
-                        value={EP.newEan}
-                        onChange={e=>setEditPanel(p=>({...p,newEan:e.target.value,newEanStatus:'idle',newEanProduct:null}))}
-                        onKeyDown={e=>{if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();lookupNewEan(EP.newEan);}}}
-                        onPaste={e=>{e.preventDefault();const v=e.clipboardData.getData('text').trim();if(v){setEditPanel(p=>({...p,newEan:v}));setTimeout(()=>lookupNewEan(v),50);}}}
-                        placeholder="Scan or type EAN barcode…"
-                        style={{width:'100%',height:38,padding:'0 12px',border:'1.5px solid #d0d5dd',borderRadius:7,fontSize:13,outline:'none',boxSizing:'border-box'}}
-                      />
-                      {EP.newEanStatus==='found'&&EP.newEanProduct&&(
-                        <div style={{marginTop:6,padding:'8px 12px',background:'#f0fdf4',border:'1px solid #bbf7d0',borderRadius:6,fontSize:12}}>
-                          <strong style={{color:'#15803d'}}>✓ {EP.newEanProduct.model}</strong>
-                          <span style={{color:'#64748b',marginLeft:8}}>{EP.newEanProduct.brand}</span>
-                          {EP.newEanProduct.imeiRequired&&<span style={{color:'#dc2626',marginLeft:8,fontSize:10,fontWeight:700}}>IMEI Required</span>}
-                        </div>
-                      )}
-                      {EP.newEanStatus==='not_found'&&(
-                        <div style={{marginTop:6,padding:'6px 12px',background:'#fff5f5',border:'1px solid #fecdd3',borderRadius:6,fontSize:12,color:'#dc2626'}}>
-                          ✕ EAN not found in Product Master
-                        </div>
-                      )}
-                    </div>
-                    <button
-                      onClick={()=>EP.newEanStatus==='found'?addNewRow():lookupNewEan(EP.newEan)}
-                      disabled={EP.newEanStatus==='loading'}
-                      style={{height:38,padding:'0 16px',border:'none',borderRadius:7,background:EP.newEanStatus==='found'?'#16a34a':'#2563eb',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0,opacity:EP.newEanStatus==='loading'?0.6:1}}>
-                      {EP.newEanStatus==='loading'?'Looking up…':EP.newEanStatus==='found'?'Add Row':'Look Up'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Save / Cancel footer */}
-            <div style={{padding:'14px 20px',borderTop:'1px solid #e2e8f0',background:'#fff',position:'sticky',bottom:0,display:'flex',gap:10}}>
-              <button onClick={saveEditPanel} disabled={EP.saving||EP.loadingDetail}
-                style={{flex:1,height:42,border:'none',borderRadius:8,background:EP.saving?'#94a3b8':'#2563eb',color:'#fff',fontSize:14,fontWeight:700,cursor:EP.saving?'not-allowed':'pointer'}}>
-                {EP.saving?'Saving changes…':'💾 Save Changes'}
-              </button>
-              <button onClick={()=>!EP.saving&&setEditPanel(p=>({...p,open:false}))}
-                style={{height:42,padding:'0 20px',border:'1px solid #e2e8f0',borderRadius:8,background:'#fff',fontSize:13,color:'#64748b',cursor:'pointer',fontWeight:600}}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-// ── Small component: add-IMEI input inside a row ─────────────────────────
-function AddImeiInput({onAdd}:{onAdd:(imei1:string)=>void}) {
-  const [val,setVal]=useState('');
-  const submit=()=>{
-    if(!/^\d{15}$/.test(val.trim())){alert('IMEI must be exactly 15 digits');return;}
-    onAdd(val.trim());setVal('');
-  };
-  return(
-    <div style={{display:'flex',gap:6,marginTop:8}}>
-      <input value={val} onChange={e=>{setVal(e.target.value);if(/^\d{15}$/.test(e.target.value.trim())){onAdd(e.target.value.trim());setVal('');}}}
-        onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();submit();}}}
-        placeholder="Scan new IMEI to add (15 digits)…"
-        style={{flex:1,height:32,padding:'0 10px',border:'1.5px solid #d0d5dd',borderRadius:6,fontSize:12,fontFamily:'monospace',outline:'none'}}/>
-      <button onClick={submit} style={{height:32,padding:'0 12px',border:'none',borderRadius:6,background:'#2563eb',color:'#fff',fontSize:11,fontWeight:700,cursor:'pointer'}}>Add</button>
-    </div>
-  );
-}
+// AddImeiInput not used after redirect refactor
