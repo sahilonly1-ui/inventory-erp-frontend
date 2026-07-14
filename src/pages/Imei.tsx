@@ -145,9 +145,18 @@ export function Imei() {
             style={{height:32,padding:'0 12px',border:'1px solid #e2e8f0',borderRadius:7,background:'#fff',fontSize:12,color:'#64748b',cursor:'pointer'}}>
             Clear filters
           </button>
-          <button onClick={async()=>{if(!confirm('This will remove all IMEI records whose stock-in transaction was deleted. Proceed?'))return;try{const r=await api<{cleaned:number;message:string}>('/inventory/admin/cleanup-orphaned-imeis',{method:'POST'});alert('✓ '+r.message);load();}catch(e:any){alert('Cleanup failed: '+e.message);}}}
-            style={{height:32,padding:'0 12px',border:'1px solid #fca5a5',borderRadius:7,background:'#fef2f2',fontSize:12,color:'#dc2626',cursor:'pointer',fontWeight:600}}>
-            🧹 Clean Orphans
+          <button onClick={async()=>{
+            const choice=window.confirm('⚠️ DELETE ALL\n\nClick OK to DELETE EVERYTHING (all IMEI records, all transactions, reset stock to zero).\n\nClick Cancel to only clean up orphaned/stuck records.');
+            if(choice===null)return;
+            const msg=choice?'DELETE ALL imei records, ALL transactions and reset ALL stock levels to zero?\n\nThis CANNOT be undone.':'Remove only orphaned IMEI records (whose stock-in was already deleted)?';
+            if(!confirm(msg))return;
+            try{
+              const r=await api<{cleaned:any;message:string}>('/inventory/admin/cleanup-orphaned-imeis',{method:'POST',body:JSON.stringify({purgeAll:choice})});
+              alert('✓ '+r.message);
+              load();
+            }catch(e:any){alert('Failed: '+e.message);}
+          }} style={{height:32,padding:'0 12px',border:'1px solid #fca5a5',borderRadius:7,background:'#fef2f2',fontSize:12,color:'#dc2626',cursor:'pointer',fontWeight:600}}>
+            🗑️ Purge Data
           </button>
           <button onClick={exportXlsx} disabled={exporting}
             style={{height:32,padding:'0 14px',border:'1px solid #d0d5dd',borderRadius:7,background:'#fff',fontSize:12,fontWeight:600,color:'#374151',cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>
