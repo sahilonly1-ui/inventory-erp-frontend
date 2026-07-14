@@ -150,8 +150,8 @@ export function Dashboard() {
         }),
       });
       setEditPanel(p=>({...p,loadingDetail:false}));
-      // Navigate to Stock In with session ID in URL
-      window.location.href=`/stock-in?editSession=${session.sessionId}`;
+      // Route to Stock In for inbound, Stock Out for outbound
+      window.location.href=`${sign==='+'?'/stock-in':'/stock-out'}?editSession=${session.sessionId}`;
 
     }catch(e:any){
       alert('Failed to load entry: '+e.message);
