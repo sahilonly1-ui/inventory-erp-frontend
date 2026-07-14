@@ -143,6 +143,12 @@ export function StockIn(){
   const clear=()=>{if(!confirm('Clear all rows and draft?'))return;eCache.clear();setRows([mk()]);moveTo(0,'ean');localStorage.removeItem(DK);};
 
   const commit=useCallback(async()=>{
+    // Ensure supplier is resolved before committing (handles race condition)
+    let resolvedSuppId=suppId;
+    if(supp&&!suppId){
+      try{const r=await api<any>('/vendors/find-or-create',{method:'POST',body:JSON.stringify({name:toT(supp)})});
+        if(r.vendor){resolvedSuppId=r.vendor.id;setSuppId(r.vendor.id);}}catch{}
+    }
     // Block rows that still need IMEI (status='found') — phones not yet scanned
     const needsImei=rows.filter(r=>r.status==='found'&&r.productId);
     if(needsImei.length){
@@ -169,7 +175,7 @@ export function StockIn(){
         await api('/imei/receive',{method:'POST',body:JSON.stringify({
           productId,warehouseId:whId,
           imeis,               // all IMEIs for this product in ONE call
-          vendorId:suppId||undefined,
+          vendorId:resolvedSuppId||undefined,
           force:true,          // bypass imeiRequired check
           remarks:rmk,
         })});
@@ -187,7 +193,7 @@ export function StockIn(){
         await api('/inventory/stock-in',{method:'POST',body:JSON.stringify({
           productId,warehouseId:whId,
           quantity:data.qty,
-          vendorId:suppId||undefined,
+          vendorId:resolvedSuppId||undefined,
           remarks:`${rmk}${data.srNos.length?' | S/N:'+data.srNos.join(','):''}`,
         })});
       }
@@ -280,7 +286,8 @@ Tip: Check if any IMEI was previously scanned (use IMEI Tracker to verify).`);
             <tbody>
               {rows.map((row,i)=>{
                 const isA=i===ar;
-                const bg=row.status==='saved'?'#f0fdf4':row.errMsg?'#fff5f5':isA?'#f0f9ff':i%2===0?'#fff':'#fafafa';
+                const needsImei=(row.status==='found')||(row.status==='saved'&&row.imeiRequired&&!row.imei);
+                const bg=row.errMsg?'#fff5f5':needsImei?'#fffbeb':row.status==='saved'?'#f0fdf4':isA?'#f0f9ff':i%2===0?'#fff':'#fafafa';
                 const eOL=(f:FC)=>isA&&fc===f?`2px solid ${f==='imei'?'#dc2626':f==='srno'?'#2563eb':'#2563eb'}`:'2px solid transparent';
                 return(
                   <tr key={row.id} style={{background:bg}}>
@@ -290,8 +297,24 @@ Tip: Check if any IMEI was previously scanned (use IMEI Tracker to verify).`);
                       <div style={{height:38,outline:eOL('ean'),display:'flex',alignItems:'center'}}>
                         <input ref={R(i,'ean')} value={row.ean}
                           onChange={e=>upd(i,{ean:e.target.value,status:'empty',errMsg:'',errField:''})}
-                          onKeyDown={e=>{if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();handleEan(i,(e.target as HTMLInputElement).value);}}}
-                          onPaste={e=>{e.preventDefault();const v=e.clipboardData.getData('text').trim();if(v){upd(i,{ean:v});setTimeout(()=>handleEan(i,v),30);}}}
+                          onKeyDown={e=>{
+                            if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();handleEan(i,(e.target as HTMLInputElement).value);return;}
+                            // Ctrl+D / Cmd+D = fill EAN down into consecutive empty rows (like Excel)
+                            if((e.ctrlKey||e.metaKey)&&e.key==='d'){e.preventDefault();const v=row.ean.trim();if(!v)return;
+                              setRows(rs=>{const next=[...rs];let j=i+1;// Find contiguous empty EAN rows below
+                              while(j<next.length&&!next[j].ean){next[j]={...next[j],ean:v,status:'loading',errMsg:'',errField:''};j++;}
+                              // If no empty rows, add one
+                              if(j===i+1)next.push({...mk(),ean:v,status:'loading',errMsg:'',errField:''});
+                              return next;});
+                              // Trigger handleEan for all newly filled rows
+                              let j=i+1;const cur=rows;while(j<cur.length&&(!cur[j].ean||cur[j].ean==='')){setTimeout(()=>ERef.current(j,v),80*(j-i));j++;}
+                            }
+                          }}
+                          onPaste={e=>{e.preventDefault();const raw=e.clipboardData.getData('text');const lines=raw.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);if(lines.length>1){// Multi-line EAN paste (Excel column) — fill consecutive rows
+                            // First ensure we have enough rows
+                            setRows(rs=>{const needed=i+lines.length;const cur=[...rs];while(cur.length<needed)cur.push(mk());return cur;});
+                            lines.forEach((line,offset)=>{setTimeout(()=>{const ri=i+offset;setRows(rs=>rs.map((r,x)=>x===ri?{...r,ean:line,status:'loading',errMsg:'',errField:''}:r));ERef.current(ri,line);},60*offset);});
+                          }else if(lines[0]){upd(i,{ean:lines[0]});setTimeout(()=>handleEan(i,lines[0]),30);}}}
                           onFocus={()=>{setAr(i);setFc('ean');}} placeholder={i===0?'Scan EAN…':''} style={CI()}/>
                         {row.status==='loading'&&<div className="spinner" style={{width:13,height:13,margin:'0 6px',flexShrink:0}}/>}
                       </div>
@@ -345,8 +368,9 @@ Tip: Check if any IMEI was previously scanned (use IMEI Tracker to verify).`);
                     {/* Status */}
                     <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',padding:'0 8px',textAlign:'center'}}>
                       {row.errMsg&&<span style={{fontSize:9,background:'#fef2f2',color:'#dc2626',padding:'2px 6px',borderRadius:8,fontWeight:700,cursor:'help',display:'block',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:72}} title={row.errMsg}>✕ Error</span>}
-                      {!row.errMsg&&row.status==='saved'&&<span style={{fontSize:10,background:'#dcfce7',color:'#15803d',padding:'2px 8px',borderRadius:10,fontWeight:700}}>✓</span>}
-                      {!row.errMsg&&row.status==='found'&&<span style={{fontSize:10,background:'#dbeafe',color:'#1d4ed8',padding:'2px 8px',borderRadius:10}}>Ready</span>}
+                      {!row.errMsg&&row.status==='saved'&&!row.imeiRequired&&<span style={{fontSize:10,background:'#dcfce7',color:'#15803d',padding:'2px 8px',borderRadius:10,fontWeight:700}}>✓</span>}
+                      {!row.errMsg&&row.status==='saved'&&row.imeiRequired&&row.imei&&<span style={{fontSize:10,background:'#dcfce7',color:'#15803d',padding:'2px 8px',borderRadius:10,fontWeight:700}}>✓ IMEI</span>}
+                      {!row.errMsg&&(row.status==='found'||(row.status==='saved'&&row.imeiRequired&&!row.imei))&&<span style={{fontSize:10,background:'#fef9c3',color:'#92400e',padding:'2px 8px',borderRadius:10,fontWeight:700}}>⚠ IMEI</span>}
                       {!row.errMsg&&row.status==='not_found'&&<span style={{fontSize:10,background:'#fef2f2',color:'#dc2626',padding:'2px 8px',borderRadius:10}}>New EAN</span>}
                     </td>
                     {/* Delete */}
