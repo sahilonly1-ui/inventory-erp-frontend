@@ -50,6 +50,15 @@ This removes the stock entry as if it was never scanned.`))return;
     setEditModal({ids,label,currentVendorId});
     setEditVendorId(currentVendorId||'');
   };
+  
+  // Navigate to Stock In to add more items for this supplier
+  const goToStockIn=(vendorName:string)=>{
+    // Store the supplier name in sessionStorage so Stock In can pre-fill it
+    sessionStorage.setItem('erp_prefill_supplier', vendorName);
+    window.location.hash='#/stock-in';
+    // Small delay to allow navigation
+    setTimeout(()=>window.dispatchEvent(new HashChangeEvent('hashchange')),50);
+  };
 
   const saveEdit=async()=>{
     if(!editModal)return;
@@ -283,9 +292,15 @@ This removes the stock entry as if it was never scanned.`))return;
         <div style={{position:'fixed',inset:0,background:'rgba(15,23,42,.5)',zIndex:500,display:'flex',alignItems:'center',justifyContent:'center'}}>
           <div style={{background:'#fff',borderRadius:14,padding:28,width:460,boxShadow:'0 24px 60px rgba(0,0,0,.2)'}}>
             <div style={{fontSize:16,fontWeight:800,color:'#0f172a',marginBottom:4}}>Edit Entry</div>
-            <div style={{fontSize:12,color:'#64748b',marginBottom:6}}>{editModal.ids.length} transaction{editModal.ids.length!==1?'s':''} · <strong style={{color:'#0f172a'}}>{editModal.label}</strong></div>
-            <div style={{background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:8,padding:'10px 14px',marginBottom:20,fontSize:12,color:'#64748b'}}>
-              💡 Use this to re-assign the supplier for this stock entry. To change products or quantities, delete this entry and create a new Stock In.
+            <div style={{fontSize:12,color:'#64748b',marginBottom:12}}>{editModal.ids.length} transaction{editModal.ids.length!==1?'s':''} · <strong style={{color:'#0f172a'}}>{editModal.label}</strong></div>
+            <div style={{background:'#eff6ff',border:'1px solid #bfdbfe',borderRadius:8,padding:'10px 14px',marginBottom:16,fontSize:12,color:'#1e40af',display:'flex',gap:8,alignItems:'flex-start'}}>
+              <span>ℹ️</span>
+              <div>
+                <div style={{fontWeight:600,marginBottom:2}}>What you can do here:</div>
+                <div>• <strong>Reassign supplier</strong> — change who this stock came from</div>
+                <div>• <strong>Delete</strong> this entry entirely and re-scan if products/quantities need changing</div>
+                <div>• <strong>Add more stock</strong> from the same supplier via Stock In</div>
+              </div>
             </div>
             <label style={{fontSize:11,fontWeight:700,color:'#64748b',textTransform:'uppercase',letterSpacing:'.07em',display:'block',marginBottom:6}}>Reassign Supplier</label>
             <select value={editVendorId} onChange={e=>setEditVendorId(e.target.value)}
@@ -293,11 +308,11 @@ This removes the stock entry as if it was never scanned.`))return;
               <option value="">— No Supplier</option>
               {suppliers.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
-            <div style={{display:'flex',gap:10}}>
-              <button onClick={saveEdit} disabled={editing} style={{flex:1,height:40,border:'none',borderRadius:8,background:editing?'#94a3b8':'#2563eb',color:'#fff',fontSize:14,fontWeight:700,cursor:editing?'not-allowed':'pointer'}}>
-                {editing?'Saving…':'Save Changes'}
+            <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+              <button onClick={saveEdit} disabled={editing} style={{flex:1,minWidth:120,height:40,border:'none',borderRadius:8,background:editing?'#94a3b8':'#2563eb',color:'#fff',fontSize:13,fontWeight:700,cursor:editing?'not-allowed':'pointer'}}>
+                {editing?'Saving…':'Save Supplier'}
               </button>
-              <button onClick={()=>setEditModal(null)} style={{height:40,padding:'0 18px',border:'1px solid #e2e8f0',borderRadius:8,background:'#fff',fontSize:13,color:'#64748b',cursor:'pointer'}}>Cancel</button>
+              <button onClick={()=>setEditModal(null)} style={{height:40,padding:'0 14px',border:'1px solid #e2e8f0',borderRadius:8,background:'#fff',fontSize:13,color:'#64748b',cursor:'pointer'}}>Cancel</button>
             </div>
           </div>
         </div>
