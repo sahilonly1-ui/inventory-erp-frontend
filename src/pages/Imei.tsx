@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { api, getAccessToken } from '../api/client';
 
 interface ImeiUnit {
-  id:string; imei1:string; imei2?:string; status:string; imeiType:string; swiped:boolean;
+  id:string; imei1:string; imei2?:string; status:string; imeiType:string; swiped:boolean; swipedAt?:string;
   product?:{ ean:string; model:string; brand:string; };
   warehouse?:{ name:string; };
   supplier?:{ name:string; };
@@ -188,7 +188,7 @@ export function Imei() {
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
             <thead>
               <tr style={{background:'#f8fafc',position:'sticky',top:0,zIndex:5,boxShadow:'0 1px 0 #e2e8f0'}}>
-                {['IMEI 1 / IMEI 2','Product','Status','Type','Swiped','Supplier','Warehouse','Stock In','Last Updated','Change Status'].map(h=>(
+                {['IMEI 1 / IMEI 2','Product','Status','Swiped','Swiped On','Supplier','Stock In','Last Updated','Change Status'].map(h=>(
                   <th key={h} style={{padding:'0 12px',height:36,textAlign:'left',fontWeight:700,color:'#64748b',fontSize:10,textTransform:'uppercase',letterSpacing:'.07em',whiteSpace:'nowrap'}}>{h}</th>
                 ))}
               </tr>
@@ -221,11 +221,7 @@ export function Imei() {
                         {item.status.replace(/_/g,' ')}
                       </span>
                     </td>
-                    {/* IMEI Type */}
-                    <td style={{padding:'8px 12px'}}>
-                      {item.imeiType!=='NIL'&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:10,fontWeight:700,background:tm.bg,color:tm.color}}>{tm.label}</span>}
-                      {item.imeiType==='NIL'&&<span style={{color:'#cbd5e1',fontSize:11}}>—</span>}
-                    </td>
+
                     {/* Swiped toggle */}
                     <td style={{padding:'8px 12px'}} onClick={e=>e.stopPropagation()}>
                       <button onClick={()=>toggleSwiped(item.id,item.imei1,item.swiped)} disabled={updatingId===item.id} title={item.swiped?'Mark unswiped':'Mark swiped'}
@@ -233,12 +229,22 @@ export function Imei() {
                         <span style={{width:16,height:16,borderRadius:'50%',background:'#fff',position:'absolute',top:3,left:item.swiped?25:3,transition:'left .2s',boxShadow:'0 1px 3px rgba(0,0,0,.2)',display:'block'}}/>
                       </button>
                     </td>
+                    {/* Swiped On date/time */}
+                    <td style={{padding:'8px 12px',whiteSpace:'nowrap',fontSize:11}}>
+                      {item.swiped&&item.swipedAt?(
+                        <span style={{color:'#2563eb',fontWeight:600}}>
+                          {new Date(item.swipedAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}
+                          <br/>
+                          <span style={{color:'#94a3b8',fontWeight:400}}>{new Date(item.swipedAt).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</span>
+                        </span>
+                      ):'—'}
+                    </td>
                     {/* Supplier */}
                     <td style={{padding:'8px 12px',color:'#374151',maxWidth:140,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                       {(item as any).supplier?.name||<span style={{color:'#cbd5e1'}}>—</span>}
                     </td>
                     {/* Warehouse */}
-                    <td style={{padding:'8px 12px',color:'#64748b',whiteSpace:'nowrap'}}>{item.warehouse?.name||'—'}</td>
+
                     {/* Stock In Date */}
                     <td style={{padding:'8px 12px',color:'#374151',whiteSpace:'nowrap'}}>{fmt(item.createdAt)}</td>
                     {/* Last Updated */}
