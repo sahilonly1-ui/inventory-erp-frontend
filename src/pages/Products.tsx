@@ -1312,6 +1312,7 @@ export default function Products(){
   const [statusF,setStatusF]=useState('');
   const [lowStock,setLowStock]=useState(false);  // < 3 units
   const [outOfStock,setOutOfStock]=useState(false);
+  const [withStock,setWithStock]=useState(false);  // any stock > 0
   const [sortKey,setSortKey]=useState('updatedAt:desc');
   const [page,setPage]=useState(1);
   const [limit,setLimit]=useState(50);
@@ -1370,7 +1371,7 @@ export default function Products(){
   const currentFilters=useMemo(()=>({
     search:search||undefined,brand:brandF||undefined,categoryId:catF||undefined,status:statusF||undefined,
     // lowStock = products with stock 1-3; outOfStock = 0
-    lowStock:lowStock||undefined,outOfStock:outOfStock||undefined,
+    lowStock:lowStock||undefined,outOfStock:outOfStock||undefined,withStock:withStock||undefined,
     sortBy:sortBy||undefined,sortDir,
   }),[search,brandF,catF,statusF,lowStock,outOfStock,sortBy,sortDir]);
 
@@ -1384,8 +1385,8 @@ export default function Products(){
   useEffect(()=>{loadMeta();},[loadMeta]);
   useEffect(()=>{clearTimeout(dbRef.current);dbRef.current=setTimeout(()=>loadProducts(),search?350:0);return()=>clearTimeout(dbRef.current);},[loadProducts]);
 
-  const reset=()=>{setSearch('');setBrandF('');setCatF('');setStatusF('');setLowStock(false);setOutOfStock(false);setPage(1);setSel(new Set());};
-  const hasF=!!(search||brandF||catF||statusF||lowStock||outOfStock);
+  const reset=()=>{setSearch('');setBrandF('');setCatF('');setStatusF('');setLowStock(false);setOutOfStock(false);setWithStock(false);setPage(1);setSel(new Set());};
+  const hasF=!!(search||brandF||catF||statusF||lowStock||outOfStock||withStock);
   const toggleSel=(id:string)=>setSel(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n;});
   const selAll=()=>setSel(prev=>prev.size===(products?.items.length||0)?new Set():new Set(products?.items.map(p=>p.id)||[]));
   const saveCols=(cols:string[])=>{setVisCols(cols);localStorage.setItem('erp_cols',JSON.stringify(cols));};
@@ -1506,9 +1507,9 @@ export default function Products(){
     catch(e:any){showT('Error: '+e.message);}
   };
 
-  const kpiClick=(key:string)=>{reset();if(key==='active')setStatusF('ACTIVE');if(key==='low')setLowStock(true);if(key==='out')setOutOfStock(true);};
+  const kpiClick=(key:string)=>{reset();if(key==='active')setStatusF('ACTIVE');if(key==='withstock')setWithStock(true);if(key==='low')setLowStock(true);if(key==='out')setOutOfStock(true);};
 
-  const applyView=(v:SavedView)=>{const f=v.filters||{};setSearch(f.search||'');setBrandF(f.brand||'');setCatF(f.categoryId||'');setStatusF(f.status||'');setLowStock(!!f.lowStock);setOutOfStock(!!f.outOfStock);if(v.columns?.length)setVisCols(v.columns);if(v.sortBy&&v.sortDir)setSortKey(v.sortBy+':'+v.sortDir);setPage(1);};
+  const applyView=(v:SavedView)=>{const f=v.filters||{};setSearch(f.search||'');setBrandF(f.brand||'');setCatF(f.categoryId||'');setStatusF(f.status||'');setLowStock(!!f.lowStock);setOutOfStock(!!f.outOfStock);setWithStock(!!f.withStock);if(v.columns?.length)setVisCols(v.columns);if(v.sortBy&&v.sortDir)setSortKey(v.sortBy+':'+v.sortDir);setPage(1);};
   const saveView=async(name:string)=>{const v=await api<SavedView>('/products/views',{method:'POST',body:JSON.stringify({name,filters:currentFilters,columns:visCols,sortBy,sortDir})});setViews(prev=>[...prev,v]);showT('View saved');};
   const delView=async(id:string)=>{await api(`/products/views/${id}`,{method:'DELETE'});setViews(prev=>prev.filter(v=>v.id!==id));};
 
@@ -1662,7 +1663,7 @@ export default function Products(){
           {[
             {ico:'📦',val:stats?.total,lbl:'Total Products',clr:'',key:''},
             {ico:'✅',val:stats?.active,lbl:'Active ↗',clr:'var(--ok)',key:'active'},
-            {ico:'🟡',val:stats?.lowStock,lbl:'With Stock ↗',clr:'var(--warn)',key:'low'},
+            {ico:'🟡',val:stats?.lowStock,lbl:'With Stock ↗',clr:'var(--warn)',key:'withstock'},
             {ico:'🚫',val:stats?.outOfStock,lbl:'Zero Stock ↗',clr:'var(--err)',key:'out'},
             {ico:null,val:brands.length,lbl:'Brands ↗',clr:'#7c3aed',key:'brands'},
             {ico:'📂',val:categories.length,lbl:'Categories ↗',clr:'var(--info)',key:'cats'},
