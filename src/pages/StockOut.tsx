@@ -16,7 +16,7 @@ const getC=():string[]=>{try{return JSON.parse(localStorage.getItem(CK)||'[]');}
 const saveC=(n:string)=>{const h=getC().filter(x=>x!==n);localStorage.setItem(CK,JSON.stringify([n,...h].slice(0,100)));};
 const DEF=['Amazon','Flipkart','JioMart','Meesho','Walk In Customer','Service Center','Return'];
 const pCache=new Map<string,{id:string;model:string;brand:string;imeiRequired:boolean}|null>();
-let seq=0;
+// seq removed — per-row safety via setRows guard
 
 export function StockOut(){
   // ── State ──────────────────────────────────────────────────────────────────
@@ -50,18 +50,19 @@ export function StockOut(){
   // ── EAN scan — same as StockIn: EAN→EAN→EAN flow ─────────────────────────
   const handleEan=useCallback(async(i:number,ean:string)=>{
     const v=ean.trim();if(!v||!whId)return;
-    const mSeq=++seq;upd(i,{ean:v,status:'loading',errMsg:'',errField:''});
+    upd(i,{ean:v,status:'loading',errMsg:'',errField:''});
     let p=pCache.get(v);
     if(p===undefined){
       try{const r=await api<{product:{id:string;model:string;brand:string;imeiRequired:boolean}}>(`/inventory/lookup?ean=${encodeURIComponent(v)}`);
         p={id:r.product.id,model:r.product.model,brand:r.product.brand,imeiRequired:r.product.imeiRequired};pCache.set(v,p);
       }catch{pCache.set(v,null);p=null;}
     }
-    if(mSeq!==seq)return;
-    if(!p){upd(i,{status:'not_found',errMsg:'EAN not found in product master'});return;}
-    // Non-IMEI products auto-save — serial is optional; phones show 'found' to await IMEI
-    upd(i,{productId:p.id,model:p.model,brand:p.brand,imeiRequired:p.imeiRequired,status:p.imeiRequired?'found':'saved',qty:1});
-    const ni=ins(i);moveTo(ni,'ean'); // EAN → next EAN
+    setRows(rs=>{
+      if(rs[i]?.ean!==v)return rs;
+      if(!p){return rs.map((r,x)=>x===i?{...r,status:'not_found' as const,errMsg:'EAN not found in product master'}:r);}
+      return rs.map((r,x)=>x===i?{...r,productId:(p as any).id,model:(p as any).model,brand:(p as any).brand,imeiRequired:(p as any).imeiRequired,status:(p as any).imeiRequired?'found':'saved',qty:1}:r);
+    });
+    if(p){const ni=ins(i);moveTo(ni,'ean');}
   },[whId,upd,ins,moveTo]);
   useEffect(()=>{ERef.current=handleEan;},[handleEan]);
 
@@ -130,7 +131,7 @@ export function StockOut(){
 
   // ── Commit — dispatch IMEIs and non-IMEI stock out ─────────────────────────
   const commit=useCallback(async()=>{
-    const needsImei=rows.filter(r=>(r.status==='found'||(r.status==='saved'&&r.imeiRequired&&!r.imei))&&r.productId);
+    const needsImei=rows.filter(r=>r.productId&&(r.status==='found'||(r.imeiRequired&&!r.imei&&r.status==='saved')));
     if(needsImei.length){alert(`⚠ ${needsImei.length} row(s) are missing IMEI:\n${needsImei.map(r=>`  • ${r.model}`).join('\n')}\n\nPlease scan the IMEI for each product before dispatching.`);const fi=rows.findIndex(r=>r.status==='found'||(r.status==='saved'&&r.imeiRequired&&!r.imei));if(fi>=0)moveTo(fi,'imei');return;}
     const sv=rows.filter(r=>r.status==='saved'&&r.productId);
     if(!sv.length||!whId)return;
@@ -253,7 +254,7 @@ export function StockOut(){
                         <input ref={R(i,'ean')} value={row.ean}
                           onChange={e=>upd(i,{ean:e.target.value,status:'empty',errMsg:'',errField:''})}
                           onKeyDown={e=>{if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();handleEan(i,(e.target as HTMLInputElement).value);return;}if((e.ctrlKey||e.metaKey)&&e.key==='d'){e.preventDefault();const v=row.ean.trim();if(!v)return;setRows(rs=>{const next=[...rs];let j=i+1;while(j<next.length&&!next[j].ean){next[j]={...next[j],ean:v,status:'loading',errMsg:'',errField:''};j++;}if(j===i+1)next.push({...mk(),ean:v,status:'loading',errMsg:'',errField:''});return next;});let j=i+1;const cur=rows;while(j<cur.length&&(!cur[j].ean||cur[j].ean==='')){setTimeout(()=>ERef.current(j,v),80*(j-i));j++;}}}}
-                          onPaste={e=>{e.preventDefault();const raw=e.clipboardData.getData('text');const lines=raw.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);if(lines.length>1){setRows(rs=>{const needed=i+lines.length;const cur=[...rs];while(cur.length<needed)cur.push(mk());return cur;});lines.forEach((line,offset)=>{setTimeout(()=>{const ri=i+offset;setRows(rs=>rs.map((r,x)=>x===ri?{...r,ean:line,status:'loading',errMsg:'',errField:''}:r));ERef.current(ri,line);},60*offset);});}else if(lines[0]){upd(i,{ean:lines[0],status:'loading',errMsg:'',errField:''});setTimeout(()=>handleEan(i,lines[0]),80);}}}
+                          onPaste={e=>{e.preventDefault();const raw=e.clipboardData.getData('text');const lines=raw.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);if(lines.length>1){setRows(rs=>{const needed=i+lines.length;const cur=[...rs];while(cur.length<needed)cur.push(mk());return cur;});lines.forEach((line,offset)=>{setTimeout(()=>{const ri=i+offset;setRows(rs=>rs.map((r,x)=>x===ri?{...r,ean:line,status:'loading',errMsg:'',errField:''}:r));ERef.current(ri,line);},20*offset);});}else if(lines[0]){upd(i,{ean:lines[0],status:'loading',errMsg:'',errField:''});setTimeout(()=>handleEan(i,lines[0]),80);}}}
                           onFocus={()=>{setAr(i);setFc('ean');}}
                           placeholder={i===0?'Scan EAN to dispatch…':''} style={CI()}/>
                         {row.status==='loading'&&<div className="spinner" style={{width:13,height:13,margin:'0 6px',flexShrink:0}}/>}
