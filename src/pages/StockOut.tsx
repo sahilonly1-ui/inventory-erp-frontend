@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -18,8 +19,18 @@ const DEF=['Amazon','Flipkart','JioMart','Meesho','Walk In Customer','Service Ce
 const pCache=new Map<string,{id:string;model:string;brand:string;imeiRequired:boolean}|null>();
 // seq removed — per-row safety via setRows guard
 
+// Edit mode context stored in server session by Dashboard
+interface EditMode {
+  txnIds: string[];
+  supplierName: string;
+  supplierVendorId: string;
+  sign: '+' | '-';
+  originalDate: string;
+}
+
 export function StockOut(){
   // ── State ──────────────────────────────────────────────────────────────────
+  const[searchParams]=useSearchParams();
   const[whs,setWhs]=useState<Warehouse[]>([]);
   const[whId,setWhId]=useState('');
   const[cust,setCust]=useState('');
@@ -32,11 +43,26 @@ export function StockOut(){
   const[ar,setAr]=useState(0);
   const[fc,setFc]=useState<FC>('ean');
   const[busy,setBusy]=useState(false);
+  const[editMode,setEditMode]=useState<EditMode|null>(null);
   const refs=useRef<Record<string,HTMLInputElement|null>>({});
   const R=(i:number,c:FC)=>(el:HTMLInputElement|null)=>{refs.current[`${i}-${c}`]=el;};
   const ERef=useRef<(i:number,e:string)=>void>(()=>{});
 
-  useEffect(()=>{api<Warehouse[]>('/warehouses').then(ws=>{setWhs(ws);const m=ws.find(w=>w.name.toLowerCase().includes('main'));setWhId(m?.id||ws[0]?.id||'');}).catch(()=>{});}, []);
+  useEffect(()=>{
+    api<Warehouse[]>('/warehouses').then(ws=>{setWhs(ws);const m=ws.find(w=>w.name.toLowerCase().includes('main'));setWhId(m?.id||ws[0]?.id||'');}).catch(()=>{});
+    const sessionId=searchParams.get('editSession');
+    if(sessionId){
+      api<{draft:{r:Row[];s:string;iv:string;dt:string};editMeta:EditMode}>(`/inventory/edit-sessions/${sessionId}`)
+        .then(({draft,editMeta})=>{
+          setEditMode(editMeta);
+          if(editMeta.supplierName)setCust(editMeta.supplierName);
+          if(editMeta.originalDate)setDate(editMeta.originalDate);
+          if(draft.r?.some((x:Row)=>x.status!=='empty'))setRows(draft.r);
+          if(draft.iv)setInv(draft.iv);
+        })
+        .catch(e=>alert('Could not load edit session: '+(e.message||'expired')));
+    }
+  },[searchParams]);
 
   // ── Reliable focus with retry ─────────────────────────────────────────────
   const moveTo=useCallback((ri:number,cell:FC)=>{
@@ -136,19 +162,31 @@ export function StockOut(){
     const sv=rows.filter(r=>r.status==='saved'&&r.productId);
     if(!sv.length||!whId)return;
     setBusy(true);
-    const rmk=`${doc}${cust?' → '+cust:''}${inv?' | INV:'+inv:''}`;
+    const rmk=`${editMode?'EDIT:':''}${doc}${cust?' → '+cust:''}${inv?' | INV:'+inv:''}`;
     try{
+      // ── EDIT MODE: delete original transactions first ─────────────────────────────
+      if(editMode?.txnIds?.length){
+        if(!confirm(`This will replace the original Stock Out entry for ${editMode.supplierName} (${editMode.txnIds.length} transaction${editMode.txnIds.length!==1?'s':''}).\n\nProceed?`)){
+          setBusy(false);return;
+        }
+        if(editMode.txnIds.length>1){
+          await api('/inventory/transactions/bulk-delete',{method:'POST',body:JSON.stringify({ids:editMode.txnIds})});
+        }else{
+          await api(`/inventory/transactions/${editMode.txnIds[0]}`,{method:'DELETE'});
+        }
+      }
+
       // ── Batch dispatch all IMEIs in one call ──────────────────────────────────────
+      // Skip IMEI duplicate check in edit mode (these IMEIs were already in the system)
       const imeiRows=sv.filter(r=>r.imei);
       if(imeiRows.length){
         await api('/imei/dispatch',{method:'POST',body:JSON.stringify({
-          imeis:imeiRows.map(r=>r.imei), // all IMEIs in ONE dispatch call
+          imeis:imeiRows.map(r=>r.imei),
           channel:'STOCK_OUT',
           remarks:rmk,
         })});
       }
 
-      // ── Batch non-IMEI rows by productId (1 call per unique product) ─────────────
       const nonImeiByProduct=sv.filter(r=>!r.imei).reduce((a:any,r)=>{
         if(!a[r.productId])a[r.productId]={productId:r.productId,qty:0,srNos:[] as string[]};
         a[r.productId].qty+=(r.qty||1);
@@ -164,13 +202,17 @@ export function StockOut(){
       }
 
       if(cust)saveC(cust);
-      pCache.clear();setRows([mk()]);moveTo(0,'ean');
-      alert(`✓ ${sv.length} item(s) dispatched — ${doc}`);
+      pCache.clear();setRows([mk()]);moveTo(0,'ean');setEditMode(null);
+      alert(editMode
+        ?`✓ Entry updated — ${sv.length} item(s) re-dispatched.`
+        :`✓ ${sv.length} item(s) dispatched — ${doc}`
+      );
+      if(editMode)window.location.href='/';
     }catch(e:any){
-      alert(`Dispatch failed: ${e.message||'Unknown error'}\n\nCheck IMEI status in IMEI Tracker.`);
+      alert(`${editMode?'Update':'Dispatch'} failed: ${e.message||'Unknown error'}\n\nCheck IMEI status in IMEI Tracker.`);
     }
     finally{setBusy(false);}
-  },[rows,whId,cust,inv,doc,moveTo]);
+  },[rows,whId,cust,inv,doc,moveTo,editMode]);
 
   // ── Derived ────────────────────────────────────────────────────────────────
   const sv=rows.filter(r=>r.status==='saved'&&r.qty>0);
@@ -184,13 +226,29 @@ export function StockOut(){
       <div style={{background:'#fff',borderBottom:'1px solid #e2e8f0',padding:'8px 16px',flexShrink:0}}>
         <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
           <span style={{fontSize:11,fontWeight:700,color:'#dc2626',background:'#fef2f2',padding:'3px 12px',borderRadius:20,border:'1px solid #fecaca'}}>{doc}</span>
-          <span style={{fontSize:13,fontWeight:700,color:'#0f172a'}}>Stock Out Entry</span>
+          {editMode?(
+            <span style={{fontSize:13,fontWeight:700,color:'#7c3aed',display:'flex',alignItems:'center',gap:6}}>
+              ✏️ Editing Entry
+              <span style={{fontSize:10,background:'#f5f3ff',color:'#7c3aed',padding:'2px 8px',borderRadius:10,border:'1px solid #ddd6fe',fontWeight:700}}>
+                {editMode.supplierName} · {editMode.txnIds.length} original txn{editMode.txnIds.length!==1?'s':''}
+              </span>
+            </span>
+          ):(
+            <span style={{fontSize:13,fontWeight:700,color:'#0f172a'}}>Stock Out Entry</span>
+          )}
           <div style={{flex:1}}/>
           <span style={{fontSize:11,color:'#94a3b8'}}>{sv.length} items · {tot} units</span>
-          <button onClick={clear} style={{height:28,padding:'0 10px',border:'1px solid #fecdd3',borderRadius:6,background:'#fff5f5',color:'#dc2626',fontSize:11,fontWeight:600,cursor:'pointer'}}>Clear All</button>
+          {editMode?(
+            <button onClick={()=>{if(!confirm('Discard changes and go back to Dashboard?'))return;setEditMode(null);window.location.href='/';}}
+              style={{height:28,padding:'0 10px',border:'1px solid #fecdd3',borderRadius:6,background:'#fff5f5',color:'#dc2626',fontSize:11,fontWeight:600,cursor:'pointer'}}>
+              ← Cancel Edit
+            </button>
+          ):(
+            <button onClick={clear} style={{height:28,padding:'0 10px',border:'1px solid #fecdd3',borderRadius:6,background:'#fff5f5',color:'#dc2626',fontSize:11,fontWeight:600,cursor:'pointer'}}>Clear All</button>
+          )}
           <button onClick={commit} disabled={!sv.length||busy}
             style={{height:30,padding:'0 18px',border:'none',borderRadius:7,background:(!sv.length||busy)?'#94a3b8':'#dc2626',color:'#fff',fontSize:12,fontWeight:700,cursor:(!sv.length||busy)?'not-allowed':'pointer'}}>
-            {busy?'Dispatching…':`↑ Dispatch (${sv.length})`}
+            {busy?(editMode?'Updating…':'Dispatching…'):editMode?`💾 Update Entry (${sv.length})`:`↑ Dispatch (${sv.length})`}
           </button>
         </div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 148px 200px 180px',gap:8}}>
