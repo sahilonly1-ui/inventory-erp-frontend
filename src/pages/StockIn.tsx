@@ -12,7 +12,7 @@ const mk=():Row=>({id:uid(),ean:'',productId:'',model:'',brand:'',imeiRequired:f
 const SK='erp_supp_v3', DK='sin_draft_v2';
 const getH=():string[]=>{try{return JSON.parse(localStorage.getItem(SK)||'[]');}catch{return[];}};
 const saveH=(n:string)=>{const h=getH().filter(x=>x!==n);localStorage.setItem(SK,JSON.stringify([n,...h].slice(0,100)));};
-const toT=(s:string)=>s.trim().replace(/\b\w+/g,w=>w[0].toUpperCase()+w.slice(1).toLowerCase());
+const toT=(s:string)=>s.trim().replace(/\w+/g,w=>w[0].toUpperCase()+w.slice(1).toLowerCase());
 const eCache=new Map<string,{productId:string;model:string;brand:string;imeiRequired:boolean}|null>();
 let seq=0;
 const STATES=['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chandigarh','Chhattisgarh','Dadra & Nagar Haveli','Daman & Diu','Delhi','Goa','Gujarat','Haryana','Himachal Pradesh','Jammu & Kashmir','Jharkhand','Karnataka','Kerala','Ladakh','Lakshadweep','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Puducherry','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Other'];
@@ -143,6 +143,15 @@ export function StockIn(){
   const clear=()=>{if(!confirm('Clear all rows and draft?'))return;eCache.clear();setRows([mk()]);moveTo(0,'ean');localStorage.removeItem(DK);};
 
   const commit=useCallback(async()=>{
+    // Block rows that still need IMEI (status='found') — phones not yet scanned
+    const needsImei=rows.filter(r=>r.status==='found'&&r.productId);
+    if(needsImei.length){
+      alert(`⚠ ${needsImei.length} row(s) are missing IMEI:\n${needsImei.map(r=>`  • ${r.model}`).join('\n')}\n\nPlease scan the IMEI for each product before saving.`);
+      // Move cursor to first row needing IMEI
+      const fi=rows.findIndex(r=>r.status==='found');
+      if(fi>=0)moveTo(fi,'imei');
+      return;
+    }
     const sv=rows.filter(r=>r.status==='saved'&&r.productId);
     if(!sv.length||!whId)return;
     setBusy(true);
@@ -189,7 +198,9 @@ export function StockIn(){
       alert(`✓ ${sv.length} item(s) committed — ${doc}`);
     }catch(e:any){
       const msg=e.message||'Unknown error';
-      alert(`Commit failed: ${msg}\n\nTip: Check if any IMEI was previously scanned (use IMEI Tracker to verify).`);
+      alert(`Commit failed: ${msg}
+
+Tip: Check if any IMEI was previously scanned (use IMEI Tracker to verify).`);
     }
     finally{setBusy(false);}
   },[rows,whId,suppId,supp,inv,doc,moveTo]);
@@ -301,7 +312,9 @@ export function StockIn(){
                             if(/^\d{15}$/.test(v.trim()))setTimeout(()=>handleImei(i,v.trim()),60);
                           }}
                           onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();handleImei(i,(e.target as HTMLInputElement).value);}if(e.key==='Tab'){e.preventDefault();handleImei(i,(e.target as HTMLInputElement).value);}if(e.key==='Escape')upd(i,{errMsg:'',errField:'',imei:'',status:row.productId?'found':'empty'});}}
-                          onPaste={e=>{e.preventDefault();const v=e.clipboardData.getData('text').trim();if(v){upd(i,{imei:v});setTimeout(()=>handleImei(i,v),30);}}}
+                          onPaste={e=>{e.preventDefault();const raw=e.clipboardData.getData('text');const lines=raw.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);if(lines.length>1){// Multi-line paste (Excel column) — fill consecutive rows
+                            lines.forEach((line,offset)=>{const ri=i+offset;if(ri<rows.length){upd(ri,{imei:line,errMsg:'',errField:''});setTimeout(()=>handleImei(ri,line),30+offset*80);}});
+                          }else if(lines[0]){upd(i,{imei:lines[0]});setTimeout(()=>handleImei(i,lines[0]),30);}}}
                           onFocus={()=>{setAr(i);setFc('imei');}}
                           placeholder="Scan IMEI (15 digits)…"
                           style={CI({fontFamily:'monospace',fontSize:12,color:row.errField==='imei'?'#dc2626':'#0f172a'})}/>
@@ -313,7 +326,7 @@ export function StockIn(){
                         <input ref={R(i,'srno')} value={row.srno}
                           onChange={e=>upd(i,{srno:e.target.value})}
                           onKeyDown={e=>{if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();handleSrno(i,(e.target as HTMLInputElement).value);}}}
-                          onPaste={e=>{e.preventDefault();const v=e.clipboardData.getData('text').trim();if(v){upd(i,{srno:v});setTimeout(()=>handleSrno(i,v),30);}}}
+                          onPaste={e=>{e.preventDefault();const raw=e.clipboardData.getData('text');const lines=raw.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);if(lines.length>1){lines.forEach((line,offset)=>{const ri=i+offset;if(ri<rows.length){upd(ri,{srno:line});setTimeout(()=>handleSrno(ri,line),30+offset*80);}});}else if(lines[0]){upd(i,{srno:lines[0]});setTimeout(()=>handleSrno(i,lines[0]),30);}}}
                           onFocus={()=>{setAr(i);setFc('srno');}}
                           placeholder="Serial / any text…"
                           style={CI({fontSize:12,color:'#374151'})}/>
