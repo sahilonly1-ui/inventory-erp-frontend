@@ -5,11 +5,11 @@ import { api } from '../api/client';
 interface Warehouse { id: string; name: string; }
 type FC = 'ean'|'imei'|'srno';
 type RS = 'empty'|'loading'|'not_found'|'found'|'saved'|'err';
-interface Row { id:string; ean:string; productId:string; model:string; brand:string; imeiRequired:boolean; qty:number; imei:string; srno:string; imeiType:string; status:RS; errMsg:string; errField:'imei'|'srno'|''; }
+interface Row { id:string; ean:string; productId:string; model:string; brand:string; imeiRequired:boolean; srnoRequired:boolean; qty:number; imei:string; srno:string; imeiType:string; status:RS; errMsg:string; errField:'imei'|'srno'|''; }
 
 const uid=()=>Math.random().toString(36).slice(2,9);
 const genDoc=()=>`SIN-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.floor(Math.random()*9000+1000)}`;
-const mk=():Row=>({id:uid(),ean:'',productId:'',model:'',brand:'',imeiRequired:false,qty:0,imei:'',srno:'',imeiType:'NIL',status:'empty',errMsg:'',errField:''});
+const mk=():Row=>({id:uid(),ean:'',productId:'',model:'',brand:'',imeiRequired:false,srnoRequired:false,qty:0,imei:'',srno:'',imeiType:'NIL',status:'empty',errMsg:'',errField:''});
 const SK='erp_supp_v3', DK='sin_draft_v2';
 const getH=():string[]=>{try{return JSON.parse(localStorage.getItem(SK)||'[]');}catch{return[];}};
 const saveH=(n:string)=>{const h=getH().filter(x=>x!==n);localStorage.setItem(SK,JSON.stringify([n,...h].slice(0,100)));};
@@ -128,7 +128,10 @@ export function StockIn(){
         return next;
       }
       // IMEI-required products ALWAYS go to 'found' — never auto-save without IMEI
-      return rs.map((r,x)=>x===i?{...r,...p!,status:p!.imeiRequired?'found':'saved',qty:1}:r);
+      const needsImei=p!.imeiRequired;
+      const needsSrno=(p as any).srnoRequired||false;
+      // imeiRequired → 'found' (need IMEI); srnoRequired only → 'found' as well (need SrNo); else auto-save
+      return rs.map((r,x)=>x===i?{...r,...p!,srnoRequired:needsSrno,status:(needsImei||needsSrno)?'found':'saved',qty:1}:r);
     });
     if(p){
       // Only insert a new blank row if the next slot is truly empty (not pre-filled by bulk paste)
@@ -191,17 +194,22 @@ export function StockIn(){
     const v=val.trim();
     const row=rows[i];
     if(!row.productId){const ni=i+1;if(ni<rows.length)moveTo(ni,'srno');return;}
-    // Empty Sr.No. is fine — just move on
-    if(!v){upd(i,{qty:1,status:'saved',errMsg:'',errField:''});const ni=i+1;if(ni<rows.length)moveTo(ni,'srno');return;}
+    // Empty Sr.No.: fine if not required; block if required
+    if(!v){
+      if(row.srnoRequired&&!row.imei){upd(i,{errMsg:'Sr. No. required for this brand',errField:'srno',status:'found'});moveTo(i,'srno');return;}
+      upd(i,{qty:1,status:row.imeiRequired&&!row.imei?'found':'saved',errMsg:'',errField:''});
+      const ni=ins(i);moveTo(ni,'ean');return;
+    }
     // Within-session duplicate Sr.No.
     const sessDup=rows.findIndex((r,ri)=>ri!==i&&r.srno===v);
     if(sessDup!==-1){
       upd(i,{errMsg:`Duplicate! Sr.No. "${v}" already in row ${sessDup+1} of this entry.`,status:'err',errField:'srno'});
       moveTo(i,'srno');return;
     }
+    // If srnoRequired and no IMEI needed, scanning SrNo completes the row
     upd(i,{srno:v,qty:row.imei?row.qty:1,status:'saved',errMsg:'',errField:''});
-    const ni=i+1;if(ni<rows.length)moveTo(ni,'srno');
-  },[rows,upd,moveTo]);
+    const ni=ins(i);moveTo(ni,'ean');
+  },[rows,upd,ins,moveTo]);
 
   const del=(i:number)=>{setRows(rs=>rs.length===1?[mk()]:rs.filter((_,x)=>x!==i));moveTo(Math.max(0,ar>=i?ar-1:ar),'ean');};
   const clear=()=>{if(!confirm('Clear all rows and draft?'))return;eCache.clear();setRows([mk()]);moveTo(0,'ean');localStorage.removeItem(DK);};
@@ -221,7 +229,15 @@ export function StockIn(){
       if(fi>=0)moveTo(fi,'imei');
       return;
     }
-    const sv=rows.filter(r=>r.status==='saved'&&r.productId);
+    // Block rows that still need IMEI or SrNo
+    const stillPending=rows.filter(r=>r.productId&&r.status==='found');
+    if(stillPending.length){
+      const msgs=stillPending.map(r=>`  • ${r.model}${r.imeiRequired&&!r.imei?' — IMEI missing':''}${r.srnoRequired&&!r.imei&&!r.srno?' — Sr.No. missing':''}`).join('\n');
+      alert(`⚠ ${stillPending.length} row(s) incomplete:\n${msgs}\n\nPlease complete scanning before saving.`);
+      const fi=rows.findIndex(r=>r.productId&&r.status==='found');
+      if(fi>=0)moveTo(fi,stillPending[0]?.imeiRequired?'imei':'srno');return;
+    }
+        const sv=rows.filter(r=>r.status==='saved'&&r.productId);
     if(!sv.length||!whId)return;
     setBusy(true);
     const rmk=`${editMode?'EDIT:':''}${doc}${supp?' | '+supp:''}${inv?' | INV:'+inv:''}`;
@@ -461,9 +477,9 @@ export function StockIn(){
                     {/* Status */}
                     <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',padding:'0 8px',textAlign:'center'}}>
                       {row.errMsg&&<span style={{fontSize:9,background:'#fef2f2',color:'#dc2626',padding:'2px 6px',borderRadius:8,fontWeight:700,cursor:'help',display:'block',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:72}} title={row.errMsg}>✕ Error</span>}
-                      {!row.errMsg&&row.status==='saved'&&!row.imeiRequired&&<span style={{fontSize:10,background:'#dcfce7',color:'#15803d',padding:'2px 8px',borderRadius:10,fontWeight:700}}>✓</span>}
-                      {!row.errMsg&&row.status==='saved'&&row.imeiRequired&&row.imei&&<span style={{fontSize:10,background:'#dcfce7',color:'#15803d',padding:'2px 8px',borderRadius:10,fontWeight:700}}>✓ IMEI</span>}
-                      {!row.errMsg&&(row.status==='found'||(row.status==='saved'&&row.imeiRequired&&!row.imei))&&<span style={{fontSize:10,background:'#fef9c3',color:'#92400e',padding:'2px 8px',borderRadius:10,fontWeight:700}}>⚠ IMEI</span>}
+                      {!row.errMsg&&row.status==='saved'&&<span style={{fontSize:10,background:'#dcfce7',color:'#15803d',padding:'2px 8px',borderRadius:10,fontWeight:700}}>{row.imeiRequired?'✓ IMEI':row.srnoRequired?'✓ S/N':'✓'}</span>}
+                      {!row.errMsg&&row.status==='found'&&row.imeiRequired&&<span style={{fontSize:10,background:'#fef9c3',color:'#92400e',padding:'2px 8px',borderRadius:10,fontWeight:700}}>⚠ IMEI</span>}
+                      {!row.errMsg&&row.status==='found'&&!row.imeiRequired&&row.srnoRequired&&<span style={{fontSize:10,background:'#fed7aa',color:'#9a3412',padding:'2px 8px',borderRadius:10,fontWeight:700}}>⚠ S/N</span>}
                       {!row.errMsg&&row.status==='not_found'&&<span style={{fontSize:10,background:'#fef2f2',color:'#dc2626',padding:'2px 8px',borderRadius:10}}>New EAN</span>}
                     </td>
                     {/* Delete */}
