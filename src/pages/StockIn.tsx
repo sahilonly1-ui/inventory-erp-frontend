@@ -310,7 +310,7 @@ export function StockIn(){
   const sm=Object.values(sv.reduce((a:any,r)=>{const k=r.model||r.ean;if(!a[k])a[k]={m:k,q:0};a[k].q+=r.qty;return a;},{})) as any[];
   const tot=sm.reduce((s,r)=>s+r.q,0);
   const sg=sHist.filter(x=>x.toLowerCase().includes(ss.toLowerCase())).slice(0,8);
-  const CI=(ex:React.CSSProperties={}):React.CSSProperties=>({width:'100%',height:'100%',border:'none',padding:'0 10px',background:'transparent',fontSize:13,color:'#101828',outline:'none',touchAction:'manipulation' as any,fontFamily:'inherit',...ex});
+  const CI=(ex:React.CSSProperties={}):React.CSSProperties=>({width:'100%',height:'100%',border:'none',padding:'0 10px',background:'transparent',fontSize:13,color:'#101828',outline:'none',fontFamily:'inherit',...ex});
 
   return(
     <div style={{display:'flex',flexDirection:'column',height:'100vh',background:'#fff',overflow:'hidden'}}>
@@ -403,7 +403,7 @@ export function StockIn(){
                     <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',padding:0}}>
                       <div style={{height:38,outline:eOL('ean'),display:'flex',alignItems:'center'}}>
                         <input ref={R(i,'ean')} value={row.ean}
-                          inputMode="numeric" autoComplete="off" autoCorrect="off"
+                          inputMode="numeric" autoComplete="off"
                           onChange={e=>{
                             const v=e.target.value;
                             upd(i,{ean:v,status:'empty',errMsg:'',errField:''});
@@ -447,7 +447,7 @@ export function StockIn(){
                     <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',padding:0,background:row.errField==='imei'?'#fff5f5':''}}>
                       <div style={{height:38,outline:eOL('imei'),background:isA&&fc==='imei'?'#fff5f5':'',display:'flex'}}>
                         <input ref={R(i,'imei')} value={row.imei}
-                          inputMode="numeric" autoComplete="off" autoCorrect="off"
+                          inputMode="numeric" autoComplete="off"
                           onChange={e=>{
                             const v=e.target.value;upd(i,{imei:v,errMsg:'',errField:''});
                             // Auto-submit when scanner finishes (exactly 15 digits entered)
