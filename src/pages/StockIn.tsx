@@ -14,7 +14,7 @@ const SK='erp_supp_v3', DK='sin_draft_v2';
 const getH=():string[]=>{try{return JSON.parse(localStorage.getItem(SK)||'[]');}catch{return[];}};
 const saveH=(n:string)=>{const h=getH().filter(x=>x!==n);localStorage.setItem(SK,JSON.stringify([n,...h].slice(0,100)));};
 const toT=(s:string)=>s.trim().replace(/\w+/g,w=>w[0].toUpperCase()+w.slice(1).toLowerCase());
-const eCache=new Map<string,{productId:string;model:string;brand:string;imeiRequired:boolean}|null>();
+const eCache=new Map<string,{productId:string;model:string;brand:string;imeiRequired:boolean;srnoRequired:boolean}|null>();
 // seq removed — per-row race safety handled inside handleEan via setRows guard
 const STATES=['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chandigarh','Chhattisgarh','Dadra & Nagar Haveli','Daman & Diu','Delhi','Goa','Gujarat','Haryana','Himachal Pradesh','Jammu & Kashmir','Jharkhand','Karnataka','Kerala','Ladakh','Lakshadweep','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Puducherry','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Other'];
 
@@ -113,8 +113,8 @@ export function StockIn(){
       // Use a row-local stamp so concurrent bulk lookups don't cancel each other.
       // Each row updates only its own index so cross-row races are safe.
       try{
-        const r=await api<{product:{id:string;model:string;brand:string;imeiRequired:boolean}}>(`/inventory/lookup?ean=${encodeURIComponent(v)}`);
-        p={productId:r.product.id,model:r.product.model,brand:r.product.brand,imeiRequired:r.product.imeiRequired};
+        const r=await api<{product:{id:string;model:string;brand:string;imeiRequired:boolean;srnoRequired:boolean;brandImeiRequired:boolean;brandSrnoRequired:boolean}}>(`/inventory/lookup?ean=${encodeURIComponent(v)}`);
+        p={productId:r.product.id,model:r.product.model,brand:r.product.brand,imeiRequired:r.product.imeiRequired,srnoRequired:r.product.srnoRequired||false};
         eCache.set(v,p);
       }catch{eCache.set(v,null);p=null;}
     }
