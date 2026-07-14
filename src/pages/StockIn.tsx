@@ -538,7 +538,7 @@ export function StockIn(){
                         onBlur={e=>{const v=e.target.value.trim();if(v&&row.status==='empty')handleEan(i,v);}}
                         onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();handleEan(i,(e.target as HTMLInputElement).value);}}}
                         placeholder="Scan or type barcode..."
-                        style={{width:'100%',height:52,fontSize:18,padding:'0 14px',border:'1.5px solid #d0d5dd',borderRadius:10,boxSizing:'border-box',fontFamily:'monospace',outline:'none',WebkitAppearance:'none'}}
+                        style={{width:'100%',height:52,fontSize:18,padding:'0 14px',border:'1.5px solid #d0d5dd',borderRadius:10,boxSizing:'border-box',fontFamily:'monospace',outline:'none'}}
                       />
                       {row.model&&<div style={{marginTop:8,fontSize:14,fontWeight:700,color:'#0f172a'}}>{row.model}</div>}
                       {row.brand&&<div style={{fontSize:12,color:'#64748b'}}>{row.brand} · EAN: {row.ean}</div>}
@@ -554,7 +554,7 @@ export function StockIn(){
                               onChange={e=>{const v=e.target.value;upd(i,{imei:v,errMsg:'',errField:''});if(/^\d{15}$/.test(v.trim()))setTimeout(()=>handleImei(i,v.trim()),60);}}
                               onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();handleImei(i,(e.target as HTMLInputElement).value);}}}
                               placeholder="Scan IMEI..."
-                              style={{width:'100%',height:52,fontSize:18,padding:'0 14px',border:`1.5px solid ${row.errField==='imei'?'#dc2626':'#d0d5dd'}`,borderRadius:10,boxSizing:'border-box',fontFamily:'monospace',outline:'none',WebkitAppearance:'none'}}
+                              style={{width:'100%',height:52,fontSize:18,padding:'0 14px',border:`1.5px solid ${row.errField==='imei'?'#dc2626':'#d0d5dd'}`,borderRadius:10,boxSizing:'border-box',fontFamily:'monospace',outline:'none'}}
                             />
                           </>
                         )}
@@ -566,7 +566,7 @@ export function StockIn(){
                               onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();handleSrno(i,(e.target as HTMLInputElement).value);}}}
                               onBlur={e=>{if(e.target.value.trim())handleSrno(i,e.target.value.trim());}}
                               placeholder="Enter serial/box number..."
-                              style={{width:'100%',height:52,fontSize:16,padding:'0 14px',border:`1.5px solid ${row.errField==='srno'?'#dc2626':'#d0d5dd'}`,borderRadius:10,boxSizing:'border-box',outline:'none',WebkitAppearance:'none'}}
+                              style={{width:'100%',height:52,fontSize:16,padding:'0 14px',border:`1.5px solid ${row.errField==='srno'?'#dc2626':'#d0d5dd'}`,borderRadius:10,boxSizing:'border-box',outline:'none'}}
                             />
                           </>
                         )}
