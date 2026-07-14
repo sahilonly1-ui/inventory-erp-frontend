@@ -137,28 +137,26 @@ export function Dashboard() {
       const supplierName=txns[0]?.vendorName??vendorLabel;
       const dateStr=txns[0]?.createdAt?.slice(0,10)??new Date().toISOString().slice(0,10);
 
-      // Write the edit context to localStorage — StockIn reads this on mount
-      localStorage.setItem('sin_draft_v2', JSON.stringify({
-        r:rows, s:supplierName, iv:'', dt:dateStr,
-      }));
-      // Also store the original txn IDs so StockIn knows to delete them on save
-      localStorage.setItem('sin_edit_mode', JSON.stringify({
-        txnIds:ids,
-        supplierName,
-        supplierVendorId:txns[0]?.vendorId??'',
-        sign,
-        originalDate:dateStr,
-      }));
+      // Save to server-side edit session (works for entries from any date, 24h TTL)
+      const session=await api<{sessionId:string}>('/inventory/edit-sessions',{
+        method:'POST',
+        body:JSON.stringify({
+          draft:{ r:rows, s:supplierName, iv:'', dt:dateStr },
+          editMeta:{
+            txnIds:ids, supplierName,
+            supplierVendorId:txns[0]?.vendorId??'',
+            sign, originalDate:dateStr,
+          },
+        }),
+      });
+      setEditPanel(p=>({...p,loadingDetail:false}));
+      // Navigate to Stock In with session ID in URL
+      window.location.href=`/stock-in?editSession=${session.sessionId}`;
 
     }catch(e:any){
       alert('Failed to load entry: '+e.message);
       setEditPanel(p=>({...p,loadingDetail:false}));
-      return;
     }
-
-    setEditPanel(p=>({...p,loadingDetail:false}));
-    // Navigate to Stock In — React Router navigate
-    window.location.href='/stock-in';
   };
 
   // ── Look up new EAN for adding a product ────────────────────────────────
