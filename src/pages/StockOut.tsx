@@ -6,12 +6,12 @@ import { api } from '../api/client';
 interface Warehouse { id:string; name:string; }
 type FC = 'ean'|'imei'|'srno';
 type RS = 'empty'|'loading'|'not_found'|'found'|'saved'|'err';
-interface Row { id:string; ean:string; productId:string; model:string; brand:string; imeiRequired:boolean; qty:number; imei:string; srno:string; status:RS; errMsg:string; errField:'imei'|'srno'|''; }
+interface Row { id:string; ean:string; productId:string; model:string; brand:string; imeiRequired:boolean; srnoRequired:boolean; qty:number; imei:string; srno:string; status:RS; errMsg:string; errField:'imei'|'srno'|''; }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const uid=()=>Math.random().toString(36).slice(2,9);
 const genDoc=()=>`SOUT-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.floor(Math.random()*9000+1000)}`;
-const mk=():Row=>({id:uid(),ean:'',productId:'',model:'',brand:'',imeiRequired:false,qty:0,imei:'',srno:'',status:'empty',errMsg:'',errField:''});
+const mk=():Row=>({id:uid(),ean:'',productId:'',model:'',brand:'',imeiRequired:false,srnoRequired:false,qty:0,imei:'',srno:'',status:'empty',errMsg:'',errField:''});
 const CK='erp_customers_v1';
 const getC=():string[]=>{try{return JSON.parse(localStorage.getItem(CK)||'[]');}catch{return[];}};
 const saveC=(n:string)=>{const h=getC().filter(x=>x!==n);localStorage.setItem(CK,JSON.stringify([n,...h].slice(0,100)));};
@@ -86,7 +86,9 @@ export function StockOut(){
     setRows(rs=>{
       if(rs[i]?.ean!==v)return rs;
       if(!p){return rs.map((r,x)=>x===i?{...r,status:'not_found' as const,errMsg:'EAN not found in product master'}:r);}
-      return rs.map((r,x)=>x===i?{...r,productId:(p as any).id,model:(p as any).model,brand:(p as any).brand,imeiRequired:(p as any).imeiRequired,status:(p as any).imeiRequired?'found':'saved',qty:1}:r);
+      const needsImei=(p as any).imeiRequired||false;
+      const needsSrno=(p as any).srnoRequired||false;
+      return rs.map((r,x)=>x===i?{...r,productId:(p as any).id,model:(p as any).model,brand:(p as any).brand,imeiRequired:needsImei,srnoRequired:needsSrno,status:(needsImei||needsSrno)?'found':'saved',qty:1}:r);
     });
     if(p){const ni=ins(i);moveTo(ni,'ean');}
   },[whId,upd,ins,moveTo]);
@@ -157,8 +159,13 @@ export function StockOut(){
 
   // ── Commit — dispatch IMEIs and non-IMEI stock out ─────────────────────────
   const commit=useCallback(async()=>{
-    const needsImei=rows.filter(r=>r.productId&&(r.status==='found'||(r.imeiRequired&&!r.imei&&r.status==='saved')));
-    if(needsImei.length){alert(`⚠ ${needsImei.length} row(s) are missing IMEI:\n${needsImei.map(r=>`  • ${r.model}`).join('\n')}\n\nPlease scan the IMEI for each product before dispatching.`);const fi=rows.findIndex(r=>r.status==='found'||(r.status==='saved'&&r.imeiRequired&&!r.imei));if(fi>=0)moveTo(fi,'imei');return;}
+    const stillPending=rows.filter(r=>r.productId&&r.status==='found');
+    if(stillPending.length){
+      const msgs=stillPending.map(r=>`  • ${r.model}${r.imeiRequired&&!r.imei?' — IMEI missing':''}${r.srnoRequired&&!r.imei&&!r.srno?' — Sr.No. missing':''}`).join('\n');
+      alert(`⚠ ${stillPending.length} row(s) incomplete:\n${msgs}\n\nPlease complete scanning before dispatching.`);
+      const fi=rows.findIndex(r=>r.productId&&r.status==='found');
+      if(fi>=0)moveTo(fi,stillPending[0]?.imeiRequired?'imei':'srno');return;
+    }
     const sv=rows.filter(r=>r.status==='saved'&&r.productId);
     if(!sv.length||!whId)return;
     setBusy(true);
@@ -359,8 +366,9 @@ export function StockOut(){
                     {/* Status */}
                     <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',padding:'0 6px',textAlign:'center'}}>
                       {row.errMsg&&<span style={{fontSize:9,background:'#fef2f2',color:'#dc2626',padding:'2px 6px',borderRadius:8,fontWeight:700,cursor:'help',display:'block',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={row.errMsg}>✕ Error</span>}
-                      {!row.errMsg&&row.status==='saved'&&(!row.imeiRequired||row.imei)&&<span style={{fontSize:10,background:'#fee2e2',color:'#dc2626',padding:'2px 8px',borderRadius:10,fontWeight:700}}>✓</span>}
-                      {!row.errMsg&&(row.status==='found'||(row.status==='saved'&&row.imeiRequired&&!row.imei))&&<span style={{fontSize:10,background:'#fef9c3',color:'#92400e',padding:'2px 8px',borderRadius:10,fontWeight:700}}>⚠ IMEI</span>}
+                      {!row.errMsg&&row.status==='saved'&&<span style={{fontSize:10,background:'#fee2e2',color:'#dc2626',padding:'2px 8px',borderRadius:10,fontWeight:700}}>{row.imeiRequired?'✓ IMEI':row.srnoRequired?'✓ S/N':'✓'}</span>}
+                      {!row.errMsg&&row.status==='found'&&row.imeiRequired&&<span style={{fontSize:10,background:'#fef9c3',color:'#92400e',padding:'2px 8px',borderRadius:10,fontWeight:700}}>⚠ IMEI</span>}
+                      {!row.errMsg&&row.status==='found'&&!row.imeiRequired&&row.srnoRequired&&<span style={{fontSize:10,background:'#fed7aa',color:'#9a3412',padding:'2px 8px',borderRadius:10,fontWeight:700}}>⚠ S/N</span>}
                       {!row.errMsg&&row.status==='not_found'&&<span style={{fontSize:10,background:'#fef2f2',color:'#dc2626',padding:'2px 8px',borderRadius:10}}>Not Found</span>}
                     </td>
                     {/* Delete */}
