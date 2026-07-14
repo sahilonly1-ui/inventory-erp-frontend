@@ -75,11 +75,19 @@ export function Imei() {
 
   const toggleSwiped=async(id:string,imei1:string,cur:boolean)=>{
     setUpdatingId(id);
+    const newSwiped=!cur;
+    // Optimistic UI update immediately
+    setData(d=>d?{...d,items:d.items.map(i=>i.id===id?{...i,swiped:newSwiped,swipedAt:newSwiped?new Date().toISOString():undefined}:i)}:d);
     try{
-      // PATCH uses /:imei (the imei1 value) not /:id
-      await api(`/imei/${encodeURIComponent(imei1)}/status`,{method:'PATCH',body:JSON.stringify({status:'IN_STOCK',swiped:!cur})});
-      setData(d=>d?{...d,items:d.items.map(i=>i.id===id?{...i,swiped:!cur}:i)}:d);
-    }catch(e:any){alert(e.message);}
+      // Use dedicated /swiped endpoint (by DB id) — avoids early-return bug in /status
+      const res=await api<{id:string;swiped:boolean;swipedAt:string|null}>(`/imei/${id}/swiped`,{method:'PATCH',body:JSON.stringify({swiped:newSwiped})});
+      // Sync actual swipedAt from server
+      setData(d=>d?{...d,items:d.items.map(i=>i.id===id?{...i,swiped:res.swiped,swipedAt:res.swipedAt??undefined}:i)}:d);
+    }catch(e:any){
+      // Revert optimistic update on failure
+      setData(d=>d?{...d,items:d.items.map(i=>i.id===id?{...i,swiped:cur,swipedAt:cur?i.swipedAt:undefined}:i)}:d);
+      alert(e.message);
+    }
     finally{setUpdatingId(null);}
   };
 
