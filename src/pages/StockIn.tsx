@@ -38,6 +38,15 @@ function SM({name,onSave,onSkip}:{name:string;onSave:(s:string)=>void;onSkip:()=
   );
 }
 
+// Edit mode context stored in localStorage by Dashboard
+interface EditMode {
+  txnIds: string[];
+  supplierName: string;
+  supplierVendorId: string;
+  sign: '+' | '-';
+  originalDate: string;
+}
+
 export function StockIn(){
   const[whs,setWhs]=useState<Warehouse[]>([]);
   const[whId,setWhId]=useState('');
@@ -56,14 +65,32 @@ export function StockIn(){
   const[busy,setBusy]=useState(false);
   const[drawer,setDrawer]=useState<string|null>(null);
   const[df,setDf]=useState({ean:'',model:'',brand:'',cat:'',cost:'',sell:'',mrp:'',gst:'18',imei:false});
+  const[editMode,setEditMode]=useState<EditMode|null>(null); // set when redirected from Dashboard Edit
   const refs=useRef<Record<string,HTMLInputElement|null>>({});
   const R=(i:number,c:FC)=>(el:HTMLInputElement|null)=>{refs.current[`${i}-${c}`]=el;};
   const ERef=useRef<(i:number,e:string)=>void>(()=>{});
 
   useEffect(()=>{
     api<Warehouse[]>('/warehouses').then(ws=>{setWhs(ws);const m=ws.find(w=>w.name.toLowerCase().includes('main'));setWhId(m?.id||ws[0]?.id||'');}).catch(()=>{});
+
+    // Check for edit mode (redirected from Dashboard)
+    const em=localStorage.getItem('sin_edit_mode');
+    if(em){
+      try{
+        const parsed:EditMode=JSON.parse(em);
+        setEditMode(parsed);
+        // Supplier pre-fill
+        if(parsed.supplierName)setSupp(parsed.supplierName);
+        if(parsed.supplierVendorId)setSuppId(parsed.supplierVendorId);
+        if(parsed.originalDate)setDate(parsed.originalDate);
+        // Rows come from sin_draft_v2 (written by Dashboard before redirect)
+      }catch{}
+      localStorage.removeItem('sin_edit_mode'); // consume it
+    }
+
+    // Load draft rows (written either by Dashboard edit redirect or by previous session)
     const d=localStorage.getItem(DK);
-    if(d){try{const{r,s,iv,dt}=JSON.parse(d);if(r?.some((x:Row)=>x.status!=='empty')){setRows(r);if(s)setSupp(s);if(iv)setInv(iv);if(dt)setDate(dt);}}catch{}}
+    if(d){try{const{r,s,iv,dt}=JSON.parse(d);if(r?.some((x:Row)=>x.status!=='empty')){setRows(r);if(s&&!em)setSupp(s);if(iv)setInv(iv);if(dt&&!em)setDate(dt);}}catch{}}
   },[]);
   useEffect(()=>{if(rows.some(r=>r.status!=='empty'))localStorage.setItem(DK,JSON.stringify({r:rows,s:supp,iv:inv,dt:date}));},[rows,supp,inv,date]);
 
@@ -125,13 +152,17 @@ export function StockIn(){
     }
 
     // 3. Cross-session duplicate (already in IMEI database)
-    try{
-      const existing=await api<any>(`/imei/${encodeURIComponent(v)}`);
-      const dt=new Date(existing.createdAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
-      const sup=existing.supplier?.name||'unknown supplier';
-      upd(i,{errMsg:`Already stocked in on ${dt} from ${sup}. Duplicate scan!`,status:'err',errField:'imei'});
-      moveTo(i,'imei');return;
-    }catch{}
+    // Skip this check in edit mode — the loaded IMEIs belong to the original entry being edited.
+    // They'll be deleted and re-created on save, so they're not truly "duplicates".
+    if(!editMode){
+      try{
+        const existing=await api<any>(`/imei/${encodeURIComponent(v)}`);
+        const dt=new Date(existing.createdAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+        const sup=existing.supplier?.name||'unknown supplier';
+        upd(i,{errMsg:`Already stocked in on ${dt} from ${sup}. Duplicate scan!`,status:'err',errField:'imei'});
+        moveTo(i,'imei');return;
+      }catch{}
+    }
 
     upd(i,{imei:v,qty:1,status:'saved',errMsg:'',errField:''});
     const ni=i+1;if(ni<rows.length)moveTo(ni,'imei');
@@ -164,11 +195,10 @@ export function StockIn(){
       try{const r=await api<any>('/vendors/find-or-create',{method:'POST',body:JSON.stringify({name:toT(supp)})});
         if(r.vendor){resolvedSuppId=r.vendor.id;setSuppId(r.vendor.id);}}catch{}
     }
-    // Block rows that still need IMEI (status='found') — phones not yet scanned
+    // Block rows that still need IMEI
     const needsImei=rows.filter(r=>r.productId&&(r.status==='found'||(r.imeiRequired&&!r.imei&&r.status==='saved')));
     if(needsImei.length){
       alert(`⚠ ${needsImei.length} row(s) are missing IMEI:\n${needsImei.map(r=>`  • ${r.model}`).join('\n')}\n\nPlease scan the IMEI for each product before saving.`);
-      // Move cursor to first row needing IMEI
       const fi=rows.findIndex(r=>r.productId&&(r.status==='found'||(r.imeiRequired&&!r.imei)));
       if(fi>=0)moveTo(fi,'imei');
       return;
@@ -176,10 +206,21 @@ export function StockIn(){
     const sv=rows.filter(r=>r.status==='saved'&&r.productId);
     if(!sv.length||!whId)return;
     setBusy(true);
-    const rmk=`${doc}${supp?' | '+supp:''}${inv?' | INV:'+inv:''}`;
+    const rmk=`${editMode?'EDIT:':''}${doc}${supp?' | '+supp:''}${inv?' | INV:'+inv:''}`;
     try{
-      // ── Batch all IMEIs by productId (1 API call per unique product, not per row) ──
-      // This prevents multiple concurrent transactions causing 500 errors.
+      // ── EDIT MODE: delete original transactions first ──────────────────────────────────────────────
+      if(editMode?.txnIds?.length){
+        if(!confirm(`This will replace the original entry from ${editMode.supplierName} (${editMode.txnIds.length} transaction${editMode.txnIds.length!==1?'s':''}).\n\nOriginal stock will be reversed and re-entered with your changes.\n\nProceed?`)){
+          setBusy(false);return;
+        }
+        if(editMode.txnIds.length>1){
+          await api('/inventory/transactions/bulk-delete',{method:'POST',body:JSON.stringify({ids:editMode.txnIds})});
+        }else{
+          await api(`/inventory/transactions/${editMode.txnIds[0]}`,{method:'DELETE'});
+        }
+      }
+
+      // ── Save all rows (same as normal stock-in) ───────────────────────────────────────────────────
       const imeiRows=sv.filter(r=>r.imei);
       const imeiByProduct=imeiRows.reduce((a:any,r)=>{
         if(!a[r.productId])a[r.productId]=[];
@@ -189,16 +230,14 @@ export function StockIn(){
       for(const[productId,imeis] of Object.entries(imeiByProduct) as any[]){
         await api('/imei/receive',{method:'POST',body:JSON.stringify({
           productId,warehouseId:whId,
-          imeis,               // all IMEIs for this product in ONE call
+          imeis,
           vendorId:resolvedSuppId||undefined,
-          force:true,          // bypass imeiRequired check
+          force:true,
           remarks:rmk,
         })});
       }
 
-      // ── Batch non-IMEI rows by productId (1 call per unique product) ─────────────
-      const nonImeiRows=sv.filter(r=>!r.imei);
-      const nonImeiByProduct=nonImeiRows.reduce((a:any,r)=>{
+      const nonImeiByProduct=sv.filter(r=>!r.imei).reduce((a:any,r)=>{
         if(!a[r.productId])a[r.productId]={productId:r.productId,qty:0,srNos:[] as string[]};
         a[r.productId].qty+=(r.qty||1);
         if(r.srno)a[r.productId].srNos.push(r.srno);
@@ -214,17 +253,19 @@ export function StockIn(){
       }
 
       eCache.clear();setRows([mk()]);moveTo(0,'ean');
-      setSupp('');setSuppId('');setInv('');
+      setSupp('');setSuppId('');setInv('');setEditMode(null);
       localStorage.removeItem(DK);
-      alert(`✓ ${sv.length} item(s) committed — ${doc}`);
+      alert(editMode
+        ?`✓ Entry updated — ${sv.length} item(s) saved. Original entry replaced.`
+        :`✓ ${sv.length} item(s) committed — ${doc}`
+      );
+      if(editMode)window.location.href='/';
     }catch(e:any){
       const msg=e.message||'Unknown error';
-      alert(`Commit failed: ${msg}
-
-Tip: Check if any IMEI was previously scanned (use IMEI Tracker to verify).`);
+      alert(`${editMode?'Update':'Commit'} failed: ${msg}\n\nTip: Check if any IMEI was previously scanned (use IMEI Tracker to verify).`);
     }
     finally{setBusy(false);}
-  },[rows,whId,suppId,supp,inv,doc,moveTo]);
+  },[rows,whId,suppId,supp,inv,doc,moveTo,editMode]);
 
   const resolveSupp=useCallback(async(name:string,state?:string)=>{
     const t=toT(name);
@@ -244,12 +285,29 @@ Tip: Check if any IMEI was previously scanned (use IMEI Tracker to verify).`);
         <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
           <span style={{fontSize:11,fontWeight:700,color:'#2563eb',background:'#eff6ff',padding:'3px 12px',borderRadius:20,border:'1px solid #bfdbfe'}}>{doc}</span>
           <span style={{fontSize:10,fontWeight:700,color:'#f59e0b',background:'#fffbeb',padding:'2px 8px',borderRadius:10,border:'1px solid #fde68a',letterSpacing:'.05em'}}>DRAFT</span>
-          <span style={{fontSize:13,fontWeight:700,color:'#0f172a',marginLeft:4}}>Stock In Entry</span>
+          {editMode?(
+            <span style={{fontSize:13,fontWeight:700,color:'#7c3aed',marginLeft:4,display:'flex',alignItems:'center',gap:6}}>
+              ✏️ Editing Entry
+              <span style={{fontSize:10,background:'#f5f3ff',color:'#7c3aed',padding:'2px 8px',borderRadius:10,border:'1px solid #ddd6fe',fontWeight:700}}>
+                {editMode.supplierName} · {editMode.txnIds.length} original txn{editMode.txnIds.length!==1?'s':''}
+              </span>
+            </span>
+          ):(
+            <span style={{fontSize:13,fontWeight:700,color:'#0f172a',marginLeft:4}}>Stock In Entry</span>
+          )}
           <div style={{flex:1}}/>
           <span style={{fontSize:11,color:'#94a3b8'}}>{sv.length} items · {tot} units</span>
-          <button onClick={clear} style={{height:28,padding:'0 10px',border:'1px solid #fecdd3',borderRadius:6,background:'#fff5f5',color:'#dc2626',fontSize:11,fontWeight:600,cursor:'pointer'}}>Clear All</button>
+          {editMode&&(
+            <button onClick={()=>{if(!confirm('Discard changes and go back to Dashboard?'))return;setEditMode(null);localStorage.removeItem(DK);window.location.href='/';}}
+              style={{height:28,padding:'0 10px',border:'1px solid #fecdd3',borderRadius:6,background:'#fff5f5',color:'#dc2626',fontSize:11,fontWeight:600,cursor:'pointer'}}>
+              ← Cancel Edit
+            </button>
+          )}
+          {!editMode&&(
+            <button onClick={clear} style={{height:28,padding:'0 10px',border:'1px solid #fecdd3',borderRadius:6,background:'#fff5f5',color:'#dc2626',fontSize:11,fontWeight:600,cursor:'pointer'}}>Clear All</button>
+          )}
           <button onClick={commit} disabled={!sv.length||busy} style={{height:30,padding:'0 18px',border:'none',borderRadius:7,background:(!sv.length||busy)?'#94a3b8':'#16a34a',color:'#fff',fontSize:12,fontWeight:700,cursor:(!sv.length||busy)?'not-allowed':'pointer'}}>
-            {busy?'Saving…':`✓ Done (${sv.length})`}
+            {busy?(editMode?'Updating…':'Saving…'):editMode?`💾 Update Entry (${sv.length})`:`✓ Done (${sv.length})`}
           </button>
         </div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 148px 200px 180px',gap:8}}>
