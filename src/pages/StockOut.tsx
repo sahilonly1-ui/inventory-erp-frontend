@@ -87,7 +87,7 @@ export function StockOut(){
       if(rs[i]?.ean!==v)return rs;
       if(!p){return rs.map((r,x)=>x===i?{...r,status:'not_found' as const,errMsg:'EAN not found in product master'}:r);}
       const needsImei=(p as any).imeiRequired||false;
-      const needsSrno=(p as any).srnoRequired||false;
+      const needsSrno=p!.srnoRequired||false;
       return rs.map((r,x)=>x===i?{...r,productId:(p as any).id,model:(p as any).model,brand:(p as any).brand,imeiRequired:needsImei,srnoRequired:needsSrno,status:(needsImei||needsSrno)?'found':'saved',qty:1}:r);
     });
     if(p){const ni=ins(i);moveTo(ni,'ean');}
