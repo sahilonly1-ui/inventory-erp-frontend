@@ -29,16 +29,15 @@ jobs:
           VITE_API_URL: https://inventory-erp-backend-iplr.onrender.com/api/v1
 
       - name: Deploy to Netlify
-        run: |
-          npm install -g netlify-cli@latest
-          netlify status --auth=$NETLIFY_AUTH_TOKEN || echo "Auth check done"
-          netlify deploy \
-            --auth=$NETLIFY_AUTH_TOKEN \
-            --site=$NETLIFY_SITE_ID \
-            --prod \
-            --dir=dist \
-            --message="Auto-deploy from GitHub commit $GITHUB_SHA"
+        uses: nwtgck/actions-netlify@v3.0
+        with:
+          publish-dir: './dist'
+          production-branch: main
+          production-deploy: true
+          deploy-message: "Deploy from GitHub Actions - ${{ github.sha }}"
+          enable-pull-request-comment: false
+          enable-commit-comment: false
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
-          GITHUB_SHA: ${{ github.sha }}
+        timeout-minutes: 5
