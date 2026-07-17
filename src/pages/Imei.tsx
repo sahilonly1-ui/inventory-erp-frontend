@@ -2,7 +2,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { api, getAccessToken } from '../api/client';
 
 interface ImeiUnit {
-  id:string; imei1:string; imei2?:string; status:string; imeiType:string; swiped:boolean; swipedAt?:string;
+  id:string; imei1:string; imei2?:string; status:string; imeiType:string;
+  swiped:boolean; swipedAt?:string;
+  activated:boolean; activatedAt?:string;
   product?:{ ean:string; model:string; brand:string; };
   warehouse?:{ name:string; };
   supplier?:{ name:string; };
@@ -86,6 +88,20 @@ export function Imei() {
     }catch(e:any){
       // Revert optimistic update on failure
       setData(d=>d?{...d,items:d.items.map(i=>i.id===id?{...i,swiped:cur,swipedAt:cur?i.swipedAt:undefined}:i)}:d);
+      alert(e.message);
+    }
+    finally{setUpdatingId(null);}
+  };
+
+  const toggleActivated=async(id:string,cur:boolean)=>{
+    setUpdatingId(id);
+    const newVal=!cur;
+    setData(d=>d?{...d,items:d.items.map(i=>i.id===id?{...i,activated:newVal,activatedAt:newVal?new Date().toISOString():undefined}:i)}:d);
+    try{
+      const res=await api<{id:string;activated:boolean;activatedAt:string|null}>(`/imei/${id}/activated`,{method:'PATCH',body:JSON.stringify({activated:newVal})});
+      setData(d=>d?{...d,items:d.items.map(i=>i.id===id?{...i,activated:res.activated,activatedAt:res.activatedAt??undefined}:i)}:d);
+    }catch(e:any){
+      setData(d=>d?{...d,items:d.items.map(i=>i.id===id?{...i,activated:cur,activatedAt:cur?i.activatedAt:undefined}:i)}:d);
       alert(e.message);
     }
     finally{setUpdatingId(null);}
@@ -196,7 +212,7 @@ export function Imei() {
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
             <thead>
               <tr style={{background:'#f8fafc',position:'sticky',top:0,zIndex:5,boxShadow:'0 1px 0 #e2e8f0'}}>
-                {['IMEI 1 / IMEI 2','Product','Status','Swiped','Swiped On','Supplier','Stock In','Last Updated','Change Status'].map(h=>(
+                {['IMEI 1 / IMEI 2','Product','Status','Swiped','Swiped On','Activated','Activated On','Supplier','Stock In','Last Updated','Change Status'].map(h=>(
                   <th key={h} style={{padding:'0 12px',height:36,textAlign:'left',fontWeight:700,color:'#64748b',fontSize:10,textTransform:'uppercase',letterSpacing:'.07em',whiteSpace:'nowrap'}}>{h}</th>
                 ))}
               </tr>
@@ -244,6 +260,23 @@ export function Imei() {
                           {new Date(item.swipedAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}
                           <br/>
                           <span style={{color:'#94a3b8',fontWeight:400}}>{new Date(item.swipedAt).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</span>
+                        </span>
+                      ):'—'}
+                    </td>
+                    {/* Activated toggle */}
+                    <td style={{padding:'8px 12px',whiteSpace:'nowrap'}}>
+                      <button onClick={()=>toggleActivated(item.id,item.activated)} disabled={updatingId===item.id} title={item.activated?'Mark not activated':'Mark as activated'}
+                        style={{width:44,height:24,borderRadius:12,border:'none',cursor:'pointer',background:item.activated?'#7c3aed':'#e2e8f0',transition:'background .2s',position:'relative',flexShrink:0,display:'inline-block'}}>
+                        <span style={{position:'absolute',top:2,left:item.activated?22:2,width:20,height:20,borderRadius:'50%',background:'#fff',transition:'left .2s',display:'block'}}/>
+                      </button>
+                    </td>
+                    {/* Activated On date/time */}
+                    <td style={{padding:'8px 12px',whiteSpace:'nowrap',fontSize:11}}>
+                      {item.activated&&item.activatedAt?(
+                        <span style={{color:'#7c3aed',fontWeight:600}}>
+                          {new Date(item.activatedAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}
+                          <br/>
+                          <span style={{color:'#94a3b8',fontWeight:400}}>{new Date(item.activatedAt).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</span>
                         </span>
                       ):'—'}
                     </td>
