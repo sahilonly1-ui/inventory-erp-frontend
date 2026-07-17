@@ -12,6 +12,7 @@ import { Versions } from './pages/Versions';
 import { Suppliers } from './pages/Suppliers';
 import { StockIn } from './pages/StockIn';
 import { OpeningStock } from './pages/OpeningStock';
+import { StockReport } from './pages/StockReport';
 import { StockOut } from './pages/StockOut';
 import { Reports } from './pages/Reports';
 
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="/products"   element={<Shell><Products /></Shell>} />
         <Route path="/stock-in"   element={<Shell><StockIn /></Shell>} />
         <Route path="/opening-stock" element={<Shell><OpeningStock /></Shell>} />
+        <Route path="/stock-report"   element={<Shell><StockReport /></Shell>} />
         <Route path="/stock-out"  element={<Shell><StockOut /></Shell>} />
         <Route path="/imei"       element={<Shell><Imei /></Shell>} />
         <Route path="/suppliers"  element={<Shell><Suppliers /></Shell>} />
