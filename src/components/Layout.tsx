@@ -12,6 +12,7 @@ const NAV: NavItem[] = [
   { to: '/stock-out', label: 'Stock Out',        svg: '<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>' },
   { to: '/imei',      label: 'IMEI Tracker',    svg: '<rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>' },
   { to: '/suppliers', label: 'Supplier Master',  svg: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>' },
+  { to: '/stock-report', label: 'Stock Report',   svg: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/><rect x="13" y="13" width="2" height="5"/><rect x="7" y="11" width="2" height="7"/>' },
   { to: '/reports',   label: 'Reports',          svg: '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>' },
   { to: '/versions',  label: 'Version History',  svg: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>' },
 ];
