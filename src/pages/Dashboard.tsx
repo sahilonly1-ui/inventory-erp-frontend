@@ -56,13 +56,13 @@ export function Dashboard() {
     warehouseId:string;
     sign:'+' | '-';
     saving:boolean;
-    loadingDetail:boolean;
+    loadingVendorKey:string|null;
     newEan:string;           // EAN being typed for new row
     newEanStatus:'idle'|'loading'|'found'|'not_found';
     newEanProduct:{id:string;model:string;brand:string;imeiRequired:boolean}|null;
   }>({
     open:false, vendorLabel:'', allTxnIds:[], rows:[], supplierId:'', supplierName:'',
-    warehouseId:'', sign:'+', saving:false, loadingDetail:false, newEan:'', newEanStatus:'idle', newEanProduct:null,
+    warehouseId:'', sign:'+', saving:false, loadingVendorKey:null, newEan:'', newEanStatus:'idle', newEanProduct:null,
   });
 
   const newEanRef = useRef<HTMLInputElement>(null);
@@ -100,8 +100,8 @@ export function Dashboard() {
 
   // ── Edit: fetch full entry detail → write to StockIn draft → redirect ──────
   const openEditPanel=async(ids:string[], vendorLabel:string, sign:'+'|'-')=>{
-    // Show loading state on the button (use a simple flag via editPanel.loadingDetail)
-    setEditPanel(p=>({...p,open:false,loadingDetail:true}));
+    // Show loading state on the button (use a simple flag via loadingVendorKey per vendor)
+    setEditPanel(p=>({...p,open:false,loadingVendorKey:label}));
     try{
       const detail=await api<{transactions:EntryTxn[]}>(`/inventory/transactions/entry-detail?ids=${ids.join(',')}`);
       const txns=detail.transactions;
@@ -152,13 +152,13 @@ export function Dashboard() {
           },
         }),
       });
-      setEditPanel(p=>({...p,loadingDetail:false}));
+      setEditPanel(p=>({...p,loadingVendorKey:null}));
       // Route to Stock In for inbound, Stock Out for outbound
       window.location.href=`${sign==='+'?'/stock-in':'/stock-out'}?editSession=${session.sessionId}`;
 
     }catch(e:any){
       alert('Failed to load entry: '+e.message);
-      setEditPanel(p=>({...p,loadingDetail:false}));
+      setEditPanel(p=>({...p,loadingVendorKey:null}));
     }
   };
 
@@ -318,10 +318,10 @@ export function Dashboard() {
 
   const ActionBtns=({ids,label,sign}:{ids:string[];label:string;sign:'+'|'-'})=>(
     <div style={{display:'flex',gap:6,flexShrink:0}}>
-      <button onClick={()=>openEditPanel(ids,label,sign)} disabled={editPanel.loadingDetail}
-        style={{height:26,padding:'0 10px',border:'1px solid #bfdbfe',borderRadius:5,background:'#eff6ff',cursor:editPanel.loadingDetail?'wait':'pointer',color:'#2563eb',fontSize:11,fontWeight:600,display:'flex',alignItems:'center',gap:4,opacity:editPanel.loadingDetail?0.6:1}}>
-        {editPanel.loadingDetail?<div className="spinner" style={{width:10,height:10}}/>:<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>}
-        {editPanel.loadingDetail?'Loading…':'Edit'}
+      <button onClick={()=>openEditPanel(ids,label,sign)} disabled={editPanel.loadingVendorKey===label}
+        style={{height:26,padding:'0 10px',border:'1px solid #bfdbfe',borderRadius:5,background:'#eff6ff',cursor:editPanel.loadingVendorKey===label?'wait':'pointer',color:'#2563eb',fontSize:11,fontWeight:600,display:'flex',alignItems:'center',gap:4,opacity:editPanel.loadingVendorKey===label?0.6:1}}>
+        {editPanel.loadingVendorKey===label?<div className="spinner" style={{width:10,height:10}}/>:<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>}
+        {editPanel.loadingVendorKey===label?'Loading…':'Edit'}
       </button>
       <button onClick={()=>bulkDelete(ids,label)} disabled={!!deleting}
         style={{height:26,padding:'0 10px',border:'1px solid #fca5a5',borderRadius:5,background:'#fef2f2',cursor:'pointer',color:'#dc2626',fontSize:11,fontWeight:600,display:'flex',alignItems:'center',gap:4,opacity:deleting?0.6:1}}>
