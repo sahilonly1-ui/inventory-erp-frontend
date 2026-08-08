@@ -15,6 +15,7 @@ const getH=():string[]=>{try{return JSON.parse(localStorage.getItem(SK)||'[]');}
 const saveH=(n:string)=>{const h=getH().filter(x=>x!==n);localStorage.setItem(SK,JSON.stringify([n,...h].slice(0,100)));};
 const toT=(s:string)=>s.trim().replace(/\w+/g,w=>w[0].toUpperCase()+w.slice(1).toLowerCase());
 const eCache=new Map<string,{productId:string;model:string;brand:string;imeiRequired:boolean;srnoRequired:boolean}|null>();
+const eanInFlight=new Set<string>(); // prevents double-trigger from onChange+onBlur
 // seq removed — per-row race safety handled inside handleEan via setRows guard
 const STATES=['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chandigarh','Chhattisgarh','Dadra & Nagar Haveli','Daman & Diu','Delhi','Goa','Gujarat','Haryana','Himachal Pradesh','Jammu & Kashmir','Jharkhand','Karnataka','Kerala','Ladakh','Lakshadweep','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Puducherry','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Other'];
 
@@ -113,6 +114,9 @@ export function StockIn(){
 
   const handleEan=useCallback(async(i:number,ean:string)=>{
     const v=ean.trim();if(!v)return;
+    const key=`${i}:${v}`;
+    if(eanInFlight.has(key))return; // already processing this row+EAN
+    eanInFlight.add(key);
     upd(i,{ean:v,status:'loading',errMsg:'',errField:''});
     let p=eCache.get(v);
     if(p===undefined){
@@ -127,7 +131,11 @@ export function StockIn(){
         await new Promise(res=>setTimeout(res,500));
         const cached=eCache.get(v);
         if(cached!==undefined){p=cached;}
-        else{eCache.set(v,null);p=null;}
+        else{
+          // Don't permanently cache as null — next scan should retry
+          // (don't set eCache so the next handleEan call tries the API again)
+          p=null;
+        }
       }
     }
     // Verify row still has this EAN (user may have cleared it during lookup)
@@ -135,7 +143,14 @@ export function StockIn(){
       if(rs[i]?.ean!==v)return rs; // row was changed — skip update
       if(!p){
         const next=rs.map((r,x)=>x===i?{...r,status:'not_found' as const,errMsg:''}:r);
-        // Open new product drawer (deferred so state settles first)
+        // One final cache check before opening "New Product" drawer
+        const finalCheck=eCache.get(v);
+        if(finalCheck){
+          // Product was found by another concurrent call — use it
+          setTimeout(()=>handleEan(i,v),10);
+          return rs;
+        }
+        // Genuinely not found — open drawer
         setTimeout(()=>{setDrawer(v);setDf(d=>({...d,ean:v}));moveTo(i,'ean');},0);
         return next;
       }
@@ -163,6 +178,7 @@ export function StockIn(){
       });
       moveTo(i+1,'ean');
     }
+    eanInFlight.delete(key);
   },[upd,ins,moveTo,setDrawer,setDf]);
   useEffect(()=>{ERef.current=handleEan;},[handleEan]);
 
