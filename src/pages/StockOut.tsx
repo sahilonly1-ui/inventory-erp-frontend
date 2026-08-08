@@ -328,7 +328,7 @@ export function StockOut(){
                     </td>
                      {/* Product Name */}
                      <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',padding:'2px 10px',color:row.model?'#0f172a':'#cbd5e1',fontWeight:row.model?500:400,overflow:'hidden',lineHeight:1.25}}>
-                     <span style={{display:'block',whiteSpace:'nowrap',overflow:'hidden',fontSize:!row.model?12:row.model.length<=32?13:row.model.length<=38?11:row.model.length<=45?10:row.model.length<=52?9:8}}>{row.model||'Auto-filled after EAN scan'}</span>
+                     <span style={{display:'block',whiteSpace:'nowrap',overflow:'hidden',fontSize:!row.model?12:row.model.length<=45?13:row.model.length<=50?12:row.model.length<=60?11:row.model.length<=70?10:9}}>{row.model||'Auto-filled after EAN scan'}</span>
                      </td>
                     {/* Qty */}
                     <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',textAlign:'center',fontWeight:700,fontSize:14,color:row.qty>0?'#dc2626':'#cbd5e1'}}>{row.qty>0?row.qty:'—'}</td>
@@ -397,7 +397,7 @@ export function StockOut(){
             {sv.length===0?<div style={{padding:'20px 14px',textAlign:'center',color:'#cbd5e1',fontSize:12}}>Scan products to dispatch</div>
               :sv.map(r=>(
               <div key={r.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 14px',fontSize:12}}>
-              <span style={{color:'#374151',overflow:'hidden',whiteSpace:'nowrap',flex:1,minWidth:0,fontSize:((r.model||r.ean||'').length<=28)?11:((r.model||r.ean||'').length<=36)?10:((r.model||r.ean||'').length<=44)?9:8}}>{r.model||r.ean}</span>
+              <span style={{color:'#374151',overflow:'hidden',whiteSpace:'nowrap',flex:1,minWidth:0,fontSize:(r.model||r.ean||'').length<=35?11:(r.model||r.ean||'').length<=44?10:(r.model||r.ean||'').length<=54?9:8}}>{r.model||r.ean}</span>
                 <span style={{fontWeight:700,color:'#dc2626',flexShrink:0,marginLeft:6}}>-{r.qty}</span>
               </div>
             ))}
