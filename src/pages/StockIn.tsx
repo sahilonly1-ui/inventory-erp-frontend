@@ -444,12 +444,10 @@ export function StockIn(){
                       </div>
                     </td>
                     {/* Product */}
-                    <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',padding:'0 10px',color:row.model?'#0f172a':'#cbd5e1',fontWeight:row.model?500:400,overflow:'hidden'}}>
-                      <span style={{display:'block',whiteSpace:'nowrap',overflow:'hidden',
-                        fontSize: !row.model?12:row.model.length<=45?13:row.model.length<=50?12:row.model.length<=60?11:row.model.length<=70?10:9,
-                      }}>
+                    <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',padding:'2px 10px',color:row.model?'#0f172a':'#cbd5e1',fontWeight:row.model?500:400,verticalAlign:'middle'}}>
+                      <div style={{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical' as any,overflow:'hidden',fontSize:12,lineHeight:1.35,wordBreak:'break-word'}}>
                         {row.model||'Auto-filled after EAN scan'}
-                      </span>
+                      </div>
                     </td>
                     {/* Qty */}
                     <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',textAlign:'center',fontWeight:700,fontSize:14,color:row.qty>0?'#16a34a':'#cbd5e1'}}>{row.qty>0?row.qty:'—'}</td>
@@ -595,8 +593,12 @@ export function StockIn(){
             {sm.length===0?<div style={{padding:'20px 14px',textAlign:'center',color:'#cbd5e1',fontSize:12}}>Scan products to see summary</div>
               :sm.map((s:any)=>(
               <div key={s.m} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 14px',fontSize:12}}>
-                <span style={{color:'#374151',overflow:'hidden',whiteSpace:'nowrap',flex:1,minWidth:0,
-                  fontSize:s.m.length<=35?11:s.m.length<=44?10:s.m.length<=54?9:8}}>{s.m}</span>
+                <div style={{
+                  display:'-webkit-box',WebkitLineClamp:2,
+                  WebkitBoxOrient:'vertical' as any,
+                  overflow:'hidden',fontSize:10,lineHeight:1.3,
+                  wordBreak:'break-word',flex:1,minWidth:0,color:'#374151',
+                }}>{s.m}</div>
                 <span style={{fontWeight:700,color:'#16a34a',flexShrink:0,marginLeft:6}}>{s.q}</span>
               </div>
             ))}
