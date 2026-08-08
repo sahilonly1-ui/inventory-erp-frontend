@@ -15,7 +15,6 @@ const getH=():string[]=>{try{return JSON.parse(localStorage.getItem(SK)||'[]');}
 const saveH=(n:string)=>{const h=getH().filter(x=>x!==n);localStorage.setItem(SK,JSON.stringify([n,...h].slice(0,100)));};
 const toT=(s:string)=>s.trim().replace(/\w+/g,w=>w[0].toUpperCase()+w.slice(1).toLowerCase());
 const eCache=new Map<string,{productId:string;model:string;brand:string;imeiRequired:boolean;srnoRequired:boolean}|null>();
-const eanInFlight=new Set<string>(); // prevents double-trigger from onChange+onBlur
 // seq removed — per-row race safety handled inside handleEan via setRows guard
 const STATES=['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chandigarh','Chhattisgarh','Dadra & Nagar Haveli','Daman & Diu','Delhi','Goa','Gujarat','Haryana','Himachal Pradesh','Jammu & Kashmir','Jharkhand','Karnataka','Kerala','Ladakh','Lakshadweep','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Puducherry','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Other'];
 
@@ -114,9 +113,6 @@ export function StockIn(){
 
   const handleEan=useCallback(async(i:number,ean:string)=>{
     const v=ean.trim();if(!v)return;
-    const key=`${i}:${v}`;
-    if(eanInFlight.has(key))return; // already processing this row+EAN
-    eanInFlight.add(key);
     upd(i,{ean:v,status:'loading',errMsg:'',errField:''});
     let p=eCache.get(v);
     if(p===undefined){
@@ -162,23 +158,16 @@ export function StockIn(){
     });
     if(p){
       setRows(rs=>{
-        const cur=rs[i];
-        if(!cur?.productId)return rs; // race guard: product not set yet
         const nextRow=rs[i+1];
-        if(nextRow&&nextRow.status==='empty'&&!nextRow.ean.trim()){
-          // Blank row already exists below — just use it, no insert needed
-          return rs;
-        }
-        if(nextRow&&nextRow.ean.trim())return rs; // next row has content — don't insert
-        // No usable row below — add one
+        // Only insert if next row has content — reuse empty row if it exists
+        if(!nextRow||(!nextRow.ean.trim()&&nextRow.status==='empty'))return rs;
         const nr={id:Math.random().toString(36).slice(2,9),ean:'',productId:'',model:'',brand:'',imeiRequired:false,srnoRequired:false,qty:0,imei:'',srno:'',imeiType:'NIL',status:'empty' as const,errMsg:'',errField:'' as const};
         const next=[...rs];
-        if(i>=rs.length-1)next.push(nr);else next.splice(i+1,0,nr);
+        next.splice(i+1,0,nr);
         return next;
       });
       moveTo(i+1,'ean');
     }
-    eanInFlight.delete(key);
   },[upd,ins,moveTo,setDrawer,setDf]);
   useEffect(()=>{ERef.current=handleEan;},[handleEan]);
 
@@ -455,7 +444,6 @@ export function StockIn(){
                               let j=i+1;const cur=rows;while(j<cur.length&&(!cur[j].ean||cur[j].ean==='')){setTimeout(()=>ERef.current(j,v),80*(j-i));j++;}
                             }
                           }}
-                          onBlur={e=>{const v=e.target.value.trim();if(v&&row.status==='empty')handleEan(i,v);}}
                           onPaste={e=>{e.preventDefault();const raw=e.clipboardData.getData('text');const lines=raw.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);if(lines.length>1){// Multi-line EAN paste (Excel column) — fill consecutive rows
                             // First ensure we have enough rows
                             setRows(rs=>{const needed=i+lines.length;const cur=[...rs];while(cur.length<needed)cur.push(mk());return cur;});
@@ -561,7 +549,6 @@ export function StockIn(){
                       <div style={{fontSize:10,fontWeight:700,color:'#94a3b8',marginBottom:5,textTransform:'uppercase',letterSpacing:'.06em'}}>EAN / Barcode</div>
                       <input ref={R(i,'ean')} value={row.ean} inputMode="numeric" autoComplete="off"
                         onChange={e=>{const v=e.target.value;upd(i,{ean:v,status:'empty',errMsg:'',errField:''});if(v.length===8||v.length===12||v.length===13){setTimeout(()=>handleEan(i,v.trim()),80);}}}
-                        onBlur={e=>{const v=e.target.value.trim();if(v&&row.status==='empty')handleEan(i,v);}}
                         onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();handleEan(i,(e.target as HTMLInputElement).value);}}}
                         placeholder="Scan or type barcode..."
                         style={{width:'100%',height:52,fontSize:18,padding:'0 14px',border:'1.5px solid #d0d5dd',borderRadius:10,boxSizing:'border-box',outline:'none',WebkitAppearance:'none'}}
