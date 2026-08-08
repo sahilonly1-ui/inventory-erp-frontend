@@ -446,12 +446,7 @@ export function StockIn(){
                     {/* Product */}
                     <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',padding:'0 10px',color:row.model?'#0f172a':'#cbd5e1',fontWeight:row.model?500:400,overflow:'hidden'}}>
                       <span style={{display:'block',whiteSpace:'nowrap',overflow:'hidden',
-                        fontSize: !row.model ? 12
-                          : row.model.length <= 32 ? 13
-                          : row.model.length <= 38 ? 11
-                          : row.model.length <= 45 ? 10
-                          : row.model.length <= 52 ? 9
-                          : 8,
+                        fontSize: !row.model?12:row.model.length<=45?13:row.model.length<=50?12:row.model.length<=60?11:row.model.length<=70?10:9,
                       }}>
                         {row.model||'Auto-filled after EAN scan'}
                       </span>
@@ -601,7 +596,7 @@ export function StockIn(){
               :sm.map((s:any)=>(
               <div key={s.m} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 14px',fontSize:12}}>
                 <span style={{color:'#374151',overflow:'hidden',whiteSpace:'nowrap',flex:1,minWidth:0,
-                  fontSize:s.m.length<=28?11:s.m.length<=36?10:s.m.length<=44?9:8}}>{s.m}</span>
+                  fontSize:s.m.length<=35?11:s.m.length<=44?10:s.m.length<=54?9:8}}>{s.m}</span>
                 <span style={{fontWeight:700,color:'#16a34a',flexShrink:0,marginLeft:6}}>{s.q}</span>
               </div>
             ))}
