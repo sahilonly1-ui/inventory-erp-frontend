@@ -349,7 +349,7 @@ export function StockOut(){
                           onPaste={e=>{e.preventDefault();const raw=e.clipboardData.getData('text');const lines=raw.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);if(lines.length>1){lines.forEach((line,offset)=>{const ri=i+offset;if(ri<rows.length){upd(ri,{imei:line,errMsg:'',errField:''});setTimeout(()=>handleImei(ri,line),30+offset*80);}});}else if(lines[0]){upd(i,{imei:lines[0]});setTimeout(()=>handleImei(i,lines[0]),30);}}}
                           onFocus={()=>{setAr(i);setFc('imei');}}
                           placeholder="Scan IMEI (IN_STOCK only)…"
-                          style={CI({fontFamily:'monospace',fontSize:13,color:row.errField==='imei'?'#dc2626':'#0f172a'})}/>
+                          style={CI({fontSize:13,color:row.errField==='imei'?'#dc2626':'#0f172a'})}/>
                       </div>
                     </td>
                     {/* Sr. No. — any text */}
