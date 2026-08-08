@@ -122,7 +122,31 @@ export function StockIn(){
         const r=await api<{product:{id:string;model:string;brand:string;imeiRequired:boolean;srnoRequired:boolean;brandImeiRequired:boolean;brandSrnoRequired:boolean}}>(`/inventory/lookup?ean=${encodeURIComponent(v)}`);
         p={productId:r.product.id,model:r.product.model,brand:r.product.brand,imeiRequired:r.product.imeiRequired,srnoRequired:r.product.srnoRequired||false};
         eCache.set(v,p);
-      }catch{eCache.set(v,null);p=null;}
+      }catch{
+        // Don't cache failures immediately — could be a race condition or network blip
+        // Check if another row already resolved this EAN while we were waiting
+        const cached=eCache.get(v);
+        if(cached!==undefined){
+          // Another row resolved it — use that result
+          p=cached;
+        } else {
+          // Retry once with a short delay before giving up
+          await new Promise(r=>setTimeout(r,400));
+          const cached2=eCache.get(v);
+          if(cached2!==undefined){
+            p=cached2;
+          } else {
+            // One more try at the API
+            try{
+              const r2=await api<{product:{id:string;model:string;brand:string;imeiRequired:boolean;srnoRequired:boolean;brandImeiRequired:boolean;brandSrnoRequired:boolean}}>(`/inventory/lookup?ean=${encodeURIComponent(v)}`);
+              p={productId:r2.product.id,model:r2.product.model,brand:r2.product.brand,imeiRequired:r2.product.imeiRequired,srnoRequired:r2.product.srnoRequired||false};
+              eCache.set(v,p);
+            }catch{
+              eCache.set(v,null);p=null;
+            }
+          }
+        }
+      }
     }
     // Verify row still has this EAN (user may have cleared it during lookup)
     setRows(rs=>{
