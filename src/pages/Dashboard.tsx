@@ -122,13 +122,16 @@ export function Dashboard() {
             });
           }
         }else{
-          // One row with full quantity
-          rows.push({
-            id:uid(),ean:t.ean,productId:t.productId,model:t.model,brand:t.brand,
-            imeiRequired:t.imeiRequired,qty:Math.abs(t.quantity),imei:'',srno:'',imeiType:'NIL',
-            status:'saved',errMsg:'',errField:'',
-            _origTxnId:t.id,
-          });
+          // Expand into individual rows (qty=1 each) so user sees same view as original scan
+          const qty=Math.abs(t.quantity);
+          for(let q=0;q<qty;q++){
+            rows.push({
+              id:uid(),ean:t.ean,productId:t.productId,model:t.model,brand:t.brand,
+              imeiRequired:t.imeiRequired,srnoRequired:false,qty:1,imei:'',srno:'',imeiType:'NIL',
+              status:'saved',errMsg:'',errField:'',
+              _origTxnId:t.id,
+            });
+          }
         }
       }
       // Add one blank row at the end for new additions
