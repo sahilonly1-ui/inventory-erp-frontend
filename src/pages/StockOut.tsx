@@ -326,10 +326,10 @@ export function StockOut(){
                         {row.status==='loading'&&<div className="spinner" style={{width:13,height:13,margin:'0 6px',flexShrink:0}}/>}
                       </div>
                     </td>
-                    {/* Product Name */}
-                    <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',padding:'0 10px',color:row.model?'#0f172a':'#cbd5e1',fontWeight:row.model?500:400,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                      {row.model||'Auto-filled after EAN scan'}
-                    </td>
+                     {/* Product Name */}
+                     <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',padding:'2px 10px',color:row.model?'#0f172a':'#cbd5e1',fontWeight:row.model?500:400,overflow:'hidden',lineHeight:1.25}}>
+                       <span style={{display:'block',fontSize:row.model&&row.model.length>35?10:row.model&&row.model.length>25?11:12,wordBreak:'break-word'}}>{row.model||'Auto-filled after EAN scan'}</span>
+                     </td>
                     {/* Qty */}
                     <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',textAlign:'center',fontWeight:700,fontSize:14,color:row.qty>0?'#dc2626':'#cbd5e1'}}>{row.qty>0?row.qty:'—'}</td>
                     {/* IMEI — strict 15 digits, must be IN_STOCK */}
