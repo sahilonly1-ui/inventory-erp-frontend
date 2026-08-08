@@ -466,7 +466,7 @@ export function StockIn(){
                           }else if(lines[0]){upd(i,{imei:lines[0]});setTimeout(()=>handleImei(i,lines[0]),30);}}}
                           onFocus={()=>{setAr(i);setFc('imei');}}
                           placeholder="Scan IMEI (15 digits)…"
-                          style={CI({fontFamily:'monospace',fontSize:12,color:row.errField==='imei'?'#dc2626':'#0f172a'})}/>
+                          style={CI({fontFamily:'monospace',fontSize:13,color:row.errField==='imei'?'#dc2626':'#0f172a'})}/>
                       </div>
                     </td>
                     {/* Sr. No. — any text, no restriction */}
