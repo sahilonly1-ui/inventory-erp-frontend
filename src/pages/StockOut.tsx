@@ -81,7 +81,22 @@ export function StockOut(){
     if(p===undefined){
       try{const r=await api<{product:{id:string;model:string;brand:string;imeiRequired:boolean;srnoRequired:boolean}}>(`/inventory/lookup?ean=${encodeURIComponent(v)}`);
         p={id:r.product.id,model:r.product.model,brand:r.product.brand,imeiRequired:r.product.imeiRequired,srnoRequired:r.product.srnoRequired||false};pCache.set(v,p);
-      }catch{pCache.set(v,null);p=null;}
+      }catch{
+        const cached=pCache.get(v);
+        if(cached!==undefined){p=cached;}
+        else{
+          await new Promise(r=>setTimeout(r,400));
+          const cached2=pCache.get(v);
+          if(cached2!==undefined){p=cached2;}
+          else{
+            try{
+              const r2=await api<{product:{id:string;model:string;brand:string;imeiRequired:boolean;srnoRequired:boolean}}>(`/inventory/lookup?ean=${encodeURIComponent(v)}`);
+              p={id:r2.product.id,model:r2.product.model,brand:r2.product.brand,imeiRequired:r2.product.imeiRequired,srnoRequired:r2.product.srnoRequired||false};
+              pCache.set(v,p);
+            }catch{pCache.set(v,null);p=null;}
+          }
+        }
+      }
     }
     setRows(rs=>{
       if(rs[i]?.ean!==v)return rs;
