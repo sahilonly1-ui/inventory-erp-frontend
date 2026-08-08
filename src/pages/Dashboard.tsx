@@ -101,7 +101,7 @@ export function Dashboard() {
   // ── Edit: fetch full entry detail → write to StockIn draft → redirect ──────
   const openEditPanel=async(ids:string[], vendorLabel:string, sign:'+'|'-')=>{
     // Show loading state on the button (use a simple flag via loadingVendorKey per vendor)
-    setEditPanel(p=>({...p,open:false,loadingVendorKey:label}));
+    setEditPanel(p=>({...p,open:false,loadingVendorKey:vendorLabel}));
     try{
       const detail=await api<{transactions:EntryTxn[]}>(`/inventory/transactions/entry-detail?ids=${ids.join(',')}`);
       const txns=detail.transactions;
