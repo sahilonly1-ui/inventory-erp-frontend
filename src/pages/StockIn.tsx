@@ -444,11 +444,19 @@ export function StockIn(){
                       </div>
                     </td>
                     {/* Product */}
-                    <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',padding:'0 10px',color:row.model?'#0f172a':'#cbd5e1',fontWeight:row.model?500:400,overflow:'hidden',lineHeight:1.3}}>
-                      {row.model&&row.model.length>42
-                        ? <span style={{display:'block',fontSize:10,wordBreak:'break-word'}}>{row.model}</span>
-                        : <span style={{display:'block',fontSize:13,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{row.model||'Auto-filled after EAN scan'}</span>
-                      }
+                    <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',padding:'0 10px',color:row.model?'#0f172a':'#cbd5e1',fontWeight:row.model?500:400,overflow:'hidden'}}>
+                      <span style={{
+                        display:'block',
+                        whiteSpace:'nowrap',
+                        overflow:'hidden',
+                        fontSize: !row.model ? 12
+                          : row.model.length <= 36 ? 13
+                          : row.model.length <= 44 ? 11
+                          : row.model.length <= 54 ? 10
+                          : 9,
+                      }}>
+                        {row.model||'Auto-filled after EAN scan'}
+                      </span>
                     </td>
                     {/* Qty */}
                     <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',textAlign:'center',fontWeight:700,fontSize:14,color:row.qty>0?'#16a34a':'#cbd5e1'}}>{row.qty>0?row.qty:'—'}</td>
