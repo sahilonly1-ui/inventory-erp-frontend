@@ -123,29 +123,11 @@ export function StockIn(){
         p={productId:r.product.id,model:r.product.model,brand:r.product.brand,imeiRequired:r.product.imeiRequired,srnoRequired:r.product.srnoRequired||false};
         eCache.set(v,p);
       }catch{
-        // Don't cache failures immediately — could be a race condition or network blip
-        // Check if another row already resolved this EAN while we were waiting
+        // Wait briefly for concurrent row lookups to populate cache
+        await new Promise(res=>setTimeout(res,500));
         const cached=eCache.get(v);
-        if(cached!==undefined){
-          // Another row resolved it — use that result
-          p=cached;
-        } else {
-          // Retry once with a short delay before giving up
-          await new Promise(r=>setTimeout(r,400));
-          const cached2=eCache.get(v);
-          if(cached2!==undefined){
-            p=cached2;
-          } else {
-            // One more try at the API
-            try{
-              const r2=await api<{product:{id:string;model:string;brand:string;imeiRequired:boolean;srnoRequired:boolean;brandImeiRequired:boolean;brandSrnoRequired:boolean}}>(`/inventory/lookup?ean=${encodeURIComponent(v)}`);
-              p={productId:r2.product.id,model:r2.product.model,brand:r2.product.brand,imeiRequired:r2.product.imeiRequired,srnoRequired:r2.product.srnoRequired||false};
-              eCache.set(v,p);
-            }catch{
-              eCache.set(v,null);p=null;
-            }
-          }
-        }
+        if(cached!==undefined){p=cached;}
+        else{eCache.set(v,null);p=null;}
       }
     }
     // Verify row still has this EAN (user may have cleared it during lookup)
@@ -164,18 +146,20 @@ export function StockIn(){
       return rs.map((r,x)=>x===i?{...r,...p!,srnoRequired:needsSrno,status:(needsImei||needsSrno)?'found':'saved',qty:1}:r);
     });
     if(p){
-      // Only insert a new blank row if the next slot is truly empty (not pre-filled by bulk paste)
       setRows(rs=>{
+        const cur=rs[i];
+        if(!cur?.productId)return rs; // race guard: product not set yet
         const nextRow=rs[i+1];
-        const nextHasEan=nextRow&&nextRow.ean.trim()!=='';
-        if(!nextHasEan){
-          // No row below or it's empty — insert one
-          const nr={id:Math.random().toString(36).slice(2,9),...{ean:'',productId:'',model:'',brand:'',imeiRequired:false,srnoRequired:false,qty:0,imei:'',srno:'',imeiType:'NIL',status:'empty' as const,errMsg:'',errField:'' as const}};
-          const next=[...rs];
-          if(i>=rs.length-1)next.push(nr);else next.splice(i+1,0,nr);
-          return next;
+        if(nextRow&&nextRow.status==='empty'&&!nextRow.ean.trim()){
+          // Blank row already exists below — just use it, no insert needed
+          return rs;
         }
-        return rs; // next row already has EAN — don't insert
+        if(nextRow&&nextRow.ean.trim())return rs; // next row has content — don't insert
+        // No usable row below — add one
+        const nr={id:Math.random().toString(36).slice(2,9),ean:'',productId:'',model:'',brand:'',imeiRequired:false,srnoRequired:false,qty:0,imei:'',srno:'',imeiType:'NIL',status:'empty' as const,errMsg:'',errField:'' as const};
+        const next=[...rs];
+        if(i>=rs.length-1)next.push(nr);else next.splice(i+1,0,nr);
+        return next;
       });
       moveTo(i+1,'ean');
     }
