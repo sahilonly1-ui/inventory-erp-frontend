@@ -159,11 +159,12 @@ export function StockIn(){
     if(p){
       setRows(rs=>{
         const nextRow=rs[i+1];
-        // Only insert if next row has content — reuse empty row if it exists
-        if(!nextRow||(!nextRow.ean.trim()&&nextRow.status==='empty'))return rs;
+        // If next row is already empty → reuse it (just moveTo)
+        if(nextRow&&!nextRow.ean.trim()&&nextRow.status==='empty')return rs;
+        // Next row has content OR doesn't exist → add a blank row
         const nr={id:Math.random().toString(36).slice(2,9),ean:'',productId:'',model:'',brand:'',imeiRequired:false,srnoRequired:false,qty:0,imei:'',srno:'',imeiType:'NIL',status:'empty' as const,errMsg:'',errField:'' as const};
         const next=[...rs];
-        next.splice(i+1,0,nr);
+        if(i>=rs.length-1)next.push(nr);else next.splice(i+1,0,nr);
         return next;
       });
       moveTo(i+1,'ean');
