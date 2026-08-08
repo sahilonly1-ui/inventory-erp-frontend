@@ -328,7 +328,7 @@ export function StockOut(){
                     </td>
                      {/* Product Name */}
                      <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',padding:'2px 10px',color:row.model?'#0f172a':'#cbd5e1',fontWeight:row.model?500:400,overflow:'hidden',lineHeight:1.25}}>
-                     <span style={{display:'block',fontSize:row.model&&row.model.length>42?10:13,whiteSpace:row.model&&row.model.length>42?'normal':'nowrap',overflow:'hidden',textOverflow:row.model&&row.model.length>42?'clip':'ellipsis',wordBreak:row.model&&row.model.length>42?'break-word':'normal'}}>{row.model||'Auto-filled after EAN scan'}</span>
+                     <span style={{display:'block',whiteSpace:'nowrap',overflow:'hidden',fontSize:!row.model?12:row.model.length<=36?13:row.model.length<=44?11:row.model.length<=54?10:9}}>{row.model||'Auto-filled after EAN scan'}</span>
                      </td>
                     {/* Qty */}
                     <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',textAlign:'center',fontWeight:700,fontSize:14,color:row.qty>0?'#dc2626':'#cbd5e1'}}>{row.qty>0?row.qty:'—'}</td>
