@@ -71,7 +71,20 @@ export function StockOut(){
     setTimeout(go,20);
   },[]);
   const upd=useCallback((i:number,p:Partial<Row>)=>setRows(rs=>rs.map((r,x)=>x===i?{...r,...p}:r)),[]);
-  const ins=useCallback((i:number,pre:Partial<Row>={})=>{const nr={...mk(),...pre};setRows(rs=>{const n=[...rs];if(i>=rs.length-1)n.push(nr);else n.splice(i+1,0,nr);return n;});return i+1;},[]);
+  const ins=useCallback((i:number,pre:Partial<Row>={})=>{
+    setRows(rs=>{
+      const nextRow=rs[i+1];
+      // Reuse existing empty row — don't insert duplicate blank rows
+      if(!pre||Object.keys(pre).length===0){
+        if(nextRow&&!nextRow.ean.trim()&&nextRow.status==='empty')return rs;
+      }
+      const nr={...mk(),...pre};
+      const n=[...rs];
+      if(i>=rs.length-1)n.push(nr);else n.splice(i+1,0,nr);
+      return n;
+    });
+    return i+1;
+  },[]);
 
   // ── EAN scan — same as StockIn: EAN→EAN→EAN flow ─────────────────────────
   const handleEan=useCallback(async(i:number,ean:string)=>{
@@ -333,7 +346,6 @@ export function StockOut(){
                       <div style={{height:38,outline:eOL('ean'),display:'flex',alignItems:'center'}}>
                         <input ref={R(i,'ean')} value={row.ean}
                           onChange={e=>{const v=e.target.value;upd(i,{ean:v,status:'empty',errMsg:'',errField:''});if(v.length===8||v.length===12||v.length===13){setTimeout(()=>ERef.current(i,v.trim()),80);}}}
-                          onBlur={e=>{const v=e.target.value.trim();if(v&&(!rows[i]?.productId||rows[i]?.status==='empty'))ERef.current(i,v);}}
                           onKeyDown={e=>{if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();handleEan(i,(e.target as HTMLInputElement).value);return;}if((e.ctrlKey||e.metaKey)&&e.key==='d'){e.preventDefault();const v=row.ean.trim();if(!v)return;setRows(rs=>{const next=[...rs];let j=i+1;while(j<next.length&&!next[j].ean){next[j]={...next[j],ean:v,status:'loading',errMsg:'',errField:''};j++;}if(j===i+1)next.push({...mk(),ean:v,status:'loading',errMsg:'',errField:''});return next;});let j=i+1;const cur=rows;while(j<cur.length&&(!cur[j].ean||cur[j].ean==='')){setTimeout(()=>ERef.current(j,v),80*(j-i));j++;}}}}
                           onPaste={e=>{e.preventDefault();const raw=e.clipboardData.getData('text');const lines=raw.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);if(lines.length>1){setRows(rs=>{const needed=i+lines.length;const cur=[...rs];while(cur.length<needed)cur.push(mk());return cur;});lines.forEach((line,offset)=>{setTimeout(()=>{const ri=i+offset;setRows(rs=>rs.map((r,x)=>x===ri?{...r,ean:line,status:'loading',errMsg:'',errField:''}:r));ERef.current(ri,line);},20*offset);});}else if(lines[0]){upd(i,{ean:lines[0],status:'loading',errMsg:'',errField:''});setTimeout(()=>handleEan(i,lines[0]),80);}}}
                           onFocus={()=>{setAr(i);setFc('ean');}}
