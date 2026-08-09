@@ -88,9 +88,12 @@ export function OpeningStock() {
 
   const ins = useCallback((i: number) => {
     setRows(rs => {
-      const next = [...rs];
       const nextRow = rs[i + 1];
-      if (!nextRow || nextRow.ean.trim() !== '') { next.splice(i + 1, 0, mk()); }
+      // If next row is already empty — reuse it
+      if (nextRow && !nextRow.ean.trim() && nextRow.status === 'empty') return rs;
+      // Next row has content OR doesn't exist → add blank row
+      const next = [...rs];
+      if (i >= rs.length - 1) next.push(mk()); else next.splice(i + 1, 0, mk());
       return next;
     });
     return i + 1;
@@ -108,7 +111,13 @@ export function OpeningStock() {
         p = { productId: r.product.id, model: r.product.model, brand: r.product.brand,
               imeiRequired: r.product.imeiRequired, srnoRequired: r.product.srnoRequired || false };
         eCache.current.set(v, p);
-      } catch { eCache.current.set(v, null); p = null; }
+      } catch {
+        // Don't cache failures — next scan should retry
+        await new Promise(res => setTimeout(res, 500));
+        const cached = eCache.current.get(v);
+        if (cached !== undefined) { p = cached; }
+        else { p = null; }
+      }
     }
     setRows(rs => {
       if (rs[i]?.ean !== v) return rs;
@@ -118,7 +127,17 @@ export function OpeningStock() {
       }
       return rs.map((r, x) => x === i ? { ...r, ...p!, status: p!.imeiRequired ? 'found' : 'saved', qty: p!.imeiRequired ? 1 : r.qty } : r);
     });
-    if (p) { setTimeout(() => moveTo(i, p!.imeiRequired ? 'imei' : 'cost'), 60); }
+    if (p) {
+      // Insert blank row for next scan (same as StockIn)
+      setRows(rs => {
+        const nextRow = rs[i + 1];
+        if (nextRow && !nextRow.ean.trim() && nextRow.status === 'empty') return rs;
+        const next = [...rs];
+        if (i >= rs.length - 1) next.push(mk()); else next.splice(i + 1, 0, mk());
+        return next;
+      });
+      setTimeout(() => moveTo(i, p!.imeiRequired ? 'imei' : 'cost'), 60);
+    }
   }, [upd, moveTo]);
 
   useEffect(() => { ERef.current = handleEan; }, [handleEan]);
@@ -265,7 +284,6 @@ export function OpeningStock() {
                       <td style={{ borderBottom: '1px solid #e2e8f0', borderRight: '1px solid #e2e8f0', padding: 0 }}>
                         <input ref={R(i, 'ean')} value={row.ean} inputMode="numeric"
                           onChange={e => { const v = e.target.value; upd(i, { ean: v, status: 'empty', errMsg: '', errField: '' }); if (v.length === 8 || v.length === 12 || v.length === 13) setTimeout(() => handleEan(i, v.trim()), 80); }}
-                          onBlur={e => { const v = e.target.value.trim(); if (v && row.status === 'empty') handleEan(i, v); }}
                           onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); handleEan(i, (e.target as HTMLInputElement).value); } }}
                           onPaste={e => { e.preventDefault(); const raw = e.clipboardData.getData('text'); const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean); if (lines.length > 1) { setRows(rs => { const needed = i + lines.length; const cur = [...rs]; while (cur.length < needed) cur.push(mk()); return cur; }); lines.forEach((line, offset) => { setTimeout(() => { const ri = i + offset; setRows(rs => rs.map((r, x) => x === ri ? { ...r, ean: line, status: 'loading', errMsg: '', errField: '' } : r)); ERef.current(ri, line); }, 20 * offset); }); } else if (lines[0]) { upd(i, { ean: lines[0] }); setTimeout(() => handleEan(i, lines[0]), 30); } }}
                           onFocus={() => setAr(i)}
@@ -275,7 +293,11 @@ export function OpeningStock() {
                       <td style={{ borderBottom: '1px solid #e2e8f0', borderRight: '1px solid #e2e8f0', padding: '0 10px', overflow: 'hidden' }}>
                         {row.status === 'loading' && <span style={{ fontSize: 11, color: '#2563eb' }}>Looking up…</span>}
                         {row.status === 'not_found' && <span style={{ fontSize: 11, color: '#dc2626' }}>✕ Not found in Product Master</span>}
-                        {row.model && <span style={{ fontSize: 12, fontWeight: 600, color: '#0f172a' }}>{row.model}</span>}
+                        {row.model && (
+                          <div style={{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical' as any,overflow:'hidden',fontSize:12,fontWeight:600,color:'#0f172a',lineHeight:1.35,wordBreak:'break-word'}}>
+                            {row.model}
+                          </div>
+                        )}
                         {!row.model && row.status === 'empty' && <span style={{ fontSize: 11, color: '#cbd5e1' }}>Auto-filled after EAN scan</span>}
                         {row.errMsg && !row.model && <span style={{ fontSize: 11, color: '#dc2626' }}>{row.errMsg}</span>}
                       </td>
@@ -294,7 +316,7 @@ export function OpeningStock() {
                         {row.productId ? (
                           <input ref={R(i, 'cost')} type="number" min={0} value={row.cost} placeholder="₹0"
                             onChange={e => upd(i, { cost: e.target.value })}
-                            onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); if (row.imeiRequired) moveTo(i, 'imei'); else { if (row.status !== 'saved') upd(i, { status: 'saved' }); const ni = ins(i); moveTo(ni, 'ean'); } } }}
+                            onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); if (row.imeiRequired) { moveTo(i, 'imei'); } else { if (row.status !== 'saved') upd(i, { status: 'saved' }); moveTo(i + 1, 'ean'); } } }}
                             onFocus={() => setAr(i)}
                             style={CI({ fontSize: 12, color: '#374151' })} />
                         ) : <span style={{ fontSize: 11, color: '#e2e8f0', padding: '0 10px' }}>—</span>}
