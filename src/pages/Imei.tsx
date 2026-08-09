@@ -27,66 +27,146 @@ const TYPE_META: Record<string,{label:string;bg:string;color:string}> = {
   DEMO:        {label:'Demo',      bg:'#fef9c3',color:'#854d0e'},
   SECOND_IMEI: {label:'2nd IMEI', bg:'#ede9fe',color:'#6d28d9'},
 };
-const fmt = (s:string) => new Date(s).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'});
+const fmt     = (s:string) => new Date(s).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+const fmtTime = (s:string) => new Date(s).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+
+// ── Filter Pill ────────────────────────────────────────────────────────────────
+function FilterPill({
+  label, value, options, onChange, icon,
+}:{
+  label:string;
+  value:string;
+  options:[string,string][];
+  onChange:(v:string)=>void;
+  icon:React.ReactNode;
+}){
+  const [open,setOpen]=useState(false);
+  const ref=useRef<HTMLDivElement>(null);
+  useEffect(()=>{
+    const fn=(e:MouseEvent)=>{if(ref.current&&!ref.current.contains(e.target as Node))setOpen(false);};
+    document.addEventListener('mousedown',fn);
+    return()=>document.removeEventListener('mousedown',fn);
+  },[]);
+
+  const active = value!=='';
+  const displayLabel = value ? options.find(([v])=>v===value)?.[1] || label : label;
+
+  return(
+    <div ref={ref} style={{position:'relative'}}>
+      <button onClick={()=>setOpen(o=>!o)} style={{
+        display:'flex',alignItems:'center',gap:6,
+        height:34,padding:'0 12px',
+        border:`1.5px solid ${active?'#2563eb':'#e2e8f0'}`,
+        borderRadius:20,
+        background:active?'#eff6ff':'#fff',
+        color:active?'#1d4ed8':'#64748b',
+        fontSize:12,fontWeight:active?700:500,
+        cursor:'pointer',whiteSpace:'nowrap',
+        transition:'all .15s',
+      }}>
+        <span style={{color:active?'#2563eb':'#94a3b8',display:'flex',alignItems:'center'}}>{icon}</span>
+        <span>{displayLabel}</span>
+        {active && (
+          <span onClick={e=>{e.stopPropagation();onChange('');}} style={{
+            marginLeft:2,width:14,height:14,borderRadius:'50%',
+            background:'#bfdbfe',color:'#1d4ed8',
+            display:'flex',alignItems:'center',justifyContent:'center',
+            fontSize:9,fontWeight:800,lineHeight:1,
+          }}>✕</span>
+        )}
+        {!active && <span style={{fontSize:9,color:'#94a3b8',marginLeft:2}}>▼</span>}
+      </button>
+      {open && (
+        <div style={{
+          position:'absolute',top:'calc(100% + 6px)',left:0,zIndex:300,
+          background:'#fff',border:'1px solid #e2e8f0',borderRadius:10,
+          boxShadow:'0 8px 24px rgba(0,0,0,.1)',minWidth:170,overflow:'hidden',
+        }}>
+          {options.map(([v,l])=>(
+            <button key={v} onClick={()=>{onChange(v);setOpen(false);}} style={{
+              display:'flex',alignItems:'center',gap:8,
+              width:'100%',padding:'9px 14px',border:'none',textAlign:'left',
+              background:value===v?'#eff6ff':'#fff',
+              color:value===v?'#1d4ed8':'#374151',
+              fontSize:12,fontWeight:value===v?700:400,cursor:'pointer',
+              borderBottom:'1px solid #f8fafc',
+            }}>
+              {value===v && <span style={{color:'#2563eb',fontSize:10}}>✓</span>}
+              {value!==v && <span style={{width:10,display:'inline-block'}}/>}
+              {l}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function Imei() {
-  const [data,setData]=useState<Page|null>(null);
-  const [loading,setLoading]=useState(true);
-  const [search,setSearch]=useState('');
-  const [status,setStatus]=useState('');
-  const [imeiType,setImeiType]=useState('');
-  const [swiped,setSwiped]=useState('');
-  const [page,setPage]=useState(1);
-  const [exporting,setExporting]=useState(false);
-  const [updatingId,setUpdatingId]=useState<string|null>(null);
-  const [expandedId,setExpandedId]=useState<string|null>(null);
-  const debRef=useRef<ReturnType<typeof setTimeout>>();
+  const [data,setData]         = useState<Page|null>(null);
+  const [loading,setLoading]   = useState(true);
+  const [search,setSearch]     = useState('');
+  const [status,setStatus]     = useState('');
+  const [imeiType,setImeiType] = useState('');
+  const [swiped,setSwiped]     = useState('');
+  const [activated,setActivated] = useState('');
+  const [page,setPage]         = useState(1);
+  const [exporting,setExporting] = useState(false);
+  const [updatingId,setUpdatingId] = useState<string|null>(null);
+  const [expandedId,setExpandedId] = useState<string|null>(null);
+  const debRef = useRef<ReturnType<typeof setTimeout>>();
 
-  const load=useCallback(async(q=search,s=status,t=imeiType,sw=swiped,pg=page)=>{
+  const load = useCallback(async(
+    q=search, s=status, t=imeiType, sw=swiped, act=activated, pg=page
+  )=>{
     setLoading(true);
     try{
       const params=new URLSearchParams({page:String(pg),limit:'50'});
-      if(q)params.set('search',q);
-      if(s)params.set('status',s);
-      if(t)params.set('imeiType',t);
-      if(sw)params.set('swiped',sw);
+      if(q)   params.set('search',q);
+      if(s)   params.set('status',s);
+      if(t)   params.set('imeiType',t);
+      if(sw)  params.set('swiped',sw);
+      if(act) params.set('activated',act);
       const d=await api<Page>(`/imei?${params}`);
       setData(d);
     }catch{}
     finally{setLoading(false);}
-  },[search,status,imeiType,swiped,page]);
+  },[search,status,imeiType,swiped,activated,page]);
 
   useEffect(()=>{load();},[load]);
 
   const onSearch=(v:string)=>{
     setSearch(v);setPage(1);
     clearTimeout(debRef.current);
-    debRef.current=setTimeout(()=>load(v,status,imeiType,swiped,1),350);
+    debRef.current=setTimeout(()=>load(v,status,imeiType,swiped,activated,1),350);
   };
 
-  const setFilter=(key:'status'|'imeiType'|'swiped',val:string)=>{
-    const ns=key==='status'?val:status;
-    const nt=key==='imeiType'?val:imeiType;
-    const nsw=key==='swiped'?val:swiped;
-    if(key==='status')setStatus(val);
-    if(key==='imeiType')setImeiType(val);
-    if(key==='swiped')setSwiped(val);
+  const onFilterChange=(key:'status'|'imeiType'|'swiped'|'activated',val:string)=>{
+    const ns  = key==='status'    ? val : status;
+    const nt  = key==='imeiType'  ? val : imeiType;
+    const nsw = key==='swiped'    ? val : swiped;
+    const nact= key==='activated' ? val : activated;
+    if(key==='status')    setStatus(val);
+    if(key==='imeiType')  setImeiType(val);
+    if(key==='swiped')    setSwiped(val);
+    if(key==='activated') setActivated(val);
     setPage(1);
-    load(search,ns,nt,nsw,1);
+    load(search,ns,nt,nsw,nact,1);
   };
 
-  const toggleSwiped=async(id:string,imei1:string,cur:boolean)=>{
+  const clearAll=()=>{
+    setSearch('');setStatus('');setImeiType('');setSwiped('');setActivated('');setPage(1);
+    load('','','','','',1);
+  };
+
+  const toggleSwiped=async(id:string,cur:boolean)=>{
     setUpdatingId(id);
     const newSwiped=!cur;
-    // Optimistic UI update immediately
     setData(d=>d?{...d,items:d.items.map(i=>i.id===id?{...i,swiped:newSwiped,swipedAt:newSwiped?new Date().toISOString():undefined}:i)}:d);
     try{
-      // Use dedicated /swiped endpoint (by DB id) — avoids early-return bug in /status
       const res=await api<{id:string;swiped:boolean;swipedAt:string|null}>(`/imei/${id}/swiped`,{method:'PATCH',body:JSON.stringify({swiped:newSwiped})});
-      // Sync actual swipedAt from server
       setData(d=>d?{...d,items:d.items.map(i=>i.id===id?{...i,swiped:res.swiped,swipedAt:res.swipedAt??undefined}:i)}:d);
     }catch(e:any){
-      // Revert optimistic update on failure
       setData(d=>d?{...d,items:d.items.map(i=>i.id===id?{...i,swiped:cur,swipedAt:cur?i.swipedAt:undefined}:i)}:d);
       alert(e.message);
     }
@@ -123,185 +203,275 @@ export function Imei() {
       const resp=await fetch(`${base}/reports/imei_filtered`,{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':`Bearer ${getAccessToken()}`},
-        body:JSON.stringify({search:search||undefined,imeiType:imeiType||undefined,swiped:swiped||undefined}),
+        body:JSON.stringify({search:search||undefined,status:status||undefined,imeiType:imeiType||undefined,swiped:swiped||undefined,activated:activated||undefined}),
       });
       if(!resp.ok)throw new Error('Export failed');
       const blob=await resp.blob();
       const url=URL.createObjectURL(blob);
       const a=document.createElement('a');a.href=url;
-      a.download=`IMEI_Export_${search?search.replace(/\s+/g,'_')+'_':''}${new Date().toISOString().slice(0,10)}.xlsx`;
+      a.download=`IMEI_Export_${new Date().toISOString().slice(0,10)}.xlsx`;
       document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
     }catch(e:any){alert(e.message);}
     finally{setExporting(false);}
   };
 
-  const items=data?.items||[];
-  const total=data?.total||0;
+  const items = data?.items||[];
+  const total = data?.total||0;
+  const hasFilters = !!(search||status||imeiType||swiped||activated);
 
-  const activeFilters=[
-    status&&`Status: ${status.replace(/_/g,' ')}`,
-    imeiType&&`Type: ${TYPE_META[imeiType]?.label||imeiType}`,
-    swiped&&(swiped==='true'?'Swiped':'Unswiped'),
-  ].filter(Boolean);
+  // Icons
+  const IcoStatus    = <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>;
+  const IcoType      = <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>;
+  const IcoSwiped    = <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>;
+  const IcoActivated = <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>;
+
+  const thS:React.CSSProperties = {
+    padding:'10px 14px',textAlign:'left',fontSize:10,fontWeight:700,
+    color:'#64748b',textTransform:'uppercase',letterSpacing:'.07em',
+    borderBottom:'2px solid #e2e8f0',whiteSpace:'nowrap',background:'#fff',
+    position:'sticky',top:0,zIndex:1,
+  };
 
   return (
-    <div style={{display:'flex',flexDirection:'column',height:'100vh',background:'#f8fafc'}}>
-      {/* Header */}
-      <div style={{padding:'14px 20px',borderBottom:'1px solid #e2e8f0',background:'#fff',flexShrink:0}}>
-        <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:12}}>
+    <div style={{display:'flex',flexDirection:'column',height:'100vh',background:'#f8fafc',overflow:'hidden'}}>
+
+      {/* ── Header ── */}
+      <div style={{padding:'12px 20px',borderBottom:'1px solid #e2e8f0',background:'#fff',flexShrink:0}}>
+
+        {/* Title row */}
+        <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:10}}>
           <div>
-            <div style={{fontSize:18,fontWeight:800,color:'#0f172a',letterSpacing:'-.3px'}}>IMEI Tracker</div>
-            <div style={{fontSize:12,color:'#94a3b8',marginTop:1}}>
-              {loading?'Loading…':`${total.toLocaleString('en-IN')} records`}
-              {activeFilters.length>0&&<span style={{marginLeft:6,color:'#2563eb'}}>· {activeFilters.join(' · ')}</span>}
+            <div style={{fontSize:17,fontWeight:800,color:'#0f172a',letterSpacing:'-.3px'}}>IMEI Tracker</div>
+            <div style={{fontSize:11,color:'#94a3b8',marginTop:1}}>
+              {loading ? 'Loading…' : `${total.toLocaleString('en-IN')} records`}
+              {hasFilters && <span style={{marginLeft:6,color:'#2563eb',fontWeight:600}}>· filtered</span>}
             </div>
           </div>
           <div style={{flex:1}}/>
-          <button onClick={()=>{setSearch('');setStatus('');setImeiType('');setSwiped('');setPage(1);load('','','','',1);}}
-            style={{height:32,padding:'0 12px',border:'1px solid #e2e8f0',borderRadius:7,background:'#fff',fontSize:12,color:'#64748b',cursor:'pointer'}}>
-            Clear filters
-          </button>
-          <button onClick={exportXlsx} disabled={exporting}
-            style={{height:32,padding:'0 14px',border:'1px solid #d0d5dd',borderRadius:7,background:'#fff',fontSize:12,fontWeight:600,color:'#374151',cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <button onClick={exportXlsx} disabled={exporting} style={{
+            height:32,padding:'0 14px',border:'1px solid #d0d5dd',borderRadius:7,
+            background:'#fff',fontSize:12,fontWeight:600,color:'#374151',
+            cursor:exporting?'not-allowed':'pointer',display:'flex',alignItems:'center',gap:6,
+          }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
             {exporting?'Exporting…':'Download XLSX'}
           </button>
         </div>
 
-        {/* Search + filters */}
-        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-          <div style={{position:'relative',flex:'1 1 280px'}}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" style={{position:'absolute',left:10,top:'50%',transform:'translateY(-50%)',pointerEvents:'none'}}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-            <input value={search} onChange={e=>onSearch(e.target.value)}
-              placeholder="Search IMEI, product name (e.g. Moto 60 Pro)…"
-              style={{width:'100%',height:36,paddingLeft:34,paddingRight:10,border:'1.5px solid #e2e8f0',borderRadius:8,fontSize:13,outline:'none',boxSizing:'border-box',background:'#fff'}}
-              onFocus={e=>(e.target as HTMLElement).style.borderColor='#2563eb'} onBlur={e=>(e.target as HTMLElement).style.borderColor='#e2e8f0'} />
-          </div>
-          {[
-            {val:status, set:(v:string)=>setFilter('status',v), label:'Status',
-              opts:[['','All Status'],['IN_STOCK','In Stock'],['SOLD','Sold'],['RETURNED','Returned'],['OPEN_BOX','Open Box'],['SERVICE','Service'],['DAMAGED','Damaged'],['LOST','Lost']]},
-            {val:imeiType, set:(v:string)=>setFilter('imeiType',v), label:'Type',
-              opts:[['','All Types'],['NIL','Standard'],['OPEN_BOX','Open Box'],['DEMO','Demo'],['SECOND_IMEI','2nd IMEI']]},
-            {val:swiped, set:(v:string)=>setFilter('swiped',v), label:'Swiped',
-              opts:[['','All'],['true','Swiped ✓'],['false','Unswiped ○']]},
-          ].map((f,fi)=>(
-            <select key={fi} value={f.val} onChange={e=>f.set(e.target.value)}
-              style={{height:36,padding:'0 28px 0 10px',border:`1.5px solid ${f.val?'#2563eb':'#e2e8f0'}`,borderRadius:8,fontSize:12,background:'#fff',outline:'none',cursor:'pointer',color:f.val?'#2563eb':'#374151',minWidth:110,fontWeight:f.val?600:400}}>
-              {f.opts.map(([v,l])=><option key={v as string} value={v as string}>{l as string}</option>)}
-            </select>
-          ))}
+        {/* Search bar */}
+        <div style={{position:'relative',marginBottom:10}}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2"
+            style={{position:'absolute',left:11,top:'50%',transform:'translateY(-50%)',pointerEvents:'none'}}>
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input value={search} onChange={e=>onSearch(e.target.value)}
+            placeholder="Search IMEI, product name, brand…"
+            style={{
+              width:'100%',height:36,paddingLeft:34,paddingRight:search?32:10,
+              border:'1.5px solid #e2e8f0',borderRadius:8,fontSize:13,outline:'none',
+              background:'#fff',boxSizing:'border-box',color:'#0f172a',
+            }}
+            onFocus={e=>(e.target as HTMLInputElement).style.borderColor='#2563eb'}
+            onBlur={e=>(e.target as HTMLInputElement).style.borderColor='#e2e8f0'}
+          />
+          {search && (
+            <button onClick={()=>onSearch('')} style={{
+              position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',
+              width:18,height:18,borderRadius:'50%',border:'none',background:'#e2e8f0',
+              color:'#64748b',fontSize:11,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',
+            }}>✕</button>
+          )}
+        </div>
+
+        {/* Filter pills row */}
+        <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+          <FilterPill
+            label="Status" value={status} icon={IcoStatus}
+            onChange={v=>onFilterChange('status',v)}
+            options={[
+              ['','All Status'],
+              ['IN_STOCK','● In Stock'],
+              ['SOLD','● Sold'],
+              ['RETURNED','● Returned'],
+              ['OPEN_BOX','● Open Box'],
+              ['SERVICE','● Service'],
+              ['DAMAGED','● Damaged'],
+              ['LOST','● Lost'],
+            ]}
+          />
+          <FilterPill
+            label="IMEI Type" value={imeiType} icon={IcoType}
+            onChange={v=>onFilterChange('imeiType',v)}
+            options={[
+              ['','All Types'],
+              ['NIL','Standard'],
+              ['OPEN_BOX','Open Box'],
+              ['DEMO','Demo'],
+              ['SECOND_IMEI','2nd IMEI'],
+            ]}
+          />
+          <FilterPill
+            label="Swiped" value={swiped} icon={IcoSwiped}
+            onChange={v=>onFilterChange('swiped',v)}
+            options={[
+              ['','All'],
+              ['true','Swiped ✓'],
+              ['false','Not Swiped'],
+            ]}
+          />
+          <FilterPill
+            label="Activated" value={activated} icon={IcoActivated}
+            onChange={v=>onFilterChange('activated',v)}
+            options={[
+              ['','All'],
+              ['true','Activated ✓'],
+              ['false','Not Activated'],
+            ]}
+          />
+          {hasFilters && (
+            <button onClick={clearAll} style={{
+              height:34,padding:'0 14px',border:'1.5px solid #fca5a5',
+              borderRadius:20,background:'#fef2f2',color:'#dc2626',
+              fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:5,
+            }}>
+              <span>✕</span> Clear all
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Table */}
+      {/* ── Table ── */}
       <div style={{flex:1,overflow:'auto'}}>
         {loading ? (
-          <div style={{display:'flex',justifyContent:'center',padding:'48px'}}><div className="spinner" style={{width:28,height:28}}/></div>
-        ) : items.length === 0 ? (
-          <div style={{textAlign:'center',padding:'64px 20px',color:'#94a3b8'}}>
-            <div style={{fontSize:32,marginBottom:12}}>📱</div>
-            <div style={{fontSize:15,fontWeight:700,color:'#374151',marginBottom:6}}>
-              {search||status||imeiType||swiped?'No matching IMEI records':'No IMEI records yet'}
-            </div>
-            <div style={{fontSize:13}}>
-              {search?`Try fewer keywords — partial matches work (e.g. "Edge 60")`:
-               'IMEI records appear automatically when stock is received'}
-            </div>
+          <div style={{display:'flex',justifyContent:'center',padding:'64px'}}>
+            <div className="spinner" style={{width:28,height:28}}/>
+          </div>
+        ) : items.length===0 ? (
+          <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'60%',gap:12,color:'#94a3b8'}}>
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" strokeWidth="1.5">
+              <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+            </svg>
+            <div style={{fontSize:14,fontWeight:600}}>No records found</div>
+            {hasFilters && <button onClick={clearAll} style={{fontSize:12,color:'#2563eb',background:'none',border:'none',cursor:'pointer',textDecoration:'underline'}}>Clear filters</button>}
           </div>
         ) : (
-          <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,minWidth:1100}}>
             <thead>
-              <tr style={{background:'#f8fafc',position:'sticky',top:0,zIndex:5,boxShadow:'0 1px 0 #e2e8f0'}}>
-                {['IMEI 1 / IMEI 2','Product','Status','Swiped','Swiped On','Activated','Activated On','Supplier','Stock In','Last Updated','Change Status'].map(h=>(
-                  <th key={h} style={{padding:'0 12px',height:36,textAlign:'left',fontWeight:700,color:'#64748b',fontSize:10,textTransform:'uppercase',letterSpacing:'.07em',whiteSpace:'nowrap'}}>{h}</th>
-                ))}
+              <tr>
+                <th style={thS}>IMEI 1 / IMEI 2</th>
+                <th style={thS}>Product</th>
+                <th style={thS}>Status</th>
+                <th style={{...thS,textAlign:'center'}}>Swiped</th>
+                <th style={thS}>Swiped On</th>
+                <th style={{...thS,textAlign:'center',color:'#7c3aed'}}>Activated</th>
+                <th style={{...thS,color:'#7c3aed'}}>Activated On</th>
+                <th style={thS}>Supplier</th>
+                <th style={thS}>Stock In</th>
+                <th style={thS}>Last Updated</th>
+                <th style={thS}>Change Status</th>
               </tr>
             </thead>
             <tbody>
-              {items.map((item,i)=>{
-                const sm=STATUS_META[item.status]||{bg:'#f1f5f9',color:'#475569',dot:'#64748b'};
-                const tm=TYPE_META[item.imeiType]||TYPE_META.NIL;
-                const isExp=expandedId===item.id;
-                return (
-                  <tr key={item.id}
-                    style={{borderBottom:'1px solid #f1f5f9',background:i%2===0?'#fff':'#fafafa',cursor:'pointer',transition:'background .08s'}}
-                    onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background='#f0f9ff'}
-                    onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background=i%2===0?'#fff':'#fafafa'}
-                    onClick={()=>setExpandedId(isExp?null:item.id)}>
-                    {/* IMEI */}
-                    <td style={{padding:'8px 12px',minWidth:160}}>
-                      <div style={{fontFamily:'monospace',fontSize:12,fontWeight:700,color:'#0f172a',letterSpacing:'.01em'}}>{item.imei1}</div>
-                      {item.imei2&&<div style={{fontFamily:'monospace',fontSize:10,color:'#94a3b8',marginTop:1}}>IMEI2: {item.imei2}</div>}
-                    </td>
-                    {/* Product */}
-                    <td style={{padding:'8px 12px',maxWidth:220}}>
-                      <div style={{fontWeight:600,color:'#0f172a',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.product?.model||'—'}</div>
-                      <div style={{fontSize:10,color:'#94a3b8',marginTop:1}}>{item.product?.brand||''}{item.product?.ean?` · ${item.product.ean}`:''}</div>
-                    </td>
-                    {/* Status */}
-                    <td style={{padding:'8px 12px'}}>
-                      <span style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:11,padding:'3px 9px',borderRadius:20,fontWeight:700,background:sm.bg,color:sm.color}}>
-                        <span style={{width:6,height:6,borderRadius:'50%',background:sm.dot,flexShrink:0}}/>
-                        {item.status.replace(/_/g,' ')}
-                      </span>
-                    </td>
-
-                    {/* Swiped toggle */}
-                    <td style={{padding:'8px 12px'}} onClick={e=>e.stopPropagation()}>
-                      <button onClick={()=>toggleSwiped(item.id,item.imei1,item.swiped)} disabled={updatingId===item.id} title={item.swiped?'Mark unswiped':'Mark swiped'}
-                        style={{width:44,height:22,borderRadius:11,border:'none',background:item.swiped?'#2563eb':'#e2e8f0',cursor:'pointer',position:'relative',transition:'background .2s',display:'inline-block',flexShrink:0,opacity:updatingId===item.id?.5:1}}>
-                        <span style={{width:16,height:16,borderRadius:'50%',background:'#fff',position:'absolute',top:3,left:item.swiped?25:3,transition:'left .2s',boxShadow:'0 1px 3px rgba(0,0,0,.2)',display:'block'}}/>
-                      </button>
-                    </td>
-                    {/* Swiped On date/time */}
-                    <td style={{padding:'8px 12px',whiteSpace:'nowrap',fontSize:11}}>
-                      {item.swiped&&item.swipedAt?(
-                        <span style={{color:'#2563eb',fontWeight:600}}>
-                          {new Date(item.swipedAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}
-                          <br/>
-                          <span style={{color:'#94a3b8',fontWeight:400}}>{new Date(item.swipedAt).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</span>
+              {items.map((item,idx)=>{
+                const sm = STATUS_META[item.status]||{bg:'#f1f5f9',color:'#64748b',dot:'#94a3b8'};
+                const isExp = expandedId===item.id;
+                return(
+                  <>
+                    <tr key={item.id}
+                      style={{background:idx%2===0?'#fff':'#fafafa',borderBottom:'1px solid #f1f5f9',cursor:'pointer'}}
+                      onClick={()=>setExpandedId(isExp?null:item.id)}>
+                      {/* IMEI */}
+                      <td style={{padding:'10px 14px',fontFamily:'monospace',fontSize:12,fontWeight:600,color:'#0f172a',whiteSpace:'nowrap'}}>
+                        <div>{item.imei1}</div>
+                        {item.imei2 && <div style={{fontSize:10,color:'#94a3b8',marginTop:2}}>{item.imei2}</div>}
+                      </td>
+                      {/* Product */}
+                      <td style={{padding:'10px 14px',maxWidth:240}}>
+                        <div style={{fontWeight:600,color:'#0f172a',fontSize:12,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical' as any}}>{item.product?.model||'—'}</div>
+                        <div style={{fontSize:10,color:'#94a3b8',marginTop:2}}>{item.product?.brand} · {item.product?.ean}</div>
+                      </td>
+                      {/* Status */}
+                      <td style={{padding:'10px 14px',whiteSpace:'nowrap'}}>
+                        <span style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 10px',borderRadius:20,background:sm.bg,color:sm.color,fontSize:11,fontWeight:700}}>
+                          <span style={{width:6,height:6,borderRadius:'50%',background:sm.dot,flexShrink:0}}/>
+                          {item.status.replace(/_/g,' ')}
                         </span>
-                      ):'—'}
-                    </td>
-                    {/* Activated toggle */}
-                    <td style={{padding:'8px 12px',whiteSpace:'nowrap'}}>
-                      <button onClick={()=>toggleActivated(item.id,item.activated)} disabled={updatingId===item.id} title={item.activated?'Mark not activated':'Mark as activated'}
-                        style={{width:44,height:24,borderRadius:12,border:'none',cursor:'pointer',background:item.activated?'#7c3aed':'#e2e8f0',transition:'background .2s',position:'relative',flexShrink:0,display:'inline-block'}}>
-                        <span style={{position:'absolute',top:2,left:item.activated?22:2,width:20,height:20,borderRadius:'50%',background:'#fff',transition:'left .2s',display:'block'}}/>
-                      </button>
-                    </td>
-                    {/* Activated On date/time */}
-                    <td style={{padding:'8px 12px',whiteSpace:'nowrap',fontSize:11}}>
-                      {item.activated&&item.activatedAt?(
-                        <span style={{color:'#7c3aed',fontWeight:600}}>
-                          {new Date(item.activatedAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}
-                          <br/>
-                          <span style={{color:'#94a3b8',fontWeight:400}}>{new Date(item.activatedAt).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</span>
-                        </span>
-                      ):'—'}
-                    </td>
-                    {/* Supplier */}
-                    <td style={{padding:'8px 12px',color:'#374151',maxWidth:140,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                      {(item as any).supplier?.name||<span style={{color:'#cbd5e1'}}>—</span>}
-                    </td>
-                    {/* Warehouse */}
-
-                    {/* Stock In Date */}
-                    <td style={{padding:'8px 12px',color:'#374151',whiteSpace:'nowrap'}}>{fmt(item.createdAt)}</td>
-                    {/* Last Updated */}
-                    <td style={{padding:'8px 12px',color:'#94a3b8',whiteSpace:'nowrap'}}>
-                      {item.status==='SOLD'?<span style={{color:'#dc2626',fontWeight:600}}>{fmt(item.updatedAt)}</span>:fmt(item.updatedAt)}
-                    </td>
-                    {/* Change Status */}
-                    <td style={{padding:'8px 12px'}} onClick={e=>e.stopPropagation()}>
-                      <select defaultValue="" onChange={async e=>{const v=e.target.value;if(!v)return;await changeStatus(item.id,item.imei1,v);e.target.value='';}}
-                        disabled={updatingId===item.id}
-                        style={{height:28,padding:'0 6px',border:'1px solid #e2e8f0',borderRadius:6,fontSize:11,background:'#fff',cursor:'pointer',color:'#374151',maxWidth:100,opacity:updatingId===item.id?.5:1}}>
-                        <option value="">Change…</option>
-                        {['IN_STOCK','RETURNED','OPEN_BOX','SERVICE','DAMAGED','LOST'].map(s=><option key={s} value={s}>{s.replace(/_/g,' ')}</option>)}
-                      </select>
-                    </td>
-                  </tr>
+                      </td>
+                      {/* Swiped toggle */}
+                      <td style={{padding:'10px 14px',textAlign:'center'}}>
+                        <button onClick={e=>{e.stopPropagation();toggleSwiped(item.id,item.swiped);}}
+                          disabled={updatingId===item.id}
+                          title={item.swiped?'Mark not swiped':'Mark as swiped'}
+                          style={{width:44,height:24,borderRadius:12,border:'none',cursor:'pointer',
+                            background:item.swiped?'#2563eb':'#e2e8f0',transition:'background .2s',position:'relative',display:'inline-block'}}>
+                          <span style={{position:'absolute',top:2,left:item.swiped?22:2,width:20,height:20,borderRadius:'50%',background:'#fff',transition:'left .2s',display:'block'}}/>
+                        </button>
+                      </td>
+                      {/* Swiped On */}
+                      <td style={{padding:'10px 14px',whiteSpace:'nowrap',fontSize:11}}>
+                        {item.swiped&&item.swipedAt?(
+                          <div>
+                            <div style={{color:'#2563eb',fontWeight:600}}>{fmt(item.swipedAt)}</div>
+                            <div style={{color:'#94a3b8',fontSize:10}}>{fmtTime(item.swipedAt)}</div>
+                          </div>
+                        ):'—'}
+                      </td>
+                      {/* Activated toggle */}
+                      <td style={{padding:'10px 14px',textAlign:'center'}}>
+                        <button onClick={e=>{e.stopPropagation();toggleActivated(item.id,item.activated);}}
+                          disabled={updatingId===item.id}
+                          title={item.activated?'Mark not activated':'Mark as activated'}
+                          style={{width:44,height:24,borderRadius:12,border:'none',cursor:'pointer',
+                            background:item.activated?'#7c3aed':'#e2e8f0',transition:'background .2s',position:'relative',display:'inline-block'}}>
+                          <span style={{position:'absolute',top:2,left:item.activated?22:2,width:20,height:20,borderRadius:'50%',background:'#fff',transition:'left .2s',display:'block'}}/>
+                        </button>
+                      </td>
+                      {/* Activated On */}
+                      <td style={{padding:'10px 14px',whiteSpace:'nowrap',fontSize:11}}>
+                        {item.activated&&item.activatedAt?(
+                          <div>
+                            <div style={{color:'#7c3aed',fontWeight:600}}>{fmt(item.activatedAt)}</div>
+                            <div style={{color:'#94a3b8',fontSize:10}}>{fmtTime(item.activatedAt)}</div>
+                          </div>
+                        ):'—'}
+                      </td>
+                      {/* Supplier */}
+                      <td style={{padding:'10px 14px',color:'#374151',fontSize:12}}>{item.supplier?.name||'—'}</td>
+                      {/* Stock In */}
+                      <td style={{padding:'10px 14px',color:'#64748b',fontSize:11,whiteSpace:'nowrap'}}>{fmt(item.createdAt)}</td>
+                      {/* Last Updated */}
+                      <td style={{padding:'10px 14px',color:'#94a3b8',fontSize:11,whiteSpace:'nowrap'}}>{fmt(item.updatedAt)}</td>
+                      {/* Change Status */}
+                      <td style={{padding:'10px 14px'}} onClick={e=>e.stopPropagation()}>
+                        <select value={item.status} onChange={e=>changeStatus(item.id,item.imei1,e.target.value)}
+                          disabled={updatingId===item.id}
+                          style={{height:28,padding:'0 8px',border:'1px solid #e2e8f0',borderRadius:6,fontSize:11,background:'#fff',outline:'none',cursor:'pointer'}}>
+                          {['IN_STOCK','SOLD','RETURNED','OPEN_BOX','SERVICE','DAMAGED','LOST'].map(s=>(
+                            <option key={s} value={s}>{s.replace(/_/g,' ')}</option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                    {isExp && (
+                      <tr key={`${item.id}-exp`} style={{background:'#f0f9ff'}}>
+                        <td colSpan={11} style={{padding:'12px 24px'}}>
+                          <div style={{display:'flex',gap:32,flexWrap:'wrap',fontSize:12}}>
+                            <div><span style={{color:'#94a3b8',fontWeight:600}}>IMEI 1 </span><span style={{fontFamily:'monospace',fontWeight:700}}>{item.imei1}</span></div>
+                            {item.imei2&&<div><span style={{color:'#94a3b8',fontWeight:600}}>IMEI 2 </span><span style={{fontFamily:'monospace',fontWeight:700}}>{item.imei2}</span></div>}
+                            <div><span style={{color:'#94a3b8',fontWeight:600}}>Warehouse </span><span>{item.warehouse?.name||'—'}</span></div>
+                            <div><span style={{color:'#94a3b8',fontWeight:600}}>Type </span>
+                              <span style={{padding:'2px 8px',borderRadius:10,background:TYPE_META[item.imeiType]?.bg||'#f1f5f9',color:TYPE_META[item.imeiType]?.color||'#64748b',fontWeight:600,fontSize:11}}>
+                                {TYPE_META[item.imeiType]?.label||item.imeiType}
+                              </span>
+                            </div>
+                            <div><span style={{color:'#94a3b8',fontWeight:600}}>Added </span><span>{fmt(item.createdAt)} {fmtTime(item.createdAt)}</span></div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </>
                 );
               })}
             </tbody>
@@ -309,17 +479,26 @@ export function Imei() {
         )}
       </div>
 
-      {/* Pagination */}
-      {data&&data.totalPages>1&&(
-        <div style={{padding:'10px 20px',borderTop:'1px solid #e2e8f0',background:'#fff',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
-          <span style={{fontSize:12,color:'#64748b'}}>Showing {((page-1)*50)+1}–{Math.min(page*50,total)} of {total.toLocaleString('en-IN')}</span>
-          <div style={{display:'flex',gap:6,alignItems:'center'}}>
-            <button disabled={page<=1} onClick={()=>setPage(p=>p-1)} style={{height:30,padding:'0 12px',border:'1px solid #e2e8f0',borderRadius:7,background:'#fff',fontSize:12,cursor:page<=1?'not-allowed':'pointer',opacity:page<=1?.4:1}}>← Prev</button>
-            <span style={{fontSize:12,padding:'0 10px',color:'#374151',fontWeight:600}}>Page {page} of {data.totalPages}</span>
-            <button disabled={page>=data.totalPages} onClick={()=>setPage(p=>p+1)} style={{height:30,padding:'0 12px',border:'1px solid #e2e8f0',borderRadius:7,background:'#fff',fontSize:12,cursor:page>=data.totalPages?'not-allowed':'pointer',opacity:page>=data.totalPages?.4:1}}>Next →</button>
-          </div>
+      {/* ── Pagination ── */}
+      {data && data.totalPages>1 && (
+        <div style={{padding:'10px 20px',borderTop:'1px solid #e2e8f0',background:'#fff',display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+          <span style={{fontSize:12,color:'#64748b',flex:1}}>
+            Page {data.page} of {data.totalPages} · {total.toLocaleString('en-IN')} total
+          </span>
+          {Array.from({length:data.totalPages},(_,i)=>i+1).filter(p=>p===1||p===data.totalPages||Math.abs(p-data.page)<=2).map((p,i,arr)=>(
+            <>
+              {i>0&&arr[i-1]!==p-1&&<span key={`d${p}`} style={{color:'#94a3b8',fontSize:12}}>…</span>}
+              <button key={p} onClick={()=>{setPage(p);load(search,status,imeiType,swiped,activated,p);}}
+                style={{width:32,height:32,border:`1.5px solid ${p===data.page?'#2563eb':'#e2e8f0'}`,borderRadius:7,
+                  background:p===data.page?'#2563eb':'#fff',color:p===data.page?'#fff':'#374151',
+                  fontSize:12,fontWeight:p===data.page?700:400,cursor:'pointer'}}>
+                {p}
+              </button>
+            </>
+          ))}
         </div>
       )}
     </div>
   );
 }
+export default Imei;
