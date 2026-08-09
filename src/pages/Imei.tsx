@@ -360,7 +360,7 @@ export function Imei() {
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,minWidth:1100}}>
             <thead>
               <tr>
-                <th style={thS}>IMEI 1 / IMEI 2</th>
+                <th style={thS}>IMEI</th>
                 <th style={thS}>Product</th>
                 <th style={thS}>Status</th>
                 <th style={{...thS,textAlign:'center'}}>Swiped</th>
@@ -389,7 +389,7 @@ export function Imei() {
                       </td>
                       {/* Product */}
                       <td style={{padding:'10px 14px',maxWidth:240}}>
-                        <div style={{fontWeight:600,color:'#0f172a',fontSize:12,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical' as any}}>{item.product?.model||'—'}</div>
+                        <div style={{fontWeight:600,color:'#0f172a',fontSize:12,wordBreak:'break-word',whiteSpace:'normal',lineHeight:1.4}}>{item.product?.model||'—'}</div>
                         <div style={{fontSize:10,color:'#94a3b8',marginTop:2}}>{item.product?.brand} · {item.product?.ean}</div>
                       </td>
                       {/* Status */}
