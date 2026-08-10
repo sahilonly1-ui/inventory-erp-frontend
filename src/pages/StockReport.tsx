@@ -24,64 +24,110 @@ function MultiSelect({
   getLabel: (o: any) => string;
 }) {
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const fn = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const fn = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setSearch(''); } };
     document.addEventListener('mousedown', fn);
     return () => document.removeEventListener('mousedown', fn);
   }, []);
 
   const toggle = (key: string) => {
-    const next = new Set(selected);
-    next.has(key) ? next.delete(key) : next.add(key);
-    onChange(next);
+    const next = new Set(selected); next.has(key) ? next.delete(key) : next.add(key); onChange(next);
   };
   const all  = () => onChange(new Set());
   const none = () => onChange(new Set(options.map(getKey)));
 
-  const displayText = selected.size === 0
-    ? `All ${label}`
-    : selected.size === options.length
-    ? `No ${label}`
-    : `${selected.size} ${label} selected`;
+  const visible = options.filter(o => getLabel(o).toLowerCase().includes(search.toLowerCase()));
+  const activeCount = options.length - selected.size; // how many are currently showing
+  const isAll = selected.size === 0;
+  const isNone = selected.size === options.length;
+
+  const chip = isAll
+    ? { text: `All ${label}`, bg: '#f0fdf4', color: '#15803d', border: '#86efac' }
+    : isNone
+    ? { text: `No ${label}`, bg: '#fef2f2', color: '#dc2626', border: '#fca5a5' }
+    : { text: `${activeCount} of ${options.length}`, bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' };
 
   return (
-    <div ref={ref} style={{ position:'relative', minWidth:160 }}>
+    <div ref={ref} style={{ position: 'relative' }}>
       <button onClick={() => setOpen(o => !o)} style={{
-        height:34, padding:'0 12px', border:'1px solid #d0d5dd', borderRadius:8,
-        background:'#fff', fontSize:12, color:'#374151', cursor:'pointer',
-        display:'flex', alignItems:'center', gap:6, whiteSpace:'nowrap', minWidth:160,
+        height: 34, padding: '0 10px 0 12px',
+        border: `1.5px solid ${chip.border}`,
+        borderRadius: 8, background: chip.bg,
+        display: 'flex', alignItems: 'center', gap: 6,
+        cursor: 'pointer', whiteSpace: 'nowrap',
       }}>
-        <span style={{ flex:1, textAlign:'left' }}>{displayText}</span>
-        <span style={{ color:'#94a3b8', fontSize:10 }}>▼</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: chip.color }}>{label.toUpperCase()}</span>
+        <span style={{ fontSize: 12, color: chip.color, fontWeight: 600 }}>{chip.text}</span>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={chip.color} strokeWidth="2.5"
+          style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>
+          <path d="m6 9 6 6 6-6"/>
+        </svg>
       </button>
+
       {open && (
         <div style={{
-          position:'absolute', top:'calc(100% + 4px)', left:0, zIndex:200,
-          background:'#fff', border:'1px solid #e2e8f0', borderRadius:10,
-          boxShadow:'0 8px 24px rgba(0,0,0,.12)', minWidth:220, maxHeight:300, overflowY:'auto',
+          position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 300,
+          background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12,
+          boxShadow: '0 12px 32px rgba(0,0,0,.14)', minWidth: 240, maxHeight: 360,
+          display: 'flex', flexDirection: 'column', overflow: 'hidden',
         }}>
-          {/* Select all / none */}
-          <div style={{ display:'flex', gap:0, borderBottom:'1px solid #f1f5f9' }}>
-            <button onClick={all}  style={{ flex:1, padding:'8px 12px', border:'none', background:'none', fontSize:11, color:'#2563eb', cursor:'pointer', fontWeight:600 }}>✓ All</button>
-            <button onClick={none} style={{ flex:1, padding:'8px 12px', border:'none', background:'none', fontSize:11, color:'#dc2626', cursor:'pointer', fontWeight:600 }}>✕ None</button>
+          {/* Header */}
+          <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid #f1f5f9' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>
+              {label}
+            </div>
+            {/* Search */}
+            {options.length > 6 && (
+              <div style={{ position: 'relative' }}>
+                <svg style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)' }}
+                  width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2">
+                  <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                </svg>
+                <input value={search} onChange={e => setSearch(e.target.value)}
+                  placeholder={`Filter ${label.toLowerCase()}…`}
+                  style={{ width: '100%', height: 28, padding: '0 8px 0 26px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, outline: 'none', background: '#f8fafc', boxSizing: 'border-box' }} />
+              </div>
+            )}
+            {/* All / None quick-pick */}
+            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+              <button onClick={all} style={{ flex:1, height:26, border:'1px solid #86efac', borderRadius:6, background:'#f0fdf4', fontSize:11, color:'#15803d', cursor:'pointer', fontWeight:700 }}>✓ All</button>
+              <button onClick={none} style={{ flex:1, height:26, border:'1px solid #fca5a5', borderRadius:6, background:'#fef2f2', fontSize:11, color:'#dc2626', cursor:'pointer', fontWeight:700 }}>✕ None</button>
+            </div>
           </div>
-          {options.map(o => {
-            const key = getKey(o);
-            const checked = !selected.has(key); // selected = excluded set
-            return (
-              <label key={key} style={{
-                display:'flex', alignItems:'center', gap:10, padding:'8px 14px',
-                cursor:'pointer', fontSize:12, color:'#374151',
-                background: checked ? '#f0f9ff' : '#fff',
-                borderBottom:'1px solid #f8fafc',
-              }}>
-                <input type="checkbox" checked={checked} onChange={() => toggle(key)}
-                  style={{ width:14, height:14, accentColor:'#2563eb', cursor:'pointer' }} />
-                {getLabel(o)}
-              </label>
-            );
-          })}
+
+          {/* Option list */}
+          <div style={{ overflowY: 'auto', maxHeight: 260 }}>
+            {visible.map(o => {
+              const key = getKey(o);
+              const checked = !selected.has(key);
+              return (
+                <label key={key} onClick={() => toggle(key)} style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '8px 14px', cursor: 'pointer',
+                  background: checked ? '#fff' : '#fafafa',
+                  borderBottom: '1px solid #f8fafc',
+                  transition: 'background .1s',
+                }}>
+                  <div style={{
+                    width: 16, height: 16, borderRadius: 4, flexShrink: 0,
+                    border: checked ? '2px solid #2563eb' : '1.5px solid #d0d5dd',
+                    background: checked ? '#2563eb' : '#fff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    {checked && <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="#fff" strokeWidth="2.5"><polyline points="2 6 5 9 10 3"/></svg>}
+                  </div>
+                  <span style={{ fontSize: 13, color: checked ? '#0f172a' : '#94a3b8', fontWeight: checked ? 500 : 400 }}>
+                    {getLabel(o)}
+                  </span>
+                </label>
+              );
+            })}
+            {visible.length === 0 && (
+              <div style={{ padding: '16px 14px', fontSize: 12, color: '#94a3b8', textAlign: 'center' }}>No matches</div>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -97,15 +143,25 @@ export function StockReport() {
   const [imgLoading,  setImgLoading]  = useState(false);
   const reportRef = useRef<HTMLDivElement>(null);
 
+  const [defaultApplied, setDefaultApplied] = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const r = await api<ReportData>('/inventory/stock-report');
       setData(r);
       setLastFetch(new Date());
+      // On first load, default to showing only Smartphones
+      if (!defaultApplied) {
+        setDefaultApplied(true);
+        const nonSmartphone = r.categories
+          .filter(c => !c.name.toLowerCase().includes('smartphone'))
+          .map(c => c.id);
+        if (nonSmartphone.length > 0) setExCats(new Set(nonSmartphone));
+      }
     } catch (e: any) { alert('Failed to load: ' + e.message); }
     finally { setLoading(false); }
-  }, []);
+  }, [defaultApplied]);
 
   useEffect(() => { load(); }, [load]);
 

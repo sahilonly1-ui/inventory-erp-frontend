@@ -392,7 +392,16 @@ export function Dashboard() {
         <div style={{flex:1}}/>
         <div style={{display:'flex',alignItems:'center',gap:6,background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:8,padding:'4px 10px 4px 8px'}}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-          <input type="date" value={date} onChange={e=>setDate(e.target.value)}
+          <input type="date" value={date}
+            onChange={e => { /* no-op on change — only commit on blur or Enter */ }}
+            onBlur={e => { if (e.target.value) setDate(e.target.value); }}
+            onKeyDown={e => { if (e.key === 'Enter') { (e.target as HTMLInputElement).blur(); } }}
+            onInput={e => {
+              // Native date pickers fire `input` only when a full date is picked (clicked),
+              // not when navigating months — this is the reliable commit signal on mobile.
+              const v = (e.target as HTMLInputElement).value;
+              if (v && v !== date) setDate(v);
+            }}
             style={{height:24,border:'none',background:'transparent',fontSize:12,outline:'none',color:'#374151',fontWeight:600,cursor:'pointer'}} />
         </div>
         <button onClick={load} title="Refresh" style={{width:30,height:30,border:'1px solid #e2e8f0',borderRadius:7,background:'#fff',cursor:'pointer',fontSize:14,color:'#64748b',display:'flex',alignItems:'center',justifyContent:'center'}}>↺</button>
