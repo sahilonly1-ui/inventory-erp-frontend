@@ -13,6 +13,9 @@ const fmtDate = (d: Date) =>
   d.toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
 
 // Multi-select dropdown component
+// ── Modern filter panel: shows all options as pill chips ─────────────────────
+// Selected chips = solid colored, deselected = muted ghost pill.
+// No dropdown, no checkbox confusion — everything visible at once.
 function MultiSelect({
   label, options, selected, onChange, getKey, getLabel,
 }: {
@@ -26,107 +29,136 @@ function MultiSelect({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const ref = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    const fn = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setSearch(''); } };
+    const fn = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setSearch(''); }
+    };
     document.addEventListener('mousedown', fn);
     return () => document.removeEventListener('mousedown', fn);
   }, []);
 
   const toggle = (key: string) => {
-    const next = new Set(selected); next.has(key) ? next.delete(key) : next.add(key); onChange(next);
+    const next = new Set(selected);
+    next.has(key) ? next.delete(key) : next.add(key);
+    onChange(next);
   };
-  const all  = () => onChange(new Set());
-  const none = () => onChange(new Set(options.map(getKey)));
 
-  const visible = options.filter(o => getLabel(o).toLowerCase().includes(search.toLowerCase()));
-  const activeCount = options.length - selected.size; // how many are currently showing
-  const isAll = selected.size === 0;
+  const activeCount = options.length - selected.size;
+  const isAll  = selected.size === 0;
   const isNone = selected.size === options.length;
+  const visible = options.filter(o => getLabel(o).toLowerCase().includes(search.toLowerCase()));
 
-  const chip = isAll
-    ? { text: `All ${label}`, bg: '#f0fdf4', color: '#15803d', border: '#86efac' }
-    : isNone
-    ? { text: `No ${label}`, bg: '#fef2f2', color: '#dc2626', border: '#fca5a5' }
-    : { text: `${activeCount} of ${options.length}`, bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' };
+  // Trigger button text + style
+  const triggerLabel = isAll ? `All ${label}` : isNone ? `No ${label}` : `${activeCount} / ${options.length}`;
+  const triggerStyle: React.CSSProperties = {
+    height: 32, padding: '0 11px',
+    border: isNone ? '1.5px solid #fca5a5' : isAll ? '1.5px solid #bbf7d0' : '1.5px solid #93c5fd',
+    borderRadius: 20,
+    background: isNone ? '#fff1f2' : isAll ? '#f0fdf4' : '#eff6ff',
+    color: isNone ? '#dc2626' : isAll ? '#16a34a' : '#1d4ed8',
+    fontSize: 12, fontWeight: 700, cursor: 'pointer',
+    display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap',
+  };
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
-      <button onClick={() => setOpen(o => !o)} style={{
-        height: 34, padding: '0 10px 0 12px',
-        border: `1.5px solid ${chip.border}`,
-        borderRadius: 8, background: chip.bg,
-        display: 'flex', alignItems: 'center', gap: 6,
-        cursor: 'pointer', whiteSpace: 'nowrap',
-      }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: chip.color }}>{label.toUpperCase()}</span>
-        <span style={{ fontSize: 12, color: chip.color, fontWeight: 600 }}>{chip.text}</span>
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={chip.color} strokeWidth="2.5"
-          style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>
+      {/* Trigger pill */}
+      <button onClick={() => setOpen(o => !o)} style={triggerStyle}>
+        <span style={{ fontSize: 10, opacity: .7, letterSpacing: '.04em' }}>{label.toUpperCase()}</span>
+        <span>{triggerLabel}</span>
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"
+          style={{ opacity:.6, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>
           <path d="m6 9 6 6 6-6"/>
         </svg>
       </button>
 
+      {/* Dropdown */}
       {open && (
         <div style={{
-          position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 300,
-          background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12,
-          boxShadow: '0 12px 32px rgba(0,0,0,.14)', minWidth: 240, maxHeight: 360,
-          display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 400,
+          background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14,
+          boxShadow: '0 16px 48px rgba(0,0,0,.16)',
+          width: 280, display: 'flex', flexDirection: 'column', overflow: 'hidden',
         }}>
-          {/* Header */}
-          <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid #f1f5f9' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>
+          {/* Panel header */}
+          <div style={{ padding: '12px 14px 10px', borderBottom: '1px solid #f1f5f9', background: '#fafafa' }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#374151', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>
               {label}
             </div>
-            {/* Search */}
-            {options.length > 6 && (
-              <div style={{ position: 'relative' }}>
-                <svg style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)' }}
-                  width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2">
-                  <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-                </svg>
-                <input value={search} onChange={e => setSearch(e.target.value)}
-                  placeholder={`Filter ${label.toLowerCase()}…`}
-                  style={{ width: '100%', height: 28, padding: '0 8px 0 26px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, outline: 'none', background: '#f8fafc', boxSizing: 'border-box' }} />
-              </div>
-            )}
-            {/* All / None quick-pick */}
-            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-              <button onClick={all} style={{ flex:1, height:26, border:'1px solid #86efac', borderRadius:6, background:'#f0fdf4', fontSize:11, color:'#15803d', cursor:'pointer', fontWeight:700 }}>✓ All</button>
-              <button onClick={none} style={{ flex:1, height:26, border:'1px solid #fca5a5', borderRadius:6, background:'#fef2f2', fontSize:11, color:'#dc2626', cursor:'pointer', fontWeight:700 }}>✕ None</button>
+            {/* Search bar */}
+            <div style={{ position: 'relative', marginBottom: 8 }}>
+              <svg style={{ position:'absolute',left:9,top:'50%',transform:'translateY(-50%)',pointerEvents:'none' }}
+                width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2">
+                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+              </svg>
+              <input
+                value={search} onChange={e => setSearch(e.target.value)}
+                placeholder={`Search ${label.toLowerCase()}…`}
+                style={{
+                  width:'100%', height:30, padding:'0 10px 0 28px',
+                  border:'1px solid #e2e8f0', borderRadius:8, fontSize:12,
+                  outline:'none', background:'#fff', boxSizing:'border-box', color:'#374151',
+                }}
+              />
+              {search && (
+                <button onClick={() => setSearch('')} style={{ position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',border:'none',background:'none',cursor:'pointer',color:'#94a3b8',fontSize:14,lineHeight:1 }}>×</button>
+              )}
+            </div>
+            {/* Quick actions */}
+            <div style={{ display:'flex', gap:6 }}>
+              <button onClick={() => onChange(new Set())} style={{
+                flex:1, height:26, borderRadius:7,
+                border:'1.5px solid #bbf7d0', background:'#f0fdf4',
+                fontSize:11, fontWeight:700, color:'#16a34a', cursor:'pointer',
+              }}>✓ All</button>
+              <button onClick={() => onChange(new Set(options.map(getKey)))} style={{
+                flex:1, height:26, borderRadius:7,
+                border:'1.5px solid #fca5a5', background:'#fff1f2',
+                fontSize:11, fontWeight:700, color:'#dc2626', cursor:'pointer',
+              }}>✕ None</button>
             </div>
           </div>
 
-          {/* Option list */}
-          <div style={{ overflowY: 'auto', maxHeight: 260 }}>
+          {/* Chip grid — all options as toggleable pills */}
+          <div style={{ padding:'10px 12px', display:'flex', flexWrap:'wrap', gap:6, maxHeight:260, overflowY:'auto' }}>
             {visible.map(o => {
               const key = getKey(o);
-              const checked = !selected.has(key);
+              const active = !selected.has(key); // NOT in excluded set = active/visible
               return (
-                <label key={key} onClick={() => toggle(key)} style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '8px 14px', cursor: 'pointer',
-                  background: checked ? '#fff' : '#fafafa',
-                  borderBottom: '1px solid #f8fafc',
-                  transition: 'background .1s',
-                }}>
-                  <div style={{
-                    width: 16, height: 16, borderRadius: 4, flexShrink: 0,
-                    border: checked ? '2px solid #2563eb' : '1.5px solid #d0d5dd',
-                    background: checked ? '#2563eb' : '#fff',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}>
-                    {checked && <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="#fff" strokeWidth="2.5"><polyline points="2 6 5 9 10 3"/></svg>}
-                  </div>
-                  <span style={{ fontSize: 13, color: checked ? '#0f172a' : '#94a3b8', fontWeight: checked ? 500 : 400 }}>
-                    {getLabel(o)}
-                  </span>
-                </label>
+                <button
+                  key={key}
+                  onClick={() => toggle(key)}
+                  style={{
+                    height: 30, padding: '0 12px',
+                    borderRadius: 20,
+                    border: active ? '1.5px solid #2563eb' : '1.5px solid #e2e8f0',
+                    background: active ? '#2563eb' : '#f8fafc',
+                    color: active ? '#fff' : '#94a3b8',
+                    fontSize: 12, fontWeight: active ? 600 : 400,
+                    cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 5,
+                    transition: 'all .12s',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {active && (
+                    <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <polyline points="2 6 5 9 10 3"/>
+                    </svg>
+                  )}
+                  {getLabel(o)}
+                </button>
               );
             })}
             {visible.length === 0 && (
-              <div style={{ padding: '16px 14px', fontSize: 12, color: '#94a3b8', textAlign: 'center' }}>No matches</div>
+              <div style={{ fontSize:12, color:'#94a3b8', padding:'8px 4px' }}>No matches</div>
             )}
+          </div>
+
+          {/* Footer */}
+          <div style={{ padding:'8px 14px', borderTop:'1px solid #f1f5f9', background:'#fafafa', fontSize:11, color:'#64748b', textAlign:'center' }}>
+            {activeCount} of {options.length} selected · <span style={{ color:'#2563eb', cursor:'pointer', fontWeight:600 }} onClick={() => onChange(new Set())}>Reset</span>
           </div>
         </div>
       )}

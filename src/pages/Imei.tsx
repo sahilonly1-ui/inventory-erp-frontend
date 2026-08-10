@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api, getAccessToken } from '../api/client';
+import { ImeiBulkUpload } from './ImeiBulkUpload';
 
 interface ImeiUnit {
   id:string; imei1:string; imei2?:string; status:string; imeiType:string;
@@ -112,6 +113,7 @@ export function Imei() {
   const [activated,setActivated] = useState('');
   const [page,setPage]         = useState(1);
   const [exporting,setExporting] = useState(false);
+  const [showBulk,setShowBulk]   = useState(false);
   const [updatingId,setUpdatingId] = useState<string|null>(null);
   const [expandedId,setExpandedId] = useState<string|null>(null);
   const debRef = useRef<ReturnType<typeof setTimeout>>();
@@ -257,6 +259,17 @@ export function Imei() {
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
             {exporting?'Exporting…':'Download XLSX'}
+          </button>
+          <button onClick={()=>setShowBulk(true)} style={{
+            height:32,padding:'0 14px',border:'1.5px solid #c7d2fe',borderRadius:7,
+            background:'#eff6ff',fontSize:12,fontWeight:700,color:'#4338ca',
+            cursor:'pointer',display:'flex',alignItems:'center',gap:6,
+          }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            Bulk Swipe / Activate
           </button>
         </div>
 
@@ -497,6 +510,12 @@ export function Imei() {
             </>
           ))}
         </div>
+      )}
+      {showBulk && (
+        <ImeiBulkUpload
+          onClose={()=>setShowBulk(false)}
+          onDone={()=>{ load(search,status,imeiType,swiped,activated,page); }}
+        />
       )}
     </div>
   );
