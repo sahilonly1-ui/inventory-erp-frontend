@@ -136,7 +136,9 @@ export function OpeningStock() {
         if (i >= rs.length - 1) next.push(mk()); else next.splice(i + 1, 0, mk());
         return next;
       });
-      setTimeout(() => moveTo(i, p!.imeiRequired ? 'imei' : 'cost'), 60);
+      // EAN→EAN→EAN flow (not EAN→IMEI)
+      // After all EANs scanned, user clicks IMEI field to scan IMEIs in sequence
+      setTimeout(() => moveTo(i + 1, 'ean'), 60);
     }
   }, [upd, moveTo]);
 
@@ -150,7 +152,13 @@ export function OpeningStock() {
     const dup = rows.findIndex((r, ri) => ri !== i && r.imei === imei);
     if (dup !== -1) { upd(i, { errMsg: `Duplicate! IMEI already in row ${dup + 1}`, status: 'err', errField: 'imei' }); moveTo(i, 'imei'); return; }
     upd(i, { imei, status: 'saved', errMsg: '', errField: '' });
-    const ni = ins(i); moveTo(ni, 'ean');
+    // IMEI→IMEI flow: go to next row's IMEI field (not EAN)
+    const nextIdx = i + 1;
+    if (nextIdx < rows.length && rows[nextIdx].productId) {
+      moveTo(nextIdx, 'imei');
+    } else if (nextIdx < rows.length) {
+      moveTo(nextIdx, 'ean'); // next row has no product yet
+    }
   }, [rows, upd, ins, moveTo]);
 
   // Save all
