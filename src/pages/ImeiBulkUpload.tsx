@@ -47,43 +47,56 @@ function parseExcel(file: File): Promise<BulkRow[]> {
       try {
         const wb = XLSX.read(e.target!.result, { type: 'binary', cellDates: true });
         const ws = wb.Sheets[wb.SheetNames[0]];
-        const raw: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-        if (raw.length < 2) { reject(new Error('Template is empty — add at least one row')); return; }
+        const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+        if (range.e.r < 1) { reject(new Error('Template is empty — add at least one row')); return; }
+
+        // Read a cell's RAW value (for IMEI / yes-no text — never goes through
+        // date formatting, so no risk of number-format side effects)
+        const cellRaw = (r: number, c: number): string => {
+          const cell = ws[XLSX.utils.encode_cell({ r, c })];
+          return cell ? String(cell.v ?? '').trim() : '';
+        };
+
+        // Read a cell's DISPLAYED TEXT exactly as Excel shows it (cell.w).
+        // This is the fix: converting an Excel date serial back through a JS
+        // Date object and re-extracting y/m/d is timezone-dependent and was
+        // rolling every date back by one day. Reading the formatted text
+        // Excel already computed sidesteps Date-object math entirely.
+        const cellDisplayDate = (r: number, c: number): string => {
+          const cell = ws[XLSX.utils.encode_cell({ r, c })];
+          if (!cell) return '';
+          const text = cell.w !== undefined ? String(cell.w).trim() : String(cell.v ?? '').trim();
+          if (!text) return '';
+          // DD-MM-YYYY or DD/MM/YYYY (what our template asks for)
+          let m = text.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+          if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+          // Already ISO YYYY-MM-DD
+          if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 10);
+          // Fallback: displayed text didn't match — reconstruct from the Date
+          // object as a last resort (rare: only if number format is unusual)
+          if (cell.v instanceof Date) {
+            const yyyy = cell.v.getFullYear();
+            const mm   = String(cell.v.getMonth() + 1).padStart(2, '0');
+            const dd   = String(cell.v.getDate()).padStart(2, '0');
+            return `${yyyy}-${mm}-${dd}`;
+          }
+          return '';
+        };
 
         const rows: BulkRow[] = [];
-        for (let i = 1; i < raw.length; i++) {
-          const r = raw[i];
-          const imei = String(r[0] || '').trim().replace(/\D/g, '');
+        for (let r = range.s.r + 1; r <= range.e.r; r++) {
+          const imei = cellRaw(r, 0).replace(/\D/g, '');
           if (!imei) continue;
 
-          const swipedRaw    = String(r[1] || '').trim().toLowerCase();
-          // Parse date — handles JS Date objects (from cellDates:true) OR DD-MM-YYYY strings
-          const parseDateCell = (v: any): string => {
-            if (!v && v !== 0) return '';
-            // If XLSX returned a JS Date object
-            if (v instanceof Date) {
-              const yyyy = v.getFullYear();
-              const mm   = String(v.getMonth() + 1).padStart(2, '0');
-              const dd   = String(v.getDate()).padStart(2, '0');
-              return `${yyyy}-${mm}-${dd}`;
-            }
-            const t = String(v).trim();
-            if (!t) return '';
-            // DD-MM-YYYY or DD/MM/YYYY
-            const m = t.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
-            if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
-            // Already ISO YYYY-MM-DD
-            if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0, 10);
-            return '';
-          };
-          const swipedDate   = parseDateCell(r[2]);
-          const activatedRaw = String(r[3] || '').trim().toLowerCase();
-          const activatedDate= parseDateCell(r[4]);
+          const swipedRaw    = cellRaw(r, 1).toLowerCase();
+          const swipedDate    = cellDisplayDate(r, 2);
+          const activatedRaw = cellRaw(r, 3).toLowerCase();
+          const activatedDate = cellDisplayDate(r, 4);
 
           // Anchor date-only values at local noon before converting to ISO —
           // sending a bare "YYYY-MM-DD" gets parsed by `new Date()` as UTC
-          // midnight, which rolls back a day once displayed in IST (or any
-          // timezone). Noon avoids any rollover.
+          // midnight, which can roll back a day once displayed. Noon avoids
+          // any rollover in any timezone.
           const toSafeISO = (ymd: string) => ymd ? new Date(ymd + 'T12:00:00').toISOString() : '';
 
           const row: BulkRow = { imei };
