@@ -335,6 +335,7 @@ export function Dashboard() {
     const total=txns.reduce((s,t)=>s+Math.abs(t.qty),0);
     const [open,setOpen]=useState(true);
     const byProd=txns.reduce((a:Record<string,Txn[]>,t)=>{const k=t.product.trim();if(!a[k])a[k]=[];a[k].push(t);return a;},{});
+    const sortedByProd=Object.entries(byProd).sort(([a],[b])=>a.localeCompare(b));
     const allIds=txns.map(t=>t.id);
     return (
       <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:10,marginBottom:8,overflow:'hidden',boxShadow:'0 1px 3px rgba(0,0,0,.04)'}}>
@@ -349,7 +350,7 @@ export function Dashboard() {
         </div>
         {open&&(
           <div>
-            {Object.entries(byProd).map(([model,txnList])=>{
+            {sortedByProd.map(([model,txnList])=>{
               const qty=txnList.reduce((s,t)=>s+Math.abs(t.qty),0);
               return (
                 <div key={model} style={{display:'flex',alignItems:'center',padding:'8px 14px',borderBottom:'1px solid #f1f5f9',gap:8}}>
@@ -450,7 +451,7 @@ export function Dashboard() {
                       {['Product','Units In'].map(h=><th key={h} style={{padding:'8px 12px',textAlign:h==='Units In'?'right':'left',fontWeight:700,color:'#64748b',fontSize:10,textTransform:'uppercase',borderBottom:'1px solid #e2e8f0'}}>{h}</th>)}
                     </tr></thead>
                     <tbody>
-                      {(daily?.byProduct||[]).filter(p=>p.inQty>0).sort((a,b)=>b.inQty-a.inQty).slice(0,15).map((p,i)=>(
+                      {(daily?.byProduct||[]).filter(p=>p.inQty>0).sort((a,b)=>a.model.localeCompare(b.model)).slice(0,15).map((p,i)=>(
                         <tr key={p.productId} style={{borderBottom:'1px solid #f1f5f9',background:i%2===0?'#fff':'#fafafa'}}>
                           <td style={{padding:'7px 12px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:220}}>{p.model}</td>
                           <td style={{padding:'7px 12px',textAlign:'right',fontWeight:700,color:'#16a34a'}}>+{p.inQty}</td>
@@ -482,7 +483,7 @@ export function Dashboard() {
                       {['Product','Units Out'].map(h=><th key={h} style={{padding:'8px 12px',textAlign:h==='Units Out'?'right':'left',fontWeight:700,color:'#64748b',fontSize:10,textTransform:'uppercase',borderBottom:'1px solid #e2e8f0'}}>{h}</th>)}
                     </tr></thead>
                     <tbody>
-                      {(daily?.byProduct||[]).filter(p=>p.outQty>0).sort((a,b)=>b.outQty-a.outQty).slice(0,15).map((p,i)=>(
+                      {(daily?.byProduct||[]).filter(p=>p.outQty>0).sort((a,b)=>a.model.localeCompare(b.model)).slice(0,15).map((p,i)=>(
                         <tr key={p.productId} style={{borderBottom:'1px solid #f1f5f9',background:i%2===0?'#fff':'#fafafa'}}>
                           <td style={{padding:'7px 12px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:220}}>{p.model}</td>
                           <td style={{padding:'7px 12px',textAlign:'right',fontWeight:700,color:'#dc2626'}}>-{p.outQty}</td>
@@ -506,7 +507,7 @@ export function Dashboard() {
                   ))}
                 </tr></thead>
                 <tbody>
-                  {(daily?.recentTxns||[]).map((t,i)=>(
+                  {(daily?.recentTxns||[]).slice().sort((a,b)=>a.product.localeCompare(b.product)).map((t,i)=>(
                     <tr key={t.id} style={{borderBottom:'1px solid #f1f5f9',background:i%2===0?'#fff':'#fafafa'}}>
                       <td style={{padding:'6px 12px',color:'#94a3b8',fontFamily:'monospace',fontSize:11}}>{fmtT(t.createdAt)}</td>
                       <td style={{padding:'6px 12px'}}><span style={{fontSize:10,padding:'2px 7px',borderRadius:10,fontWeight:700,background:t.qty>0?'#dcfce7':'#fee2e2',color:t.qty>0?'#16a34a':'#dc2626'}}>{t.type.replace(/_/g,' ')}</span></td>
