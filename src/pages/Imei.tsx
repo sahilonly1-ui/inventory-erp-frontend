@@ -168,14 +168,13 @@ export function Imei() {
     load('','','','','',1,'');
   };
 
-  // When toggle is OFF → turn ON with date picker; when ON → turn OFF immediately
+  // When toggle is OFF → turn ON with today's date directly (no popup)
+  // When toggle is ON → turn OFF immediately
   const handleSwipedClick=(id:string,cur:boolean)=>{
     if(cur){
-      // Already swiped → toggle off immediately
       commitSwiped(id,false,null);
     } else {
-      // Not swiped → show date picker defaulting to today
-      setDatePicker({id,field:'swiped',date:today});
+      commitSwiped(id,true,today);
     }
   };
 
@@ -183,7 +182,7 @@ export function Imei() {
     if(cur){
       commitActivated(id,false,null);
     } else {
-      setDatePicker({id,field:'activated',date:today});
+      commitActivated(id,true,today);
     }
   };
 
