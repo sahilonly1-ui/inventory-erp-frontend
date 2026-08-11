@@ -102,10 +102,25 @@ export function OpeningStock() {
     return i + 1;
   }, []);
 
-  // EAN lookup
+  // EAN lookup — non-blocking. The next row is opened and focused straight
+  // away so scanning never waits on the network; the product is resolved in
+  // the background and the row is filled in (or flagged) when it arrives.
   const handleEan = useCallback(async (i: number, ean: string) => {
     const v = ean.trim(); if (!v) return;
     upd(i, { ean: v, status: 'loading', errMsg: '', errField: '' });
+
+    // Open the next row and move on immediately, before the lookup resolves.
+    // An unknown EAN is flagged in place a moment later, which is far cheaper
+    // than stalling every single scan on a network round-trip.
+    setRows(rs => {
+      const nextRow = rs[i + 1];
+      if (nextRow && !nextRow.ean.trim() && nextRow.status === 'empty') return rs;
+      const next = [...rs];
+      if (i >= rs.length - 1) next.push(mk()); else next.splice(i + 1, 0, mk());
+      return next;
+    });
+    setTimeout(() => moveTo(i + 1, 'ean'), 0);
+
     let p = eCache.current.get(v);
     if (p === undefined) {
       try {
@@ -116,33 +131,17 @@ export function OpeningStock() {
         eCache.current.set(v, p);
       } catch {
         // Don't cache failures — next scan should retry
-        await new Promise(res => setTimeout(res, 500));
-        const cached = eCache.current.get(v);
-        if (cached !== undefined) { p = cached; }
-        else { p = null; }
+        p = eCache.current.get(v) ?? null;
       }
     }
+
     setRows(rs => {
       if (rs[i]?.ean !== v) return rs;
       if (!p) {
-        setTimeout(() => moveTo(i, 'ean'), 0);
         return rs.map((r, x) => x === i ? { ...r, status: 'not_found' as const, errMsg: 'EAN not found in Product Master' } : r);
       }
-      return rs.map((r, x) => x === i ? { ...r, ...p!, status: (p!.imeiRequired || p!.srnoRequired) ? 'found' : 'saved', qty: (p!.imeiRequired || p!.srnoRequired) ? 1 : r.qty } : r);
+      return rs.map((r, x) => x === i ? { ...r, ...p!, status: 'found' as const, qty: 1 } : r);
     });
-    if (p) {
-      // Insert blank row for next scan (same as StockIn)
-      setRows(rs => {
-        const nextRow = rs[i + 1];
-        if (nextRow && !nextRow.ean.trim() && nextRow.status === 'empty') return rs;
-        const next = [...rs];
-        if (i >= rs.length - 1) next.push(mk()); else next.splice(i + 1, 0, mk());
-        return next;
-      });
-      // EAN→EAN→EAN flow (not EAN→IMEI)
-      // After all EANs scanned, user clicks IMEI field to scan IMEIs in sequence
-      setTimeout(() => moveTo(i + 1, 'ean'), 60);
-    }
   }, [upd, moveTo]);
 
   useEffect(() => { ERef.current = handleEan; }, [handleEan]);
@@ -215,7 +214,18 @@ export function OpeningStock() {
       if (fi >= 0) moveTo(fi, rows[fi].srnoRequired ? 'srno' : 'imei');
       return;
     }
-    // A background duplicate check may have flagged a row after it was scanned.
+    // Background lookups may have flagged rows after they were scanned.
+    const unknown = rows.findIndex(r => r.status === 'not_found');
+    if (unknown !== -1) {
+      alert(`⚠ Row ${unknown + 1}: EAN ${rows[unknown].ean} is not in Product Master.\n\nAdd the product or remove that row before saving.`);
+      moveTo(unknown, 'ean');
+      return;
+    }
+    const stillLoading = rows.findIndex(r => r.status === 'loading');
+    if (stillLoading !== -1) {
+      alert('⏳ Still checking a few scans — try again in a moment.');
+      return;
+    }
     const flagged = rows.findIndex(r => r.status === 'err' && r.errMsg);
     if (flagged !== -1) {
       alert(`⚠ Row ${flagged + 1} has an error\n\n${rows[flagged].errMsg}\n\nFix or remove that row before saving.`);

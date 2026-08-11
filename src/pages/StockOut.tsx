@@ -86,39 +86,35 @@ export function StockOut(){
     return i+1;
   },[]);
 
-  // ── EAN scan — same as StockIn: EAN→EAN→EAN flow ─────────────────────────
+  // ── EAN scan — non-blocking: advance immediately, resolve in background ───
   const handleEan=useCallback(async(i:number,ean:string)=>{
     const v=ean.trim();if(!v||!whId)return;
     upd(i,{ean:v,status:'loading',errMsg:'',errField:''});
+
+    // Open the next row and move on before the lookup resolves, so scanning
+    // is never gated on a network round-trip.
+    const ni=ins(i);
+    setTimeout(()=>moveTo(ni,'ean'),0);
+
     let p=pCache.get(v);
     if(p===undefined){
-      try{const r=await api<{product:{id:string;model:string;brand:string;imeiRequired:boolean;srnoRequired:boolean}}>(`/inventory/lookup?ean=${encodeURIComponent(v)}`);
-        p={id:r.product.id,model:r.product.model,brand:r.product.brand,imeiRequired:r.product.imeiRequired,srnoRequired:r.product.srnoRequired||false};pCache.set(v,p);
+      try{
+        const r=await api<{product:{id:string;model:string;brand:string;imeiRequired:boolean;srnoRequired:boolean}}>(`/inventory/lookup?ean=${encodeURIComponent(v)}`);
+        p={id:r.product.id,model:r.product.model,brand:r.product.brand,imeiRequired:r.product.imeiRequired,srnoRequired:r.product.srnoRequired||false};
+        pCache.set(v,p);
       }catch{
-        const cached=pCache.get(v);
-        if(cached!==undefined){p=cached;}
-        else{
-          await new Promise(r=>setTimeout(r,400));
-          const cached2=pCache.get(v);
-          if(cached2!==undefined){p=cached2;}
-          else{
-            try{
-              const r2=await api<{product:{id:string;model:string;brand:string;imeiRequired:boolean;srnoRequired:boolean}}>(`/inventory/lookup?ean=${encodeURIComponent(v)}`);
-              p={id:r2.product.id,model:r2.product.model,brand:r2.product.brand,imeiRequired:r2.product.imeiRequired,srnoRequired:r2.product.srnoRequired||false};
-              pCache.set(v,p);
-            }catch{pCache.set(v,null);p=null;}
-          }
-        }
+        // Don't permanently cache a miss — the next scan should retry.
+        p=pCache.get(v)??null;
       }
     }
+
     setRows(rs=>{
       if(rs[i]?.ean!==v)return rs;
       if(!p){return rs.map((r,x)=>x===i?{...r,status:'not_found' as const,errMsg:'EAN not found in product master'}:r);}
       const needsImei=(p as any).imeiRequired||false;
       const needsSrno=p!.srnoRequired||false;
-      return rs.map((r,x)=>x===i?{...r,productId:(p as any).id,model:(p as any).model,brand:(p as any).brand,imeiRequired:needsImei,srnoRequired:needsSrno,status:(needsImei||needsSrno)?'found':'saved',qty:1}:r);
+      return rs.map((r,x)=>x===i?{...r,productId:(p as any).id,model:(p as any).model,brand:(p as any).brand,imeiRequired:needsImei,srnoRequired:needsSrno,status:'found' as const,qty:1}:r);
     });
-    if(p){const ni=ins(i);moveTo(ni,'ean');}
   },[whId,upd,ins,moveTo]);
   useEffect(()=>{ERef.current=handleEan;},[handleEan]);
 
@@ -189,7 +185,18 @@ export function StockOut(){
 
   // ── Commit — dispatch IMEIs and non-IMEI stock out ─────────────────────────
   const commit=useCallback(async()=>{
-    // A background availability check may have flagged a row after it was scanned.
+    // Background lookups may have flagged rows after they were scanned.
+    const unknown=rows.findIndex(r=>r.status==='not_found');
+    if(unknown!==-1){
+      alert(`⚠ Row ${unknown+1}: EAN ${rows[unknown].ean} is not in Product Master.\n\nRemove that row before dispatching.`);
+      moveTo(unknown,'ean');
+      return;
+    }
+    const stillLoading=rows.findIndex(r=>r.status==='loading');
+    if(stillLoading!==-1){
+      alert('⏳ Still checking a few scans — try again in a moment.');
+      return;
+    }
     const flagged=rows.findIndex(r=>r.status==='err'&&r.errMsg);
     if(flagged!==-1){
       alert(`⚠ Row ${flagged+1} has an error\n\n${rows[flagged].errMsg}\n\nFix or remove that row before dispatching.`);

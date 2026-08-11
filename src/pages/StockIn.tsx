@@ -111,64 +111,46 @@ export function StockIn(){
   const upd=useCallback((i:number,p:Partial<Row>)=>setRows(rs=>rs.map((r,x)=>x===i?{...r,...p}:r)),[]);
   const ins=useCallback((i:number,pre:Partial<Row>={})=>{const nr={...mk(),...pre};setRows(rs=>{const n=[...rs];if(i>=rs.length-1)n.push(nr);else n.splice(i+1,0,nr);return n;});return i+1;},[]);
 
+  // Non-blocking EAN lookup: the next row is opened and focused immediately so
+  // scanning never waits on the network. The product resolves in the
+  // background and the row is filled in — or flagged — when it arrives.
   const handleEan=useCallback(async(i:number,ean:string)=>{
     const v=ean.trim();if(!v)return;
     upd(i,{ean:v,status:'loading',errMsg:'',errField:''});
+
+    // Open the next row and advance right away.
+    setRows(rs=>{
+      const nextRow=rs[i+1];
+      if(nextRow&&!nextRow.ean.trim()&&nextRow.status==='empty')return rs;
+      const nr={id:Math.random().toString(36).slice(2,9),ean:'',productId:'',model:'',brand:'',imeiRequired:false,srnoRequired:false,qty:0,imei:'',srno:'',imeiType:'NIL',status:'empty' as const,errMsg:'',errField:'' as const};
+      const next=[...rs];
+      if(i>=rs.length-1)next.push(nr);else next.splice(i+1,0,nr);
+      return next;
+    });
+    setTimeout(()=>moveTo(i+1,'ean'),0);
+
     let p=eCache.get(v);
     if(p===undefined){
-      // Use a row-local stamp so concurrent bulk lookups don't cancel each other.
-      // Each row updates only its own index so cross-row races are safe.
       try{
         const r=await api<{product:{id:string;model:string;brand:string;imeiRequired:boolean;srnoRequired:boolean;brandImeiRequired:boolean;brandSrnoRequired:boolean}}>(`/inventory/lookup?ean=${encodeURIComponent(v)}`);
         p={productId:r.product.id,model:r.product.model,brand:r.product.brand,imeiRequired:r.product.imeiRequired,srnoRequired:r.product.srnoRequired||false};
         eCache.set(v,p);
       }catch{
-        // Wait briefly for concurrent row lookups to populate cache
-        await new Promise(res=>setTimeout(res,500));
-        const cached=eCache.get(v);
-        if(cached!==undefined){p=cached;}
-        else{
-          // Don't permanently cache as null — next scan should retry
-          // (don't set eCache so the next handleEan call tries the API again)
-          p=null;
-        }
+        // Don't permanently cache as null — next scan should retry
+        p=eCache.get(v)??null;
       }
     }
-    // Verify row still has this EAN (user may have cleared it during lookup)
+
     setRows(rs=>{
-      if(rs[i]?.ean!==v)return rs; // row was changed — skip update
+      if(rs[i]?.ean!==v)return rs; // row was changed during lookup — skip
       if(!p){
-        const next=rs.map((r,x)=>x===i?{...r,status:'not_found' as const,errMsg:''}:r);
-        // One final cache check before opening "New Product" drawer
-        const finalCheck=eCache.get(v);
-        if(finalCheck){
-          // Product was found by another concurrent call — use it
-          setTimeout(()=>handleEan(i,v),10);
-          return rs;
-        }
-        // Genuinely not found — open drawer
-        setTimeout(()=>{setDrawer(v);setDf(d=>({...d,ean:v}));moveTo(i,'ean');},0);
-        return next;
+        // Unknown EAN: flag the row in place. The operator keeps scanning and
+        // can come back to it; clicking the row opens the New Product drawer.
+        return rs.map((r,x)=>x===i?{...r,status:'not_found' as const,errMsg:`EAN ${v} not in Product Master — tap to add`}:r);
       }
-      // IMEI-required products ALWAYS go to 'found' — never auto-save without IMEI
-      const needsImei=p!.imeiRequired;
       const needsSrno=p!.srnoRequired||false;
-      // imeiRequired → 'found' (need IMEI); srnoRequired only → 'found' as well (need SrNo); else auto-save
-      return rs.map((r,x)=>x===i?{...r,...p!,srnoRequired:needsSrno,status:(needsImei||needsSrno)?'found':'saved',qty:1}:r);
+      return rs.map((r,x)=>x===i?{...r,...p!,srnoRequired:needsSrno,status:'found' as const,qty:1}:r);
     });
-    if(p){
-      setRows(rs=>{
-        const nextRow=rs[i+1];
-        // If next row is already empty → reuse it (just moveTo)
-        if(nextRow&&!nextRow.ean.trim()&&nextRow.status==='empty')return rs;
-        // Next row has content OR doesn't exist → add a blank row
-        const nr={id:Math.random().toString(36).slice(2,9),ean:'',productId:'',model:'',brand:'',imeiRequired:false,srnoRequired:false,qty:0,imei:'',srno:'',imeiType:'NIL',status:'empty' as const,errMsg:'',errField:'' as const};
-        const next=[...rs];
-        if(i>=rs.length-1)next.push(nr);else next.splice(i+1,0,nr);
-        return next;
-      });
-      moveTo(i+1,'ean');
-    }
   },[upd,ins,moveTo,setDrawer,setDf]);
   useEffect(()=>{ERef.current=handleEan;},[handleEan]);
 
@@ -240,7 +222,18 @@ export function StockIn(){
   const clear=()=>{if(!confirm('Clear all rows and draft?'))return;eCache.clear();setRows([mk()]);moveTo(0,'ean');localStorage.removeItem(DK);};
 
   const commit=useCallback(async()=>{
-    // A background duplicate check may have flagged a row after it was scanned.
+    // Background lookups may have flagged rows after they were scanned.
+    const unknown=rows.findIndex(r=>r.status==='not_found');
+    if(unknown!==-1){
+      alert(`⚠ Row ${unknown+1}: EAN ${rows[unknown].ean} is not in Product Master.\n\nTap "+ New EAN" to add it, or remove that row before saving.`);
+      moveTo(unknown,'ean');
+      return;
+    }
+    const stillLoading=rows.findIndex(r=>r.status==='loading');
+    if(stillLoading!==-1){
+      alert('⏳ Still checking a few scans — try again in a moment.');
+      return;
+    }
     const flagged=rows.findIndex(r=>r.status==='err'&&r.errMsg);
     if(flagged!==-1){
       alert(`⚠ Row ${flagged+1} has an error\n\n${rows[flagged].errMsg}\n\nFix or remove that row before saving.`);
@@ -522,7 +515,7 @@ export function StockIn(){
                       {!row.errMsg&&row.status==='saved'&&<span style={{fontSize:10,background:'#dcfce7',color:'#15803d',padding:'2px 8px',borderRadius:10,fontWeight:700}}>{row.imeiRequired?'✓ IMEI':row.srnoRequired?'✓ S/N':'✓'}</span>}
                       {!row.errMsg&&row.status==='found'&&row.imeiRequired&&<span style={{fontSize:10,background:'#fef9c3',color:'#92400e',padding:'2px 8px',borderRadius:10,fontWeight:700}}>⚠ IMEI</span>}
                       {!row.errMsg&&row.status==='found'&&!row.imeiRequired&&row.srnoRequired&&<span style={{fontSize:10,background:'#fed7aa',color:'#9a3412',padding:'2px 8px',borderRadius:10,fontWeight:700}}>⚠ S/N</span>}
-                      {!row.errMsg&&row.status==='not_found'&&<span style={{fontSize:10,background:'#fef2f2',color:'#dc2626',padding:'2px 8px',borderRadius:10}}>New EAN</span>}
+                      {row.status==='not_found'&&<button onClick={()=>{setDrawer(row.ean);setDf(d=>({...d,ean:row.ean}));}} title="Add this product to Product Master" style={{fontSize:10,background:'#fef2f2',color:'#dc2626',padding:'2px 8px',borderRadius:10,border:'1px solid #fecaca',cursor:'pointer',fontWeight:700}}>+ New EAN</button>}
                     </td>
                     {/* Delete */}
                     <td style={{borderBottom:'1px solid #e2e8f0',padding:0,textAlign:'center'}}>
