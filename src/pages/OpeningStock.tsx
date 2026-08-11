@@ -188,11 +188,29 @@ export function OpeningStock() {
   }, [rows, upd, ins, moveTo]);
 
   // Sr. No. entry (tablets/accessories)
-  const handleSrno = useCallback((i: number, v: string) => {
+  const handleSrno = useCallback(async (i: number, v: string) => {
     const srno = v.trim();
     if (!srno) { moveTo(i, 'srno'); return; }
     const dup = rows.findIndex((r, ri) => ri !== i && r.srno === srno);
     if (dup !== -1) { upd(i, { errMsg: `Duplicate! Sr. No. already in row ${dup + 1}`, status: 'err', errField: 'srno' }); moveTo(i, 'srno'); return; }
+
+    // Serial numbers live in the same table as IMEIs, so check for an existing
+    // registration here rather than letting the whole batch fail on save.
+    upd(i, { srno, status: 'loading', errMsg: '', errField: '' });
+    let taken = iCache.current.get(srno);
+    if (taken === undefined) {
+      try {
+        const hit = await api<{ product?: { model?: string } }>(`/imei/${encodeURIComponent(srno)}`);
+        taken = hit?.product?.model || 'another product';
+      } catch { taken = ''; }
+      iCache.current.set(srno, taken);
+    }
+    if (taken) {
+      upd(i, { srno, status: 'err', errMsg: `Already in stock as ${taken}`, errField: 'srno' });
+      moveTo(i, 'srno');
+      return;
+    }
+
     upd(i, { srno, status: 'saved', errMsg: '', errField: '' });
     const nextIdx = i + 1;
     if (nextIdx < rows.length && rows[nextIdx].productId) {
@@ -214,20 +232,21 @@ export function OpeningStock() {
     }
     const sv = rows.filter(r => r.status === 'saved' && r.productId);
 
-    // Catch duplicate IMEIs before hitting the server — the DB would reject the
-    // whole batch, and a client-side check can point straight at the bad row.
+    // Catch duplicate IMEIs / serial numbers before hitting the server — both
+    // share one unique index, so the DB would reject the whole batch.
     const seen = new Map<string, number>();
     for (let i = 0; i < rows.length; i++) {
-      const im = rows[i].imei?.trim();
-      if (!im) continue;
-      if (seen.has(im)) {
-        const first = seen.get(im)! + 1;
-        alert(`⚠ Duplicate IMEI found\n\n${im}\n\nScanned in both row ${first} and row ${i + 1}. Remove one before saving.`);
-        upd(i, { errMsg: `Duplicate — same as row ${first}`, status: 'err', errField: 'imei' });
-        moveTo(i, 'imei');
+      const code = (rows[i].imei || rows[i].srno || '').trim();
+      if (!code) continue;
+      if (seen.has(code)) {
+        const first = seen.get(code)! + 1;
+        const label = rows[i].imei ? 'IMEI' : 'Sr. No.';
+        alert(`⚠ Duplicate ${label} found\n\n${code}\n\nScanned in both row ${first} and row ${i + 1}. Remove one before saving.`);
+        upd(i, { errMsg: `Duplicate — same as row ${first}`, status: 'err', errField: rows[i].imei ? 'imei' : 'srno' });
+        moveTo(i, rows[i].imei ? 'imei' : 'srno');
         return;
       }
-      seen.set(im, i);
+      seen.set(code, i);
     }
     if (!sv.length || !whId) { alert('No items to save.'); return; }
     setBusy(true);
@@ -241,10 +260,15 @@ export function OpeningStock() {
       for (const [, d] of Object.entries(imeiByProd) as any[]) {
         await api('/imei/receive', { method: 'POST', body: JSON.stringify({ productId: d.productId, warehouseId: whId, imeis: d.imeis, force: true, type: 'OPENING', remarks: rmk }) });
       }
-      // Sr. No. items (tablets etc) — save via opening-stock with srno in remarks
-      const srnoRows = sv.filter(r => r.srno && r.srnoRequired);
-      for (const r of srnoRows) {
-        await api('/inventory/opening-stock', { method: 'POST', body: JSON.stringify({ productId: r.productId, warehouseId: whId, quantity: 1, remarks: `${rmk} | S/N: ${r.srno}` }) });
+      // Serial-number items (tablets, Wi-Fi devices) — tracked in the same
+      // table as IMEIs so they show up in IMEI Tracker and support
+      // swipe/activation just like phones.
+      const srnoByProd = sv.filter(r => r.srno && r.srnoRequired).reduce((a: Record<string,any>, r) => {
+        if (!a[r.productId]) a[r.productId] = { productId: r.productId, imeis: [] };
+        a[r.productId].imeis.push({ imei1: r.srno, imeiType: 'NIL' }); return a;
+      }, {});
+      for (const [, d] of Object.entries(srnoByProd) as any[]) {
+        await api('/imei/receive', { method: 'POST', body: JSON.stringify({ productId: d.productId, warehouseId: whId, imeis: d.imeis, force: true, type: 'OPENING', remarks: rmk }) });
       }
       // Non-IMEI, Non-SrNo accessories
       const nonImeiByProd = sv.filter(r => (!r.imei || !r.imeiRequired) && (!r.srno || !r.srnoRequired)).reduce((a: Record<string,any>, r) => {

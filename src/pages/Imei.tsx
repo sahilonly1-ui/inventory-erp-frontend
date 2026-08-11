@@ -314,7 +314,7 @@ export function Imei() {
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
           <input value={search} onChange={e=>onSearch(e.target.value)}
-            placeholder="Search IMEI, product name, brand…"
+            placeholder="Search IMEI, serial no., product name, brand…"
             style={{
               width:'100%',height:36,paddingLeft:34,paddingRight:search?32:10,
               border:'1.5px solid #e2e8f0',borderRadius:8,fontSize:13,outline:'none',
@@ -412,7 +412,7 @@ export function Imei() {
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,minWidth:1100}}>
             <thead>
               <tr>
-                <th style={thS}>IMEI</th>
+                <th style={thS}>IMEI / SERIAL</th>
                 <th style={thS}>Product</th>
                 <th style={thS}>Status</th>
                 <th style={{...thS,textAlign:'center'}}>Swiped</th>

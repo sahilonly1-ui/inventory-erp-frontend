@@ -218,9 +218,31 @@ export function StockReport() {
   const catName   = data?.categories.filter(c => !exCats.has(c.id)).map(c=>c.name).join(', ') || 'All Categories';
   const brandName = (data?.brands ?? []).filter(b => !exBrands.has(b)).join(', ') || 'All Brands';
 
-  // Build print HTML — shrink to one page, full-width, 3-column grid
+  // Distribute brand cards across N columns, balancing by estimated height.
+  // CSS multi-column paginates unreliably when printing (it was producing a
+  // blank first page), so columns are computed here and laid out with flex.
+  const buildBalancedColumns = (colCount: number) => {
+    const cards = brandList.map(brand => ({
+      brand,
+      // header + column-header + one line per product + total line
+      weight: byBrand[brand].length + 3,
+    }));
+    const cols: { brands: string[]; weight: number }[] =
+      Array.from({ length: colCount }, () => ({ brands: [], weight: 0 }));
+    // Largest-first into the currently shortest column — keeps columns even.
+    for (const c of [...cards].sort((a, b) => b.weight - a.weight)) {
+      const target = cols.reduce((min, col) => (col.weight < min.weight ? col : min), cols[0]);
+      target.brands.push(c.brand);
+      target.weight += c.weight;
+    }
+    // Restore alphabetical order within each column
+    for (const col of cols) col.brands.sort((a, b) => a.localeCompare(b));
+    return cols;
+  };
+
+  // Build print HTML — auto-shrinks to fit exactly one A4 landscape page
   const buildPrintHTML = () => {
-    const brandSections = brandList.map(brand => {
+    const cardFor = (brand: string) => {
       const bRows  = byBrand[brand];
       const bTotal = bRows.reduce((s,r)=>s+r.totalQty,0);
       const bRet   = bRows.reduce((s,r)=>s+r.retail,0);
@@ -237,19 +259,24 @@ export function StockReport() {
           <tfoot><tr class="bt"><td class="cn">Total — ${brand}</td><td class="cq">${bTotal}</td><td class="cr">${bRet}</td><td class="ca">${bAcc}</td></tr></tfoot>
         </table>
       </div>`;
-    }).join('');
+    };
+
+    const columnsHTML = buildBalancedColumns(3)
+      .map(col => `<div class="col">${col.brands.map(cardFor).join('')}</div>`)
+      .join('');
 
     return `<!DOCTYPE html><html><head><title>Stock Report ${fmtDate(new Date())}</title>
 <style>
 @page{size:A4 landscape;margin:5mm 5mm}
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:Arial,sans-serif;font-size:7.5pt;color:#000;
-  transform-origin:top left;
-  -webkit-print-color-adjust:exact;print-color-adjust:exact}
+html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{font-family:Arial,sans-serif;font-size:7.5pt;color:#000}
+#wrap{transform-origin:top left}
 h1{font-size:11pt;font-weight:800;margin-bottom:1mm}
 .meta{font-size:7pt;color:#444;margin-bottom:2mm;padding-bottom:1mm;border-bottom:1px solid #bbb}
-.grid{column-count:3;column-gap:3mm}
-.bb{break-inside:avoid;-webkit-column-break-inside:avoid;page-break-inside:avoid;display:inline-block;width:100%;margin-bottom:3mm}
+.cols{display:flex;gap:3mm;align-items:flex-start}
+.col{flex:1 1 0;min-width:0}
+.bb{margin-bottom:3mm;break-inside:avoid;page-break-inside:avoid}
 table{width:100%;border-collapse:collapse}
 th,td{border:.4pt solid #999;padding:1.5pt 3pt}
 .bh{background:#1e293b!important;color:#fff!important;font-size:8pt;font-weight:700;text-align:left;padding:2pt 4pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -259,10 +286,29 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
 .bt td{background:#f0f0f0!important;font-weight:700;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .gt{margin-top:3mm;background:#1e293b!important;color:#fff!important;padding:3pt 8pt;font-size:8.5pt;font-weight:700;display:flex;gap:15mm;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 </style></head><body>
-<h1>📦 iTechArena ERP — Stock Report</h1>
-<div class="meta">Date: ${fmtDate(new Date())} &nbsp;·&nbsp; Brands: ${brandList.join(', ')} &nbsp;·&nbsp; Total: ${grandTotal} units (Retail: ${grandRetail} | ACC: ${grandActivated})</div>
-<div class="grid">${brandSections}</div>
-<div class="gt"><span>GRAND TOTAL</span><span>Qty: ${grandTotal}</span><span>Retail: ${grandRetail}</span><span>ACC: ${grandActivated}</span></div>
+<div id="wrap">
+  <h1>📦 iTechArena ERP — Stock Report</h1>
+  <div class="meta">Date: ${fmtDate(new Date())} &nbsp;·&nbsp; Brands: ${brandList.join(', ')} &nbsp;·&nbsp; Total: ${grandTotal} units (Retail: ${grandRetail} | ACC: ${grandActivated})</div>
+  <div class="cols">${columnsHTML}</div>
+  <div class="gt"><span>GRAND TOTAL</span><span>Qty: ${grandTotal}</span><span>Retail: ${grandRetail}</span><span>ACC: ${grandActivated}</span></div>
+</div>
+<script>
+(function(){
+  // Scale the whole report down until it fits inside one A4 landscape page.
+  var MM = 96 / 25.4;                 // px per mm at CSS 96dpi
+  var availW = (297 - 10) * MM;       // page width  minus 5mm margins
+  var availH = (210 - 10) * MM;       // page height minus 5mm margins
+  var wrap = document.getElementById('wrap');
+  wrap.style.width = availW + 'px';   // lay out at full page width first
+  var h = wrap.scrollHeight, w = wrap.scrollWidth;
+  var k = Math.min(1, availH / h, availW / w);
+  if (k < 1) {
+    wrap.style.transform = 'scale(' + k + ')';
+    document.body.style.width  = (w * k) + 'px';
+    document.body.style.height = (h * k) + 'px';
+  }
+})();
+<\/script>
 </body></html>`;
   };
 
@@ -292,12 +338,12 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
       container.style.cssText = 'position:fixed;top:0;left:0;width:1122px;background:#fff;padding:12px;font-family:Arial,sans-serif;font-size:9px;z-index:-1;opacity:0';
       
       // Build the visual report in DOM
-      const brandSectionsHTML = brandList.map(brand => {
+      const cardHTML = (brand: string) => {
         const bRows  = byBrand[brand];
         const bTotal = bRows.reduce((s,r)=>s+r.totalQty,0);
         const bRet   = bRows.reduce((s,r)=>s+r.retail,0);
         const bAcc   = bRows.reduce((s,r)=>s+r.activated,0);
-        return `<div style="break-inside:avoid;-webkit-column-break-inside:avoid;page-break-inside:avoid;display:inline-block;width:100%;border:1px solid #ccc;border-radius:6px;overflow:hidden;margin-bottom:8px">
+        return `<div style="border:1px solid #ccc;border-radius:6px;overflow:hidden;margin-bottom:8px">
           <div style="background:#1e293b;color:#fff;padding:4px 8px;font-size:9px;font-weight:800">${brand}</div>
           <table style="width:100%;border-collapse:collapse;font-size:8px">
             <tr style="background:#e8e8e8"><th style="padding:2px 6px;text-align:left;border:0.5px solid #aaa">Product Name</th><th style="padding:2px;text-align:center;width:32px;border:0.5px solid #aaa">Qty</th><th style="padding:2px;text-align:center;width:40px;border:0.5px solid #aaa;color:#16a34a">Retail</th><th style="padding:2px;text-align:center;width:30px;border:0.5px solid #aaa;color:#7c3aed">ACC</th></tr>
@@ -305,14 +351,18 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
             <tr style="background:#f0f0f0;font-weight:700"><td style="padding:2px 6px;border:0.5px solid #ccc">Total — ${brand}</td><td style="padding:2px;text-align:center;border:0.5px solid #ccc">${bTotal}</td><td style="padding:2px;text-align:center;color:#16a34a;border:0.5px solid #ccc">${bRet}</td><td style="padding:2px;text-align:center;color:#7c3aed;border:0.5px solid #ccc">${bAcc}</td></tr>
           </table>
         </div>`;
-      }).join('');
+      };
+
+      const brandSectionsHTML = buildBalancedColumns(3)
+        .map(col => `<div style="flex:1 1 0;min-width:0">${col.brands.map(cardHTML).join('')}</div>`)
+        .join('');
 
       container.innerHTML = `
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
           <div style="font-size:16px;font-weight:800;color:#1e293b">📦 iTechArena ERP — Stock Report</div>
           <div style="font-size:10px;color:#64748b">${fmtDate(new Date())} · Total: ${grandTotal} units · Retail: ${grandRetail} · ACC: ${grandActivated}</div>
         </div>
-        <div style="column-count:3;column-gap:8px">
+        <div style="display:flex;gap:8px;align-items:flex-start">
           ${brandSectionsHTML}
         </div>
         <div style="margin-top:8px;background:#1e293b;color:#fff;padding:6px 12px;border-radius:6px;display:flex;gap:24px;font-size:9px;font-weight:700">
@@ -451,14 +501,16 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
         </div>
       ) : (
         <div ref={reportRef} style={{ flex:1, overflowY:'auto', padding:'14px 16px' }}>
-          <div style={{ columnWidth:340, columnGap:14 }}>
-            {brandList.map(brand => {
-              const bRows  = byBrand[brand];
-              const bTotal = bRows.reduce((s,r)=>s+r.totalQty,0);
-              const bRet   = bRows.reduce((s,r)=>s+r.retail,0);
-              const bAcc   = bRows.reduce((s,r)=>s+r.activated,0);
-              return (
-                <div key={brand} style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:10, overflow:'hidden', boxShadow:'0 1px 3px rgba(0,0,0,.04)', breakInside:'avoid', pageBreakInside:'avoid', marginBottom:14, display:'inline-block', width:'100%' }}>
+          <div style={{ display:'flex', gap:14, alignItems:'flex-start' }}>
+            {buildBalancedColumns(3).map((col, ci) => (
+              <div key={ci} style={{ flex:'1 1 0', minWidth:0 }}>
+                {col.brands.map(brand => {
+                  const bRows  = byBrand[brand];
+                  const bTotal = bRows.reduce((s,r)=>s+r.totalQty,0);
+                  const bRet   = bRows.reduce((s,r)=>s+r.retail,0);
+                  const bAcc   = bRows.reduce((s,r)=>s+r.activated,0);
+                  return (
+                <div key={brand} style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:10, overflow:'hidden', boxShadow:'0 1px 3px rgba(0,0,0,.04)', marginBottom:14 }}>
                   <div style={{ background:'#1e293b', color:'#fff', padding:'7px 12px', fontSize:12, fontWeight:800 }}>{brand}</div>
                   <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
                     <thead>
@@ -489,8 +541,10 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
                     </tfoot>
                   </table>
                 </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            ))}
           </div>
           <div style={{ marginTop:14, background:'#1e293b', borderRadius:10, padding:'10px 18px', display:'flex', gap:28, alignItems:'center' }}>
             <span style={{ color:'#fff', fontWeight:700, fontSize:13 }}>GRAND TOTAL</span>
