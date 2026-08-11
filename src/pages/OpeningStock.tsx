@@ -4,11 +4,11 @@ import { api } from '../api/client';
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface Warehouse { id: string; name: string; }
 type RS  = 'empty'|'loading'|'found'|'saved'|'not_found'|'err';
-type FC  = 'ean'|'imei'|'qty';
+type FC  = 'ean'|'imei'|'srno'|'qty';
 interface Row {
   id: string; ean: string; productId: string; model: string; brand: string;
   imeiRequired: boolean; srnoRequired: boolean;
-  qty: number; imei: string;
+  qty: number; imei: string; srno: string;
   status: RS; errMsg: string; errField: FC|'';
 }
 interface HistoryEntry {
@@ -22,7 +22,7 @@ interface HistoryEntry {
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 const mk  = (): Row => ({ id: uid(), ean:'', productId:'', model:'', brand:'',
-  imeiRequired: false, srnoRequired: false, qty: 1, imei: '',
+  imeiRequired: false, srnoRequired: false, qty: 1, imei: '', srno: '',
   status: 'empty', errMsg: '', errField: '' });
 const DK  = 'opening_draft_v1';
 const fmtDate = (s: string) => new Date(s).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
@@ -126,7 +126,7 @@ export function OpeningStock() {
         setTimeout(() => moveTo(i, 'ean'), 0);
         return rs.map((r, x) => x === i ? { ...r, status: 'not_found' as const, errMsg: 'EAN not found in Product Master' } : r);
       }
-      return rs.map((r, x) => x === i ? { ...r, ...p!, status: p!.imeiRequired ? 'found' : 'saved', qty: p!.imeiRequired ? 1 : r.qty } : r);
+      return rs.map((r, x) => x === i ? { ...r, ...p!, status: (p!.imeiRequired || p!.srnoRequired) ? 'found' : 'saved', qty: (p!.imeiRequired || p!.srnoRequired) ? 1 : r.qty } : r);
     });
     if (p) {
       // Insert blank row for next scan (same as StockIn)
@@ -156,16 +156,37 @@ export function OpeningStock() {
     // IMEI→IMEI flow: go to next row's IMEI field (not EAN)
     const nextIdx = i + 1;
     if (nextIdx < rows.length && rows[nextIdx].productId) {
-      moveTo(nextIdx, 'imei');
+      moveTo(nextIdx, rows[nextIdx].imeiRequired ? 'imei' : rows[nextIdx].srnoRequired ? 'srno' : 'ean');
     } else if (nextIdx < rows.length) {
-      moveTo(nextIdx, 'ean'); // next row has no product yet
+      moveTo(nextIdx, 'ean');
     }
   }, [rows, upd, ins, moveTo]);
+
+  // Sr. No. entry (tablets/accessories)
+  const handleSrno = useCallback((i: number, v: string) => {
+    const srno = v.trim();
+    if (!srno) { moveTo(i, 'srno'); return; }
+    const dup = rows.findIndex((r, ri) => ri !== i && r.srno === srno);
+    if (dup !== -1) { upd(i, { errMsg: `Duplicate! Sr. No. already in row ${dup + 1}`, status: 'err', errField: 'srno' }); moveTo(i, 'srno'); return; }
+    upd(i, { srno, status: 'saved', errMsg: '', errField: '' });
+    const nextIdx = i + 1;
+    if (nextIdx < rows.length && rows[nextIdx].productId) {
+      moveTo(nextIdx, rows[nextIdx].imeiRequired ? 'imei' : rows[nextIdx].srnoRequired ? 'srno' : 'ean');
+    } else if (nextIdx < rows.length) {
+      moveTo(nextIdx, 'ean');
+    }
+  }, [rows, upd, moveTo]);
 
   // Save all
   const commit = useCallback(async () => {
     const pending = rows.filter(r => r.productId && r.status === 'found');
-    if (pending.length) { alert(`⚠ ${pending.length} row(s) need IMEI.`); const fi = rows.findIndex(r => r.status === 'found'); if (fi >= 0) moveTo(fi, 'imei'); return; }
+    if (pending.length) {
+      const fi = rows.findIndex(r => r.status === 'found');
+      const needsWhat = rows[fi]?.srnoRequired ? 'Sr. No.' : 'IMEI';
+      alert(`⚠ ${pending.length} row(s) need ${needsWhat}.`);
+      if (fi >= 0) moveTo(fi, rows[fi].srnoRequired ? 'srno' : 'imei');
+      return;
+    }
     const sv = rows.filter(r => r.status === 'saved' && r.productId);
     if (!sv.length || !whId) { alert('No items to save.'); return; }
     setBusy(true);
@@ -179,8 +200,13 @@ export function OpeningStock() {
       for (const [, d] of Object.entries(imeiByProd) as any[]) {
         await api('/imei/receive', { method: 'POST', body: JSON.stringify({ productId: d.productId, warehouseId: whId, imeis: d.imeis, force: true, type: 'OPENING', remarks: rmk }) });
       }
-      // Non-IMEI — cost isn't captured here; it's set once in Product Master
-      const nonImeiByProd = sv.filter(r => !r.imei || !r.imeiRequired).reduce((a: Record<string,any>, r) => {
+      // Sr. No. items (tablets etc) — save via opening-stock with srno in remarks
+      const srnoRows = sv.filter(r => r.srno && r.srnoRequired);
+      for (const r of srnoRows) {
+        await api('/inventory/opening-stock', { method: 'POST', body: JSON.stringify({ productId: r.productId, warehouseId: whId, quantity: 1, remarks: `${rmk} | S/N: ${r.srno}` }) });
+      }
+      // Non-IMEI, Non-SrNo accessories
+      const nonImeiByProd = sv.filter(r => (!r.imei || !r.imeiRequired) && (!r.srno || !r.srnoRequired)).reduce((a: Record<string,any>, r) => {
         if (!a[r.productId]) a[r.productId] = { productId: r.productId, qty: 0 };
         a[r.productId].qty += (r.qty || 1); return a;
       }, {});
@@ -189,7 +215,7 @@ export function OpeningStock() {
       }
       eCache.current.clear(); setRows([mk()]); localStorage.removeItem(DK);
       alert(`✓ ${sv.length} item(s) added as Opening Stock`);
-      setTab('history'); // Switch to history to see what was saved
+      setTab('history');
     } catch (e: any) { alert(`Failed: ${e.message}`); }
     finally { setBusy(false); }
   }, [rows, whId, date, moveTo]);
@@ -288,7 +314,7 @@ export function OpeningStock() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, tableLayout: 'fixed', minWidth: 860 }}>
               <colgroup>
                 <col style={{ width: 36 }} /><col style={{ width: 150 }} /><col />
-                <col style={{ width: 60 }} /><col style={{ width: 220 }} /><col style={{ width: 90 }} /><col style={{ width: 42 }} />
+                <col style={{ width: 60 }} /><col style={{ width: 180 }} /><col style={{ width: 160 }} /><col style={{ width: 90 }} /><col style={{ width: 42 }} />
               </colgroup>
               <thead>
                 <tr>
@@ -296,7 +322,8 @@ export function OpeningStock() {
                   <th style={thS}>EAN / BARCODE</th>
                   <th style={thS}>PRODUCT NAME</th>
                   <th style={{ ...thS, textAlign: 'center' }}>QTY</th>
-                                    <th style={{ ...thS, color: '#dc2626' }}>IMEI (15 DIGITS)</th>
+                  <th style={{ ...thS, color: '#dc2626' }}>IMEI (15 DIGITS)</th>
+                  <th style={{ ...thS, color: '#2563eb' }}>SR. NO.</th>
                   <th style={thS}>STATUS</th>
                   <th style={thS}></th>
                 </tr>
@@ -305,7 +332,8 @@ export function OpeningStock() {
                 {rows.map((row, i) => {
                   const isA = ar === i;
                   const needsImei = row.status === 'found' && row.imeiRequired;
-                  const bg = row.errMsg ? '#fff5f5' : needsImei ? '#fffbeb' : row.status === 'saved' ? '#f0fdf4' : isA ? '#f0f9ff' : i % 2 === 0 ? '#fff' : '#fafafa';
+                  const needsSrno = row.status === 'found' && row.srnoRequired;
+                  const bg = row.errMsg ? '#fff5f5' : needsImei ? '#fffbeb' : needsSrno ? '#eff6ff' : row.status === 'saved' ? '#f0fdf4' : isA ? '#f0f9ff' : i % 2 === 0 ? '#fff' : '#fafafa';
                   return (
                     <tr key={row.id} style={{ background: bg, height: 40 }} onClick={() => setAr(i)}>
                       <td style={{ borderBottom: '1px solid #e2e8f0', textAlign: 'center', fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>{i + 1}</td>
@@ -366,10 +394,22 @@ export function OpeningStock() {
                             style={CI({ fontFamily: 'monospace', fontSize: 13, color: row.errField === 'imei' ? '#dc2626' : '#0f172a' })} />
                         ) : <span style={{ fontSize: 11, color: '#e2e8f0', padding: '0 10px' }}>—</span>}
                       </td>
+                      {/* Sr. No. column */}
+                      <td style={{ borderBottom: '1px solid #e2e8f0', borderRight: '1px solid #e2e8f0', outline: row.errField === 'srno' ? '1px solid #bfdbfe' : '1px solid transparent', padding: 0 }}>
+                        {row.srnoRequired ? (
+                          <input ref={R(i, 'srno')} value={row.srno}
+                            onChange={e => { const v = e.target.value; upd(i, { srno: v, errMsg: '', errField: '' }); }}
+                            onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); handleSrno(i, (e.target as HTMLInputElement).value); } }}
+                            onFocus={() => setAr(i)}
+                            placeholder="Enter Serial No…"
+                            style={CI({ fontSize: 13, color: row.errField === 'srno' ? '#dc2626' : '#0f172a' })} />
+                        ) : <span style={{ fontSize: 11, color: '#e2e8f0', padding: '0 10px' }}>—</span>}
+                      </td>
                       <td style={{ borderBottom: '1px solid #e2e8f0', borderRight: '1px solid #e2e8f0', padding: '0 8px', textAlign: 'center' }}>
                         {row.errMsg && <span style={{ fontSize: 10, background: '#fee2e2', color: '#dc2626', padding: '2px 7px', borderRadius: 10, fontWeight: 700 }}>✕ Error</span>}
                         {!row.errMsg && row.status === 'saved' && <span style={{ fontSize: 10, background: '#dcfce7', color: '#15803d', padding: '2px 7px', borderRadius: 10, fontWeight: 700 }}>✓</span>}
                         {!row.errMsg && needsImei && <span style={{ fontSize: 10, background: '#fef9c3', color: '#92400e', padding: '2px 7px', borderRadius: 10, fontWeight: 700 }}>⚠ IMEI</span>}
+                        {!row.errMsg && needsSrno && <span style={{ fontSize: 10, background: '#dbeafe', color: '#1d4ed8', padding: '2px 7px', borderRadius: 10, fontWeight: 700 }}>⚠ S/N</span>}
                         {row.status === 'loading' && <div className="spinner" style={{ width: 14, height: 14, margin: '0 auto' }} />}
                       </td>
                       <td style={{ borderBottom: '1px solid #e2e8f0', textAlign: 'center', padding: 0 }}>
