@@ -188,6 +188,22 @@ export function OpeningStock() {
       return;
     }
     const sv = rows.filter(r => r.status === 'saved' && r.productId);
+
+    // Catch duplicate IMEIs before hitting the server — the DB would reject the
+    // whole batch, and a client-side check can point straight at the bad row.
+    const seen = new Map<string, number>();
+    for (let i = 0; i < rows.length; i++) {
+      const im = rows[i].imei?.trim();
+      if (!im) continue;
+      if (seen.has(im)) {
+        const first = seen.get(im)! + 1;
+        alert(`⚠ Duplicate IMEI found\n\n${im}\n\nScanned in both row ${first} and row ${i + 1}. Remove one before saving.`);
+        upd(i, { errMsg: `Duplicate — same as row ${first}`, status: 'err', errField: 'imei' });
+        moveTo(i, 'imei');
+        return;
+      }
+      seen.set(im, i);
+    }
     if (!sv.length || !whId) { alert('No items to save.'); return; }
     setBusy(true);
     const rmk = `Opening Stock — ${date}`;
@@ -216,7 +232,7 @@ export function OpeningStock() {
       eCache.current.clear(); setRows([mk()]); localStorage.removeItem(DK);
       alert(`✓ ${sv.length} item(s) added as Opening Stock`);
       setTab('history');
-    } catch (e: any) { alert(`Failed: ${e.message}`); }
+    } catch (e: any) { alert(`⚠ Could not save\n\n${e.message}\n\nYour scanned rows have been kept — fix the issue above and click Save again.`); }
     finally { setBusy(false); }
   }, [rows, whId, date, moveTo]);
 
