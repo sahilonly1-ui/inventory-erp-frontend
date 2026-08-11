@@ -11,20 +11,25 @@ interface BulkRow {
 }
 interface ResultRow { imei: string; status: 'ok' | 'not_found' | 'error'; msg?: string; }
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => {
+  const d = new Date();
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return `${dd}-${mm}-${d.getFullYear()}`;
+};
 
 // Generate and download an Excel template file
 function downloadTemplate() {
   const headers = [
     'IMEI (Required)',
     'Swiped (yes/no)',
-    'Date of Swipe (YYYY-MM-DD)',
+    'Date of Swipe (DD-MM-YYYY)',
     'Activated (yes/no)',
-    'Date of Activation (YYYY-MM-DD)',
+    'Date of Activation (DD-MM-YYYY)',
   ];
   const examples = [
     ['357998631622697', 'yes', today(), '', ''],
-    ['357998631622696', 'yes', '2026-07-15', 'yes', '2026-07-15'],
+    ['357998631622696', 'yes', '15-07-2026', 'yes', '15-07-2026'],
     ['357998631622695', '', '', 'yes', today()],
   ];
   const ws = XLSX.utils.aoa_to_sheet([headers, ...examples]);
@@ -52,9 +57,17 @@ function parseExcel(file: File): Promise<BulkRow[]> {
           if (!imei) continue;
 
           const swipedRaw    = String(r[1] || '').trim().toLowerCase();
-          const swipedDate   = String(r[2] || '').trim().slice(0, 10);
+          // Parse DD-MM-YYYY → YYYY-MM-DD for backend Date constructor
+          const parseDMY = (v: string) => {
+            const t = String(v || '').trim();
+            if (!t) return '';
+            const m = t.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+            if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+            return t.slice(0, 10); // fallback: already ISO or partial
+          };
+          const swipedDate   = parseDMY(String(r[2] || ''));
           const activatedRaw = String(r[3] || '').trim().toLowerCase();
-          const activatedDate= String(r[4] || '').trim().slice(0, 10);
+          const activatedDate= parseDMY(String(r[4] || ''));
 
           const row: BulkRow = { imei };
           if (swipedRaw)    { row.swiped    = swipedRaw    === 'yes' || swipedRaw    === '1' || swipedRaw    === 'true'; if (swipedDate)    row.swipedAt    = swipedDate; }
@@ -158,9 +171,9 @@ export function ImeiBulkUpload({ onClose, onDone }: { onClose: () => void; onDon
                     {[
                       ['IMEI (Required)', '15-digit number', '357998631622697'],
                       ['Swiped', 'yes / no (blank = skip)', 'yes'],
-                      ['Date of Swipe', 'YYYY-MM-DD (blank = today)', '2026-07-15'],
+                      ['Date of Swipe', 'DD-MM-YYYY (blank = today)', '15-07-2026'],
                       ['Activated', 'yes / no (blank = skip)', 'yes'],
-                      ['Date of Activation', 'YYYY-MM-DD (blank = today)', '2026-08-01'],
+                      ['Date of Activation', 'DD-MM-YYYY (blank = today)', '01-08-2026'],
                     ].map(([col, fmt, ex], i) => (
                       <tr key={i} style={{ borderBottom:'1px solid #f1f5f9' }}>
                         <td style={{ padding:'7px 10px', fontWeight:600, color:'#0f172a' }}>{col}</td>

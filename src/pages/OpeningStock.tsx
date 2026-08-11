@@ -224,28 +224,45 @@ export function OpeningStock() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#f8fafc', overflow: 'hidden' }}>
 
-      {/* Header */}
-      <div style={{ padding: '10px 16px', background: '#fff', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 11, background: '#fffbeb', color: '#92400e', border: '1px solid #fcd34d', padding: '2px 10px', borderRadius: 20, fontWeight: 700 }}>OPENING STOCK</span>
-          <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>Opening Stock Entry</span>
+      {/* Header — two compact rows, no flex-wrap stretching */}
+      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', flexShrink: 0 }}>
+        {/* Row 1: title + save button */}
+        <div style={{ padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 11, background: '#fffbeb', color: '#92400e', border: '1px solid #fcd34d', padding: '2px 8px', borderRadius: 20, fontWeight: 700, flexShrink: 0 }}>OPENING STOCK</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', flexShrink: 0 }}>Opening Stock Entry</span>
+          <div style={{ flex: 1 }} />
+          {tab === 'scan' && <>
+            <span style={{ fontSize: 11, color: '#94a3b8', flexShrink: 0 }}>
+              {sv.length} items · {sv.reduce((s, r) => s + (r.imei ? 1 : r.qty), 0)} units
+            </span>
+            <button onClick={commit} disabled={!sv.length || busy} style={{
+              height: 30, padding: '0 14px', border: 'none', borderRadius: 7, flexShrink: 0,
+              background: (!sv.length || busy) ? '#94a3b8' : '#d97706', color: '#fff',
+              fontSize: 12, fontWeight: 700, cursor: (!sv.length || busy) ? 'not-allowed' : 'pointer',
+            }}>
+              {busy ? 'Saving…' : `✓ Save (${sv.length})`}
+            </button>
+          </>}
         </div>
-        <div style={{ flex: 1 }} />
-        {tab === 'scan' && <>
-          <span style={{ fontSize: 12, color: '#64748b' }}>{sv.length} items · {sv.reduce((s, r) => s + (r.imei ? 1 : r.qty), 0)} units</span>
-          <select value={whId} onChange={e => setWhId(e.target.value)}
-            style={{ height: 32, padding: '0 10px', border: '1px solid #d0d5dd', borderRadius: 7, fontSize: 12, background: '#fff', outline: 'none', minWidth: 140 }}>
-            {whs.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-          </select>
-          <input type="date" value={date} onChange={e => setDate(e.target.value)}
-            style={{ height: 32, padding: '0 10px', border: '1px solid #d0d5dd', borderRadius: 7, fontSize: 12, outline: 'none' }} />
-          <button onClick={() => { if (!confirm('Clear all rows?')) return; eCache.current.clear(); setRows([mk()]); localStorage.removeItem(DK); }}
-            style={{ height: 30, padding: '0 12px', border: '1px solid #fecdd3', borderRadius: 6, background: '#fff5f5', color: '#dc2626', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Clear All</button>
-          <button onClick={commit} disabled={!sv.length || busy}
-            style={{ height: 30, padding: '0 18px', border: 'none', borderRadius: 7, background: (!sv.length || busy) ? '#94a3b8' : '#d97706', color: '#fff', fontSize: 12, fontWeight: 700, cursor: (!sv.length || busy) ? 'not-allowed' : 'pointer' }}>
-            {busy ? 'Saving…' : `✓ Save Opening Stock (${sv.length})`}
-          </button>
-        </>}
+        {/* Row 2: warehouse + date + clear — all compact, no stretching */}
+        {tab === 'scan' && (
+          <div style={{ padding: '0 14px 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <select value={whId} onChange={e => setWhId(e.target.value)} style={{
+              height: 30, padding: '0 8px', border: '1px solid #d0d5dd', borderRadius: 7,
+              fontSize: 12, background: '#fff', outline: 'none', maxWidth: 180, flex: '0 1 180px',
+            }}>
+              {whs.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{
+              height: 30, padding: '0 8px', border: '1px solid #d0d5dd', borderRadius: 7,
+              fontSize: 12, outline: 'none', width: 130, flexShrink: 0,
+            }} />
+            <button onClick={() => { if (!confirm('Clear all rows?')) return; eCache.current.clear(); setRows([mk()]); localStorage.removeItem(DK); }} style={{
+              height: 30, padding: '0 10px', border: '1px solid #fecdd3', borderRadius: 6,
+              background: '#fff5f5', color: '#dc2626', fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
+            }}>Clear All</button>
+          </div>
+        )}
       </div>
 
       {/* Info banner */}
