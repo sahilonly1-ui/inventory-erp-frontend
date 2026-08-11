@@ -142,27 +142,29 @@ export function StockOut(){
       moveTo(i,'imei');return;
     }
 
-    // 3. Cross-session check — IMEI must exist AND be IN_STOCK
-    try{
-      const existing=await api<any>(`/imei/${encodeURIComponent(v)}`);
-      const status=existing.status;
-      if(status==='SOLD'){
-        const dt=new Date(existing.updatedAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
-        upd(i,{errMsg:`Already dispatched on ${dt}. IMEI is SOLD — cannot dispatch again.`,status:'err',errField:'imei'});
-        moveTo(i,'imei');return;
-      }
-      if(status!=='IN_STOCK'){
-        upd(i,{errMsg:`IMEI status is "${status}" — only IN_STOCK items can be dispatched.`,status:'err',errField:'imei'});
-        moveTo(i,'imei');return;
-      }
-      // Valid — IN_STOCK
-    }catch{
-      upd(i,{errMsg:`IMEI ${v} not found. It must be stocked in first.`,status:'err',errField:'imei'});
-      moveTo(i,'imei');return;
-    }
-
+    // 3. Cross-session check — IMEI must exist AND be IN_STOCK.
+    // Accept and advance first so scanning isn't gated on the network; the row
+    // is flagged in place if the unit turns out to be unavailable.
     upd(i,{imei:v,qty:1,status:'saved',errMsg:'',errField:''});
     const ni=i+1;if(ni<rows.length)moveTo(ni,'imei'); // IMEI → next IMEI
+
+    void (async()=>{
+      const flag=(msg:string)=>setRows(rs=>rs.map((r,x)=>x===i&&r.imei===v
+        ?{...r,status:'err',errMsg:msg,errField:'imei'}
+        :r));
+      try{
+        const existing=await api<any>(`/imei/${encodeURIComponent(v)}`);
+        const status=existing.status;
+        if(status==='SOLD'){
+          const dt=new Date(existing.updatedAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+          flag(`Already dispatched on ${dt}. IMEI is SOLD — cannot dispatch again.`);
+        }else if(status!=='IN_STOCK'){
+          flag(`IMEI status is "${status}" — only IN_STOCK items can be dispatched.`);
+        }
+      }catch{
+        flag(`IMEI ${v} not found. It must be stocked in first.`);
+      }
+    })();
   },[rows,upd,moveTo]);
 
   // ── Sr. No. column — no length restriction, duplicate detection ───────────
@@ -187,6 +189,13 @@ export function StockOut(){
 
   // ── Commit — dispatch IMEIs and non-IMEI stock out ─────────────────────────
   const commit=useCallback(async()=>{
+    // A background availability check may have flagged a row after it was scanned.
+    const flagged=rows.findIndex(r=>r.status==='err'&&r.errMsg);
+    if(flagged!==-1){
+      alert(`⚠ Row ${flagged+1} has an error\n\n${rows[flagged].errMsg}\n\nFix or remove that row before dispatching.`);
+      moveTo(flagged,rows[flagged].errField==='srno'?'srno':'imei');
+      return;
+    }
     const stillPending=rows.filter(r=>r.productId&&r.status==='found');
     if(stillPending.length){
       const msgs=stillPending.map(r=>`  • ${r.model}${r.imeiRequired&&!r.imei?' — IMEI missing':''}${r.srnoRequired&&!r.imei&&!r.srno?' — Sr.No. missing':''}`).join('\n');

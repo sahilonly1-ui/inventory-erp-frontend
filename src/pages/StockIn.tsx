@@ -193,21 +193,26 @@ export function StockIn(){
     }
 
     // 3. Cross-session duplicate (already in IMEI database)
-    // Skip this check in edit mode — the loaded IMEIs belong to the original entry being edited.
-    // They'll be deleted and re-created on save, so they're not truly "duplicates".
-    if(!editMode){
-      try{
-        const existing=await api<any>(`/imei/${encodeURIComponent(v)}`);
-        const dt=new Date(existing.createdAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
-        const sup=existing.supplier?.name||'unknown supplier';
-        upd(i,{errMsg:`Already stocked in on ${dt} from ${sup}. Duplicate scan!`,status:'err',errField:'imei'});
-        moveTo(i,'imei');return;
-      }catch{}
-    }
-
+    // Accept the scan and advance first — the check runs in the background and
+    // flags the row if it turns out to be a duplicate, so the operator can keep
+    // scanning at full speed instead of waiting on each network round-trip.
+    // Skipped in edit mode: the loaded IMEIs belong to the entry being edited.
     upd(i,{imei:v,qty:1,status:'saved',errMsg:'',errField:''});
     const ni=i+1;if(ni<rows.length)moveTo(ni,'imei');
-  },[rows,upd,moveTo]);
+
+    if(!editMode){
+      void (async()=>{
+        try{
+          const existing=await api<any>(`/imei/${encodeURIComponent(v)}`);
+          const dt=new Date(existing.createdAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+          const sup=existing.supplier?.name||'unknown supplier';
+          setRows(rs=>rs.map((r,x)=>x===i&&r.imei===v
+            ?{...r,status:'err',errMsg:`Already stocked in on ${dt} from ${sup}. Duplicate scan!`,errField:'imei'}
+            :r));
+        }catch{}
+      })();
+    }
+  },[rows,upd,moveTo,editMode]);
 
   // Sr. No. column — no length restriction but duplicate detection
   const handleSrno=useCallback((i:number,val:string)=>{
@@ -235,6 +240,13 @@ export function StockIn(){
   const clear=()=>{if(!confirm('Clear all rows and draft?'))return;eCache.clear();setRows([mk()]);moveTo(0,'ean');localStorage.removeItem(DK);};
 
   const commit=useCallback(async()=>{
+    // A background duplicate check may have flagged a row after it was scanned.
+    const flagged=rows.findIndex(r=>r.status==='err'&&r.errMsg);
+    if(flagged!==-1){
+      alert(`⚠ Row ${flagged+1} has an error\n\n${rows[flagged].errMsg}\n\nFix or remove that row before saving.`);
+      moveTo(flagged,rows[flagged].errField==='srno'?'srno':'imei');
+      return;
+    }
     // Ensure supplier is resolved before committing (handles race condition)
     let resolvedSuppId=suppId;
     if(supp&&!suppId){
@@ -561,20 +573,14 @@ export function StockIn(){
                     </div>
                     {row.productId&&(
                       <div style={{padding:'12px 14px'}}>
-                        {row.imeiRequired&&(
-                          <>
-                            <div style={{fontSize:10,fontWeight:700,color:'#dc2626',marginBottom:5,textTransform:'uppercase',letterSpacing:'.06em'}}>IMEI (15 digits)</div>
+                        <div style={{fontSize:10,fontWeight:700,color:'#dc2626',marginBottom:5,textTransform:'uppercase',letterSpacing:'.06em'}}>IMEI (15 digits)</div>
                             <input ref={R(i,'imei')} value={row.imei} inputMode="numeric" autoComplete="off"
                               onChange={e=>{const v=e.target.value;upd(i,{imei:v,errMsg:'',errField:''});if(/^\d{15}$/.test(v.trim()))setTimeout(()=>handleImei(i,v.trim()),60);}}
                               onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();handleImei(i,(e.target as HTMLInputElement).value);}}}
                               placeholder="Scan IMEI..."
                               style={{width:'100%',height:52,fontSize:18,padding:'0 14px',border:`1.5px solid ${row.errField==='imei'?'#dc2626':'#d0d5dd'}`,borderRadius:10,boxSizing:'border-box',outline:'none',WebkitAppearance:'none'}}
                             />
-                          </>
-                        )}
-                        {row.srnoRequired&&(
-                          <>
-                            <div style={{fontSize:10,fontWeight:700,color:'#0ea5e9',marginBottom:5,marginTop:row.imeiRequired?10:0,textTransform:'uppercase',letterSpacing:'.06em'}}>Serial / Sr. No.</div>
+                        <div style={{fontSize:10,fontWeight:700,color:'#0ea5e9',marginBottom:5,marginTop:10,textTransform:'uppercase',letterSpacing:'.06em'}}>Serial / Sr. No.</div>
                             <input ref={R(i,'srno')} value={row.srno} autoComplete="off"
                               onChange={e=>upd(i,{srno:e.target.value})}
                               onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();handleSrno(i,(e.target as HTMLInputElement).value);}}}
@@ -582,8 +588,6 @@ export function StockIn(){
                               placeholder="Enter serial/box number..."
                               style={{width:'100%',height:52,fontSize:16,padding:'0 14px',border:`1.5px solid ${row.errField==='srno'?'#dc2626':'#d0d5dd'}`,borderRadius:10,boxSizing:'border-box',outline:'none',WebkitAppearance:'none'}}
                             />
-                          </>
-                        )}
                         {row.errMsg&&<div style={{marginTop:8,fontSize:13,color:'#dc2626',fontWeight:600}}>✕ {row.errMsg}</div>}
                       </div>
                     )}

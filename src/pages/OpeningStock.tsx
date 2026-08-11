@@ -147,6 +147,26 @@ export function OpeningStock() {
 
   useEffect(() => { ERef.current = handleEan; }, [handleEan]);
 
+  // Background check: confirms a scanned IMEI/serial isn't already registered.
+  // Runs after focus has already moved on, so scanning is never blocked; if the
+  // code turns out to be taken, the row it belongs to is flagged in place.
+  const verifyCode = useCallback(async (rowIdx: number, code: string, field: 'imei' | 'srno') => {
+    let taken = iCache.current.get(code);
+    if (taken === undefined) {
+      try {
+        const hit = await api<{ product?: { model?: string } }>(`/imei/${encodeURIComponent(code)}`);
+        taken = hit?.product?.model || 'another product';
+      } catch { taken = ''; }
+      iCache.current.set(code, taken);
+    }
+    if (!taken) return;
+    setRows(rs => rs.map((r, x) =>
+      x === rowIdx && (field === 'imei' ? r.imei : r.srno) === code
+        ? { ...r, status: 'err', errMsg: `Already in stock as ${taken}`, errField: field }
+        : r
+    ));
+  }, []);
+
   // IMEI scan
   const handleImei = useCallback(async (i: number, v: string) => {
     const imei = v.trim();
@@ -155,62 +175,27 @@ export function OpeningStock() {
     const dup = rows.findIndex((r, ri) => ri !== i && r.imei === imei);
     if (dup !== -1) { upd(i, { errMsg: `Duplicate! IMEI already in row ${dup + 1}`, status: 'err', errField: 'imei' }); moveTo(i, 'imei'); return; }
 
-    // Check against the database right here — catching an already-registered
-    // IMEI at scan time is far more useful than failing the whole batch on save.
-    upd(i, { imei, status: 'loading', errMsg: '', errField: '' });
-    const cached = iCache.current.get(imei);
-    let alreadyExists = cached;
-    if (alreadyExists === undefined) {
-      try {
-        const hit = await api<{ imei1: string; product?: { model?: string } }>(`/imei/${encodeURIComponent(imei)}`);
-        alreadyExists = hit?.product?.model || 'another product';
-        iCache.current.set(imei, alreadyExists);
-      } catch {
-        // Not found = good, this IMEI is new
-        alreadyExists = '';
-        iCache.current.set(imei, '');
-      }
-    }
-    if (alreadyExists) {
-      upd(i, { imei, status: 'err', errMsg: `Already in stock as ${alreadyExists}`, errField: 'imei' });
-      moveTo(i, 'imei');
-      return;
-    }
-
+    // Accept the scan and move on immediately — the operator should never wait
+    // on the network between scans. The database check runs in the background
+    // and flags the row if this IMEI turns out to be already registered.
     upd(i, { imei, status: 'saved', errMsg: '', errField: '' });
-    // IMEI→IMEI flow: go to next row's IMEI field (not EAN)
     const nextIdx = i + 1;
     if (nextIdx < rows.length && rows[nextIdx].productId) {
       moveTo(nextIdx, rows[nextIdx].imeiRequired ? 'imei' : rows[nextIdx].srnoRequired ? 'srno' : 'ean');
     } else if (nextIdx < rows.length) {
       moveTo(nextIdx, 'ean');
     }
-  }, [rows, upd, ins, moveTo]);
+    void verifyCode(i, imei, 'imei');
+  }, [rows, upd, ins, moveTo, verifyCode]);
 
   // Sr. No. entry (tablets/accessories)
-  const handleSrno = useCallback(async (i: number, v: string) => {
+  const handleSrno = useCallback((i: number, v: string) => {
     const srno = v.trim();
     if (!srno) { moveTo(i, 'srno'); return; }
     const dup = rows.findIndex((r, ri) => ri !== i && r.srno === srno);
     if (dup !== -1) { upd(i, { errMsg: `Duplicate! Sr. No. already in row ${dup + 1}`, status: 'err', errField: 'srno' }); moveTo(i, 'srno'); return; }
 
-    // Serial numbers live in the same table as IMEIs, so check for an existing
-    // registration here rather than letting the whole batch fail on save.
-    upd(i, { srno, status: 'loading', errMsg: '', errField: '' });
-    let taken = iCache.current.get(srno);
-    if (taken === undefined) {
-      try {
-        const hit = await api<{ product?: { model?: string } }>(`/imei/${encodeURIComponent(srno)}`);
-        taken = hit?.product?.model || 'another product';
-      } catch { taken = ''; }
-      iCache.current.set(srno, taken);
-    }
-    if (taken) {
-      upd(i, { srno, status: 'err', errMsg: `Already in stock as ${taken}`, errField: 'srno' });
-      moveTo(i, 'srno');
-      return;
-    }
-
+    // Same non-blocking flow as IMEI — accept, advance, verify in background.
     upd(i, { srno, status: 'saved', errMsg: '', errField: '' });
     const nextIdx = i + 1;
     if (nextIdx < rows.length && rows[nextIdx].productId) {
@@ -218,18 +203,26 @@ export function OpeningStock() {
     } else if (nextIdx < rows.length) {
       moveTo(nextIdx, 'ean');
     }
-  }, [rows, upd, moveTo]);
+    void verifyCode(i, srno, 'srno');
+  }, [rows, upd, moveTo, verifyCode]);
 
   // Save all
   const commit = useCallback(async () => {
     const pending = rows.filter(r => r.productId && r.status === 'found');
     if (pending.length) {
       const fi = rows.findIndex(r => r.status === 'found');
-      const needsWhat = rows[fi]?.srnoRequired ? 'Sr. No.' : 'IMEI';
-      alert(`⚠ ${pending.length} row(s) need ${needsWhat}.`);
+      alert(`⚠ ${pending.length} row(s) still need an IMEI or Sr. No.`);
       if (fi >= 0) moveTo(fi, rows[fi].srnoRequired ? 'srno' : 'imei');
       return;
     }
+    // A background duplicate check may have flagged a row after it was scanned.
+    const flagged = rows.findIndex(r => r.status === 'err' && r.errMsg);
+    if (flagged !== -1) {
+      alert(`⚠ Row ${flagged + 1} has an error\n\n${rows[flagged].errMsg}\n\nFix or remove that row before saving.`);
+      moveTo(flagged, rows[flagged].errField === 'srno' ? 'srno' : 'imei');
+      return;
+    }
+
     const sv = rows.filter(r => r.status === 'saved' && r.productId);
 
     // Catch duplicate IMEIs / serial numbers before hitting the server — both
@@ -253,25 +246,19 @@ export function OpeningStock() {
     const rmk = `Opening Stock — ${date}`;
     try {
       // IMEI phones
-      const imeiByProd = sv.filter(r => r.imei && r.imeiRequired).reduce((a: Record<string,any>, r) => {
+      // Group by what the operator actually entered — not by the
+      // imeiRequired/srnoRequired flags, which are unreliable in Product Master.
+      // Any code entered (IMEI or serial) goes into unit-level tracking.
+      const codeByProd = sv.filter(r => r.imei || r.srno).reduce((a: Record<string,any>, r) => {
         if (!a[r.productId]) a[r.productId] = { productId: r.productId, imeis: [] };
-        a[r.productId].imeis.push({ imei1: r.imei, imeiType: 'NIL' }); return a;
+        a[r.productId].imeis.push({ imei1: (r.imei || r.srno).trim(), imeiType: 'NIL' }); return a;
       }, {});
-      for (const [, d] of Object.entries(imeiByProd) as any[]) {
+      for (const [, d] of Object.entries(codeByProd) as any[]) {
         await api('/imei/receive', { method: 'POST', body: JSON.stringify({ productId: d.productId, warehouseId: whId, imeis: d.imeis, force: true, type: 'OPENING', remarks: rmk }) });
       }
-      // Serial-number items (tablets, Wi-Fi devices) — tracked in the same
-      // table as IMEIs so they show up in IMEI Tracker and support
-      // swipe/activation just like phones.
-      const srnoByProd = sv.filter(r => r.srno && r.srnoRequired).reduce((a: Record<string,any>, r) => {
-        if (!a[r.productId]) a[r.productId] = { productId: r.productId, imeis: [] };
-        a[r.productId].imeis.push({ imei1: r.srno, imeiType: 'NIL' }); return a;
-      }, {});
-      for (const [, d] of Object.entries(srnoByProd) as any[]) {
-        await api('/imei/receive', { method: 'POST', body: JSON.stringify({ productId: d.productId, warehouseId: whId, imeis: d.imeis, force: true, type: 'OPENING', remarks: rmk }) });
-      }
-      // Non-IMEI, Non-SrNo accessories
-      const nonImeiByProd = sv.filter(r => (!r.imei || !r.imeiRequired) && (!r.srno || !r.srnoRequired)).reduce((a: Record<string,any>, r) => {
+
+      // Everything with no code at all — plain quantity accessories.
+      const nonImeiByProd = sv.filter(r => !r.imei && !r.srno).reduce((a: Record<string,any>, r) => {
         if (!a[r.productId]) a[r.productId] = { productId: r.productId, qty: 0 };
         a[r.productId].qty += (r.qty || 1); return a;
       }, {});
@@ -439,7 +426,7 @@ export function OpeningStock() {
                         {row.errMsg && <span style={{ fontSize: 11, color: '#dc2626', display: 'block' }}>{row.errMsg}</span>}
                       </td>
                       <td style={{ borderBottom: '1px solid #e2e8f0', borderRight: '1px solid #e2e8f0', padding: 0, textAlign: 'center' }}>
-                        {row.productId && !row.imeiRequired ? (
+                        {row.productId && !row.imei && !row.srno ? (
                           <input ref={R(i, 'qty')} type="number" min={1} value={row.qty}
                             onChange={e => upd(i, { qty: Math.max(1, parseInt(e.target.value) || 1) })}
                             onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); if (row.status !== 'saved') upd(i, { status: 'saved' }); moveTo(i + 1, 'ean'); } }}
@@ -450,7 +437,7 @@ export function OpeningStock() {
                         )}
                       </td>
                       <td style={{ borderBottom: '1px solid #e2e8f0', borderRight: '1px solid #e2e8f0', outline: row.errField === 'imei' ? '1px solid #fca5a5' : '1px solid transparent', padding: 0 }}>
-                        {row.imeiRequired ? (
+                        {row.productId ? (
                           <input ref={R(i, 'imei')} value={row.imei} inputMode="numeric"
                             onChange={e => { const v = e.target.value; upd(i, { imei: v, errMsg: '', errField: '' }); if (/^\d{15}$/.test(v.trim())) setTimeout(() => handleImei(i, v.trim()), 60); }}
                             onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); handleImei(i, (e.target as HTMLInputElement).value); } }}
@@ -461,7 +448,7 @@ export function OpeningStock() {
                       </td>
                       {/* Sr. No. column */}
                       <td style={{ borderBottom: '1px solid #e2e8f0', borderRight: '1px solid #e2e8f0', outline: row.errField === 'srno' ? '1px solid #bfdbfe' : '1px solid transparent', padding: 0 }}>
-                        {row.srnoRequired ? (
+                        {row.productId ? (
                           <input ref={R(i, 'srno')} value={row.srno}
                             onChange={e => { const v = e.target.value; upd(i, { srno: v, errMsg: '', errField: '' }); }}
                             onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); handleSrno(i, (e.target as HTMLInputElement).value); } }}
