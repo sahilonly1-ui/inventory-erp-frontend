@@ -80,9 +80,15 @@ function parseExcel(file: File): Promise<BulkRow[]> {
           const activatedRaw = String(r[3] || '').trim().toLowerCase();
           const activatedDate= parseDateCell(r[4]);
 
+          // Anchor date-only values at local noon before converting to ISO —
+          // sending a bare "YYYY-MM-DD" gets parsed by `new Date()` as UTC
+          // midnight, which rolls back a day once displayed in IST (or any
+          // timezone). Noon avoids any rollover.
+          const toSafeISO = (ymd: string) => ymd ? new Date(ymd + 'T12:00:00').toISOString() : '';
+
           const row: BulkRow = { imei };
-          if (swipedRaw)    { row.swiped    = swipedRaw    === 'yes' || swipedRaw    === '1' || swipedRaw    === 'true'; if (swipedDate)    row.swipedAt    = swipedDate; }
-          if (activatedRaw) { row.activated = activatedRaw === 'yes' || activatedRaw === '1' || activatedRaw === 'true'; if (activatedDate) row.activatedAt = activatedDate; }
+          if (swipedRaw)    { row.swiped    = swipedRaw    === 'yes' || swipedRaw    === '1' || swipedRaw    === 'true'; if (swipedDate)    row.swipedAt    = toSafeISO(swipedDate); }
+          if (activatedRaw) { row.activated = activatedRaw === 'yes' || activatedRaw === '1' || activatedRaw === 'true'; if (activatedDate) row.activatedAt = toSafeISO(activatedDate); }
           if (row.swiped !== undefined || row.activated !== undefined) rows.push(row);
         }
         resolve(rows);
@@ -239,9 +245,9 @@ export function ImeiBulkUpload({ onClose, onDone }: { onClose: () => void; onDon
                         <td style={{ padding:'7px 10px', color:'#94a3b8' }}>{i+1}</td>
                         <td style={{ padding:'7px 10px', fontFamily:'monospace', fontWeight:600, color:'#0f172a' }}>{r.imei}</td>
                         <td style={{ padding:'7px 10px' }}>{r.swiped !== undefined ? (r.swiped ? <span style={{ color:'#16a34a', fontWeight:600 }}>✓ Yes</span> : <span style={{ color:'#dc2626' }}>✕ No</span>) : <span style={{ color:'#d1d5db' }}>—</span>}</td>
-                        <td style={{ padding:'7px 10px', color:'#64748b' }}>{r.swipedAt || <span style={{ color:'#d1d5db' }}>today</span>}</td>
+                        <td style={{ padding:'7px 10px', color:'#64748b' }}>{r.swipedAt ? new Date(r.swipedAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) : <span style={{ color:'#d1d5db' }}>today</span>}</td>
                         <td style={{ padding:'7px 10px' }}>{r.activated !== undefined ? (r.activated ? <span style={{ color:'#7c3aed', fontWeight:600 }}>✓ Yes</span> : <span style={{ color:'#dc2626' }}>✕ No</span>) : <span style={{ color:'#d1d5db' }}>—</span>}</td>
-                        <td style={{ padding:'7px 10px', color:'#64748b' }}>{r.activatedAt || <span style={{ color:'#d1d5db' }}>today</span>}</td>
+                        <td style={{ padding:'7px 10px', color:'#64748b' }}>{r.activatedAt ? new Date(r.activatedAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) : <span style={{ color:'#d1d5db' }}>today</span>}</td>
                       </tr>
                     ))}
                   </tbody>
