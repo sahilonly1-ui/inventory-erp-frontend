@@ -50,6 +50,8 @@ export function OpeningStock() {
   const ERef    = useRef<(i: number, ean: string) => void>(() => {});
   const scanning = useRef<Record<number, boolean>>({}); // guard against double-scan
   const eCache = useRef(new Map<string, {productId:string;model:string;brand:string;imeiRequired:boolean;srnoRequired:boolean}|null>());
+  // Caches IMEI existence checks: '' = free to use, otherwise the product it's already registered to
+  const iCache = useRef(new Map<string, string>());
 
   // Load warehouses + draft
   useEffect(() => {
@@ -152,6 +154,29 @@ export function OpeningStock() {
     if (!/^\d{15}$/.test(imei)) { upd(i, { errMsg: 'IMEI must be exactly 15 digits', status: 'err', errField: 'imei' }); moveTo(i, 'imei'); return; }
     const dup = rows.findIndex((r, ri) => ri !== i && r.imei === imei);
     if (dup !== -1) { upd(i, { errMsg: `Duplicate! IMEI already in row ${dup + 1}`, status: 'err', errField: 'imei' }); moveTo(i, 'imei'); return; }
+
+    // Check against the database right here — catching an already-registered
+    // IMEI at scan time is far more useful than failing the whole batch on save.
+    upd(i, { imei, status: 'loading', errMsg: '', errField: '' });
+    const cached = iCache.current.get(imei);
+    let alreadyExists = cached;
+    if (alreadyExists === undefined) {
+      try {
+        const hit = await api<{ imei1: string; product?: { model?: string } }>(`/imei/${encodeURIComponent(imei)}`);
+        alreadyExists = hit?.product?.model || 'another product';
+        iCache.current.set(imei, alreadyExists);
+      } catch {
+        // Not found = good, this IMEI is new
+        alreadyExists = '';
+        iCache.current.set(imei, '');
+      }
+    }
+    if (alreadyExists) {
+      upd(i, { imei, status: 'err', errMsg: `Already in stock as ${alreadyExists}`, errField: 'imei' });
+      moveTo(i, 'imei');
+      return;
+    }
+
     upd(i, { imei, status: 'saved', errMsg: '', errField: '' });
     // IMEI→IMEI flow: go to next row's IMEI field (not EAN)
     const nextIdx = i + 1;
@@ -229,7 +254,7 @@ export function OpeningStock() {
       for (const [, d] of Object.entries(nonImeiByProd) as any[]) {
         await api('/inventory/opening-stock', { method: 'POST', body: JSON.stringify({ productId: d.productId, warehouseId: whId, quantity: d.qty, remarks: rmk }) });
       }
-      eCache.current.clear(); setRows([mk()]); localStorage.removeItem(DK);
+      eCache.current.clear(); iCache.current.clear(); setRows([mk()]); localStorage.removeItem(DK);
       alert(`✓ ${sv.length} item(s) added as Opening Stock`);
       setTab('history');
     } catch (e: any) { alert(`⚠ Could not save\n\n${e.message}\n\nYour scanned rows have been kept — fix the issue above and click Save again.`); }
@@ -299,7 +324,7 @@ export function OpeningStock() {
               height: 30, padding: '0 8px', border: '1px solid #d0d5dd', borderRadius: 7,
               fontSize: 12, outline: 'none', width: 130, flexShrink: 0,
             }} />
-            <button onClick={() => { if (!confirm('Clear all rows?')) return; eCache.current.clear(); setRows([mk()]); localStorage.removeItem(DK); }} style={{
+            <button onClick={() => { if (!confirm('Clear all rows?')) return; eCache.current.clear(); iCache.current.clear(); setRows([mk()]); localStorage.removeItem(DK); }} style={{
               height: 30, padding: '0 10px', border: '1px solid #fecdd3', borderRadius: 6,
               background: '#fff5f5', color: '#dc2626', fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
             }}>Clear All</button>
@@ -379,7 +404,7 @@ export function OpeningStock() {
                           style={CI({ fontFamily: 'monospace', fontSize: 13 })} />
                       </td>
                       <td style={{ borderBottom: '1px solid #e2e8f0', borderRight: '1px solid #e2e8f0', padding: '0 10px', overflow: 'hidden' }}>
-                        {row.status === 'loading' && <span style={{ fontSize: 11, color: '#2563eb' }}>Looking up…</span>}
+                        {row.status === 'loading' && !row.model && <span style={{ fontSize: 11, color: '#2563eb' }}>Looking up…</span>}
                         {row.status === 'not_found' && <span style={{ fontSize: 11, color: '#dc2626' }}>✕ Not found in Product Master</span>}
                         {row.model && (
                           <div style={{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical' as any,overflow:'hidden',fontSize:13,fontWeight:600,color:'#0f172a',lineHeight:1.35,wordBreak:'break-word'}}>
@@ -387,7 +412,7 @@ export function OpeningStock() {
                           </div>
                         )}
                         {!row.model && row.status === 'empty' && <span style={{ fontSize: 11, color: '#cbd5e1' }}>Auto-filled after EAN scan</span>}
-                        {row.errMsg && !row.model && <span style={{ fontSize: 11, color: '#dc2626' }}>{row.errMsg}</span>}
+                        {row.errMsg && <span style={{ fontSize: 11, color: '#dc2626', display: 'block' }}>{row.errMsg}</span>}
                       </td>
                       <td style={{ borderBottom: '1px solid #e2e8f0', borderRight: '1px solid #e2e8f0', padding: 0, textAlign: 'center' }}>
                         {row.productId && !row.imeiRequired ? (
