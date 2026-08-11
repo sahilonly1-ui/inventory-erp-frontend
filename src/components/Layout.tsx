@@ -2,7 +2,7 @@ import { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 
-type NavItem = { to: string; label: string; svg: string };
+type NavItem = { to: string; label: string; svg: string; perm?: string };
 
 const NAV: NavItem[] = [
   { to: '/',          label: 'Dashboard',       svg: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>' },
@@ -15,6 +15,7 @@ const NAV: NavItem[] = [
   { to: '/stock-report', label: 'Stock Report',   svg: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/><rect x="13" y="13" width="2" height="5"/><rect x="7" y="11" width="2" height="7"/>' },
   { to: '/reports',   label: 'Reports',          svg: '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>' },
   { to: '/versions',  label: 'Version History',  svg: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>' },
+  { to: '/users',     label: 'Users & Access',   svg: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 11l-3 3-1.5-1.5"/>', perm: 'users.read' },
 ];
 
 function NavIcon({ svg }: { svg: string }) {
@@ -56,7 +57,7 @@ export function Layout({ children }: { children: ReactNode }) {
         {/* Nav */}
         <nav style={{ flex: 1, padding: '8px 10px', overflowY: 'auto' }}>
           <div style={{ fontSize: 9, fontWeight: 700, color: '#98a2b3', textTransform: 'uppercase', letterSpacing: '.1em', padding: '10px 6px 6px' }}>Main Menu</div>
-          {NAV.map(n => {
+          {NAV.filter(n => !n.perm || (user?.permissions ?? []).some(p => p === '*' || p === n.perm)).map(n => {
             const active = n.to === '/' ? loc.pathname === '/' : loc.pathname.startsWith(n.to);
             return (
               <Link key={n.to} to={n.to} style={{

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { api } from '../api/client';
+import { api, getAccessToken } from '../api/client';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface Txn { id:string; type:string; qty:number; product:string; productId:string; ean:string; vendor?:string; vendorId?:string; warehouse:string; warehouseId:string; createdAt:string; }
@@ -43,6 +43,7 @@ export function Dashboard() {
   const [loading,setLoading]=useState(true);
   const [tab,setTab]=useState<'in'|'out'|'all'>('in');
   const [deleting,setDeleting]=useState<string|null>(null);
+  const [downloading,setDownloading]=useState<string|null>(null);
   const [suppliers,setSuppliers]=useState<Supplier[]>([]);
 
   // ── Full Edit Panel state ────────────────────────────────────────────────
@@ -316,8 +317,40 @@ export function Dashboard() {
   const inGroups=byVendor(inTxns);
   const outGroups=byVendor(outTxns);
 
+  // Download one entry as an Excel sheet. The filename is set server-side from
+  // the vendor, invoice number and stock-in date, so it stays consistent with
+  // the copies emailed out by the nightly backup.
+  const downloadEntry=async(ids:string[],label:string)=>{
+    setDownloading(label);
+    try{
+      const base=(import.meta.env.VITE_API_URL as string)??'https://inventory-erp-backend-iplr.onrender.com/api/v1';
+      const resp=await fetch(`${base}/reports/stock-in-entry`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${getAccessToken()}`},
+        body:JSON.stringify({txnIds:ids}),
+      });
+      if(!resp.ok)throw new Error(`Export failed (${resp.status})`);
+      const cd=resp.headers.get('Content-Disposition')||'';
+      const named=/filename="?([^"]+)"?/.exec(cd)?.[1];
+      const blob=await resp.blob();
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url;
+      a.download=named||`${label}.xlsx`;
+      document.body.appendChild(a);a.click();a.remove();
+      URL.revokeObjectURL(url);
+    }catch(e:any){alert(`Could not download\n\n${e.message}`);}
+    finally{setDownloading(null);}
+  };
+
   const ActionBtns=({ids,label,sign}:{ids:string[];label:string;sign:'+'|'-'})=>(
     <div style={{display:'flex',gap:6,flexShrink:0}}>
+      <button onClick={()=>downloadEntry(ids,label)} disabled={downloading===label}
+        title="Download this entry as Excel"
+        style={{height:26,padding:'0 10px',border:'1px solid #bbf7d0',borderRadius:5,background:'#f0fdf4',cursor:downloading===label?'wait':'pointer',color:'#15803d',fontSize:11,fontWeight:600,display:'flex',alignItems:'center',gap:4,opacity:downloading===label?0.6:1}}>
+        {downloading===label?<div className="spinner" style={{width:10,height:10}}/>:<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>}
+        {downloading===label?'…':'Save'}
+      </button>
       <button onClick={()=>openEditPanel(ids,label,sign)} disabled={editPanel.loadingVendorKey===label}
         style={{height:26,padding:'0 10px',border:'1px solid #bfdbfe',borderRadius:5,background:'#eff6ff',cursor:editPanel.loadingVendorKey===label?'wait':'pointer',color:'#2563eb',fontSize:11,fontWeight:600,display:'flex',alignItems:'center',gap:4,opacity:editPanel.loadingVendorKey===label?0.6:1}}>
         {editPanel.loadingVendorKey===label?<div className="spinner" style={{width:10,height:10}}/>:<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>}
