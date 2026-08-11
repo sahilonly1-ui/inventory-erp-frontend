@@ -183,13 +183,16 @@ export function StockReport() {
       const r = await api<ReportData>('/inventory/stock-report');
       setData(r);
       setLastFetch(new Date());
-      // On first load, default to showing only Smartphones
+      // On first load, default to showing only Smartphones + Tabs
       if (!defaultApplied) {
         setDefaultApplied(true);
-        const nonSmartphone = r.categories
-          .filter(c => !c.name.toLowerCase().includes('smartphone'))
+        const nonDefault = r.categories
+          .filter(c => {
+            const n = c.name.toLowerCase();
+            return !n.includes('smartphone') && !n.includes('tab');
+          })
           .map(c => c.id);
-        if (nonSmartphone.length > 0) setExCats(new Set(nonSmartphone));
+        if (nonDefault.length > 0) setExCats(new Set(nonDefault));
       }
     } catch (e: any) { alert('Failed to load: ' + e.message); }
     finally { setLoading(false); }

@@ -234,7 +234,7 @@ export function Imei() {
       const resp=await fetch(`${base}/reports/imei_filtered`,{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':`Bearer ${getAccessToken()}`},
-        body:JSON.stringify({search:search||undefined,status:status||undefined,imeiType:imeiType||undefined,swiped:swiped||undefined,activated:activated||undefined}),
+        body:JSON.stringify({search:search||undefined,status:status||undefined,imeiType:imeiType||undefined,swiped:swiped||undefined,activated:activated||undefined,brand:brand||undefined}),
       });
       if(!resp.ok)throw new Error('Export failed');
       const blob=await resp.blob();

@@ -57,17 +57,28 @@ function parseExcel(file: File): Promise<BulkRow[]> {
           if (!imei) continue;
 
           const swipedRaw    = String(r[1] || '').trim().toLowerCase();
-          // Parse DD-MM-YYYY → YYYY-MM-DD for backend Date constructor
-          const parseDMY = (v: string) => {
-            const t = String(v || '').trim();
+          // Parse date — handles JS Date objects (from cellDates:true) OR DD-MM-YYYY strings
+          const parseDateCell = (v: any): string => {
+            if (!v && v !== 0) return '';
+            // If XLSX returned a JS Date object
+            if (v instanceof Date) {
+              const yyyy = v.getFullYear();
+              const mm   = String(v.getMonth() + 1).padStart(2, '0');
+              const dd   = String(v.getDate()).padStart(2, '0');
+              return `${yyyy}-${mm}-${dd}`;
+            }
+            const t = String(v).trim();
             if (!t) return '';
+            // DD-MM-YYYY or DD/MM/YYYY
             const m = t.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
             if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
-            return t.slice(0, 10); // fallback: already ISO or partial
+            // Already ISO YYYY-MM-DD
+            if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0, 10);
+            return '';
           };
-          const swipedDate   = parseDMY(String(r[2] || ''));
+          const swipedDate   = parseDateCell(r[2]);
           const activatedRaw = String(r[3] || '').trim().toLowerCase();
-          const activatedDate= parseDMY(String(r[4] || ''));
+          const activatedDate= parseDateCell(r[4]);
 
           const row: BulkRow = { imei };
           if (swipedRaw)    { row.swiped    = swipedRaw    === 'yes' || swipedRaw    === '1' || swipedRaw    === 'true'; if (swipedDate)    row.swipedAt    = swipedDate; }
