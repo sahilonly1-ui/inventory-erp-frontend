@@ -342,9 +342,9 @@ export function Dashboard() {
         <div style={{padding:'10px 14px',display:'flex',alignItems:'center',gap:10,background:'#f8fafc',borderBottom:open?'1px solid #e2e8f0':'none'}}>
           <div onClick={()=>setOpen(x=>!x)} style={{flex:1,cursor:'pointer'}}>
             <div style={{fontWeight:700,fontSize:13,color:'#0f172a'}}>{vendor}</div>
-            <div style={{fontSize:11,color:'#94a3b8',marginTop:1}}>{txns.length} transaction{txns.length!==1?'s':''} · {sign}{total} units · {new Date(txns[0].createdAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})} {new Date(txns[0].createdAt).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</div>
+            <div style={{fontSize:11,color:'#94a3b8',marginTop:1}}>{txns.length} transaction{txns.length!==1?'s':''} · {sign==='+'?'':sign}{total} units · {new Date(txns[0].createdAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})} {new Date(txns[0].createdAt).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</div>
           </div>
-          <span style={{fontWeight:800,fontSize:14,color}}>{sign}{total}</span>
+          <span style={{fontWeight:800,fontSize:14,color}}>{sign==='+'?'':sign}{total}</span>
           <ActionBtns ids={allIds} label={vendor} sign={sign}/>
           <span onClick={()=>setOpen(x=>!x)} style={{color:'#94a3b8',fontSize:11,cursor:'pointer',userSelect:'none'}}>{open?'▲':'▼'}</span>
         </div>
@@ -355,7 +355,7 @@ export function Dashboard() {
               return (
                 <div key={model} style={{display:'flex',alignItems:'center',padding:'8px 14px',borderBottom:'1px solid #f1f5f9',gap:8}}>
                   <span style={{flex:1,fontSize:12,color:'#374151',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{model}</span>
-                  <span style={{fontWeight:700,fontSize:13,color,flexShrink:0}}>{sign}{qty}</span>
+                  <span style={{fontWeight:700,fontSize:13,color,flexShrink:0}}>{sign==='+'?'':sign}{qty}</span>
                 </div>
               );
             })}
@@ -451,10 +451,10 @@ export function Dashboard() {
                       {['Product','Units In'].map(h=><th key={h} style={{padding:'8px 12px',textAlign:h==='Units In'?'right':'left',fontWeight:700,color:'#64748b',fontSize:10,textTransform:'uppercase',borderBottom:'1px solid #e2e8f0'}}>{h}</th>)}
                     </tr></thead>
                     <tbody>
-                      {(daily?.byProduct||[]).filter(p=>p.inQty>0).sort((a,b)=>a.model.localeCompare(b.model)).slice(0,15).map((p,i)=>(
+                      {(daily?.byProduct||[]).filter(p=>p.inQty>0).sort((a,b)=>b.inQty-a.inQty||a.model.localeCompare(b.model)).slice(0,15).map((p,i)=>(
                         <tr key={p.productId} style={{borderBottom:'1px solid #f1f5f9',background:i%2===0?'#fff':'#fafafa'}}>
                           <td style={{padding:'7px 12px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:220}}>{p.model}</td>
-                          <td style={{padding:'7px 12px',textAlign:'right',fontWeight:700,color:'#16a34a'}}>+{p.inQty}</td>
+                          <td style={{padding:'7px 12px',textAlign:'right',fontWeight:700,color:'#16a34a'}}>{p.inQty}</td>
                         </tr>
                       ))}
                       {!(daily?.byProduct||[]).some(p=>p.inQty>0)&&<tr><td colSpan={2} style={{padding:'20px 12px',textAlign:'center',color:'#94a3b8',fontSize:12}}>No inbound products today</td></tr>}
@@ -483,7 +483,7 @@ export function Dashboard() {
                       {['Product','Units Out'].map(h=><th key={h} style={{padding:'8px 12px',textAlign:h==='Units Out'?'right':'left',fontWeight:700,color:'#64748b',fontSize:10,textTransform:'uppercase',borderBottom:'1px solid #e2e8f0'}}>{h}</th>)}
                     </tr></thead>
                     <tbody>
-                      {(daily?.byProduct||[]).filter(p=>p.outQty>0).sort((a,b)=>a.model.localeCompare(b.model)).slice(0,15).map((p,i)=>(
+                      {(daily?.byProduct||[]).filter(p=>p.outQty>0).sort((a,b)=>b.outQty-a.outQty||a.model.localeCompare(b.model)).slice(0,15).map((p,i)=>(
                         <tr key={p.productId} style={{borderBottom:'1px solid #f1f5f9',background:i%2===0?'#fff':'#fafafa'}}>
                           <td style={{padding:'7px 12px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:220}}>{p.model}</td>
                           <td style={{padding:'7px 12px',textAlign:'right',fontWeight:700,color:'#dc2626'}}>-{p.outQty}</td>
@@ -512,7 +512,7 @@ export function Dashboard() {
                       <td style={{padding:'6px 12px',color:'#94a3b8',fontFamily:'monospace',fontSize:11}}>{fmtT(t.createdAt)}</td>
                       <td style={{padding:'6px 12px'}}><span style={{fontSize:10,padding:'2px 7px',borderRadius:10,fontWeight:700,background:t.qty>0?'#dcfce7':'#fee2e2',color:t.qty>0?'#16a34a':'#dc2626'}}>{t.type.replace(/_/g,' ')}</span></td>
                       <td style={{padding:'6px 12px',maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.product}</td>
-                      <td style={{padding:'6px 12px',fontWeight:700,color:t.qty>0?'#16a34a':'#dc2626'}}>{t.qty>0?`+${t.qty}`:t.qty}</td>
+                      <td style={{padding:'6px 12px',fontWeight:700,color:t.qty>0?'#16a34a':'#dc2626'}}>{t.qty}</td>
                       <td style={{padding:'6px 12px',color:'#64748b'}}>{t.warehouse}</td>
                       <td style={{padding:'6px 12px'}}>
                         <div style={{display:'flex',gap:6}}>
