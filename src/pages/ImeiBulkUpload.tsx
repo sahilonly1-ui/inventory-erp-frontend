@@ -39,47 +39,53 @@ function downloadTemplate() {
   XLSX.writeFile(wb, 'IMEI_Bulk_Update_Template.xlsx');
 }
 
+// Convert an Excel date serial number → "YYYY-MM-DD" using pure UTC integer
+// math. Excel's epoch is 1899-12-30. Doing this arithmetically (rather than
+// letting SheetJS build a Date via `cellDates`) is the ONLY way to avoid the
+// local-timezone shift that was rolling every uploaded date back one day.
+const EXCEL_EPOCH_UTC = Date.UTC(1899, 11, 30);
+function serialToYMD(serial: number): string {
+  const ms = EXCEL_EPOCH_UTC + Math.round(serial) * 86400000;
+  const d = new Date(ms);
+  const yyyy = d.getUTCFullYear();
+  const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const dd   = String(d.getUTCDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 // Parse uploaded Excel file → BulkRow[]
 function parseExcel(file: File): Promise<BulkRow[]> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const wb = XLSX.read(e.target!.result, { type: 'binary', cellDates: true });
+        // cellDates:false is deliberate — we want the RAW serial number, not a
+        // Date object that SheetJS has already shifted into local time.
+        const wb = XLSX.read(e.target!.result, { type: 'binary', cellDates: false });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
         if (range.e.r < 1) { reject(new Error('Template is empty — add at least one row')); return; }
 
-        // Read a cell's RAW value (for IMEI / yes-no text — never goes through
-        // date formatting, so no risk of number-format side effects)
         const cellRaw = (r: number, c: number): string => {
           const cell = ws[XLSX.utils.encode_cell({ r, c })];
           return cell ? String(cell.v ?? '').trim() : '';
         };
 
-        // Read a cell's DISPLAYED TEXT exactly as Excel shows it (cell.w).
-        // This is the fix: converting an Excel date serial back through a JS
-        // Date object and re-extracting y/m/d is timezone-dependent and was
-        // rolling every date back by one day. Reading the formatted text
-        // Excel already computed sidesteps Date-object math entirely.
-        const cellDisplayDate = (r: number, c: number): string => {
+        // Read a date cell → "YYYY-MM-DD", fully timezone-independent.
+        const cellDate = (r: number, c: number): string => {
           const cell = ws[XLSX.utils.encode_cell({ r, c })];
-          if (!cell) return '';
-          const text = cell.w !== undefined ? String(cell.w).trim() : String(cell.v ?? '').trim();
+          if (!cell || cell.v === undefined || cell.v === null || cell.v === '') return '';
+
+          // Case 1: real Excel date → numeric serial. Pure math, no Date parsing.
+          if (typeof cell.v === 'number') return serialToYMD(cell.v);
+
+          // Case 2: typed as plain text → read the characters literally.
+          const text = String(cell.v).trim();
           if (!text) return '';
-          // DD-MM-YYYY or DD/MM/YYYY (what our template asks for)
-          let m = text.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
-          if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
-          // Already ISO YYYY-MM-DD
-          if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 10);
-          // Fallback: displayed text didn't match — reconstruct from the Date
-          // object as a last resort (rare: only if number format is unusual)
-          if (cell.v instanceof Date) {
-            const yyyy = cell.v.getFullYear();
-            const mm   = String(cell.v.getMonth() + 1).padStart(2, '0');
-            const dd   = String(cell.v.getDate()).padStart(2, '0');
-            return `${yyyy}-${mm}-${dd}`;
-          }
+          const dmy = text.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);   // DD-MM-YYYY
+          if (dmy) return `${dmy[3]}-${dmy[2].padStart(2,'0')}-${dmy[1].padStart(2,'0')}`;
+          const ymd = text.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);    // YYYY-MM-DD
+          if (ymd) return `${ymd[1]}-${ymd[2].padStart(2,'0')}-${ymd[3].padStart(2,'0')}`;
           return '';
         };
 
@@ -88,16 +94,14 @@ function parseExcel(file: File): Promise<BulkRow[]> {
           const imei = cellRaw(r, 0).replace(/\D/g, '');
           if (!imei) continue;
 
-          const swipedRaw    = cellRaw(r, 1).toLowerCase();
-          const swipedDate    = cellDisplayDate(r, 2);
-          const activatedRaw = cellRaw(r, 3).toLowerCase();
-          const activatedDate = cellDisplayDate(r, 4);
+          const swipedRaw     = cellRaw(r, 1).toLowerCase();
+          const swipedDate    = cellDate(r, 2);
+          const activatedRaw  = cellRaw(r, 3).toLowerCase();
+          const activatedDate = cellDate(r, 4);
 
-          // Anchor date-only values at local noon before converting to ISO —
-          // sending a bare "YYYY-MM-DD" gets parsed by `new Date()` as UTC
-          // midnight, which can roll back a day once displayed. Noon avoids
-          // any rollover in any timezone.
-          const toSafeISO = (ymd: string) => ymd ? new Date(ymd + 'T12:00:00').toISOString() : '';
+          // Send as explicit UTC noon. Noon is far enough from both midnights
+          // that no timezone on earth can shift the calendar day.
+          const toSafeISO = (ymd: string) => ymd ? `${ymd}T12:00:00.000Z` : '';
 
           const row: BulkRow = { imei };
           if (swipedRaw)    { row.swiped    = swipedRaw    === 'yes' || swipedRaw    === '1' || swipedRaw    === 'true'; if (swipedDate)    row.swipedAt    = toSafeISO(swipedDate); }
@@ -258,9 +262,9 @@ export function ImeiBulkUpload({ onClose, onDone }: { onClose: () => void; onDon
                         <td style={{ padding:'7px 10px', color:'#94a3b8' }}>{i+1}</td>
                         <td style={{ padding:'7px 10px', fontFamily:'monospace', fontWeight:600, color:'#0f172a' }}>{r.imei}</td>
                         <td style={{ padding:'7px 10px' }}>{r.swiped !== undefined ? (r.swiped ? <span style={{ color:'#16a34a', fontWeight:600 }}>✓ Yes</span> : <span style={{ color:'#dc2626' }}>✕ No</span>) : <span style={{ color:'#d1d5db' }}>—</span>}</td>
-                        <td style={{ padding:'7px 10px', color:'#64748b' }}>{r.swipedAt ? new Date(r.swipedAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) : <span style={{ color:'#d1d5db' }}>today</span>}</td>
+                        <td style={{ padding:'7px 10px', color:'#64748b' }}>{r.swipedAt ? new Date(r.swipedAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric',timeZone:'UTC'}) : <span style={{ color:'#d1d5db' }}>today</span>}</td>
                         <td style={{ padding:'7px 10px' }}>{r.activated !== undefined ? (r.activated ? <span style={{ color:'#7c3aed', fontWeight:600 }}>✓ Yes</span> : <span style={{ color:'#dc2626' }}>✕ No</span>) : <span style={{ color:'#d1d5db' }}>—</span>}</td>
-                        <td style={{ padding:'7px 10px', color:'#64748b' }}>{r.activatedAt ? new Date(r.activatedAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) : <span style={{ color:'#d1d5db' }}>today</span>}</td>
+                        <td style={{ padding:'7px 10px', color:'#64748b' }}>{r.activatedAt ? new Date(r.activatedAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric',timeZone:'UTC'}) : <span style={{ color:'#d1d5db' }}>today</span>}</td>
                       </tr>
                     ))}
                   </tbody>

@@ -28,7 +28,9 @@ const TYPE_META: Record<string,{label:string;bg:string;color:string}> = {
   DEMO:        {label:'Demo',      bg:'#fef9c3',color:'#854d0e'},
   SECOND_IMEI: {label:'2nd IMEI', bg:'#ede9fe',color:'#6d28d9'},
 };
-const fmt     = (s:string) => new Date(s).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+// Dates are stored anchored at UTC noon, so render them in UTC — this keeps the
+// calendar day identical to what was entered, on any device in any timezone.
+const fmt     = (s:string) => new Date(s).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric',timeZone:'UTC'});
 const fmtTime = (s:string) => new Date(s).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
 
 // ── Filter Pill ────────────────────────────────────────────────────────────────
@@ -188,7 +190,7 @@ export function Imei() {
 
   const commitSwiped=async(id:string,newSwiped:boolean,dateStr:string|null)=>{
     setUpdatingId(id);
-    const isoDate = newSwiped && dateStr ? new Date(dateStr+'T12:00:00').toISOString() : null;
+    const isoDate = newSwiped && dateStr ? `${dateStr}T12:00:00.000Z` : null;
     setData(d=>d?{...d,items:d.items.map(i=>i.id===id?{...i,swiped:newSwiped,swipedAt:isoDate??undefined}:i)}:d);
     try{
       const body:any={swiped:newSwiped};
@@ -204,7 +206,7 @@ export function Imei() {
 
   const commitActivated=async(id:string,newVal:boolean,dateStr:string|null)=>{
     setUpdatingId(id);
-    const isoDate = newVal && dateStr ? new Date(dateStr+'T12:00:00').toISOString() : null;
+    const isoDate = newVal && dateStr ? `${dateStr}T12:00:00.000Z` : null;
     setData(d=>d?{...d,items:d.items.map(i=>i.id===id?{...i,activated:newVal,activatedAt:isoDate??undefined}:i)}:d);
     try{
       const body:any={activated:newVal};
