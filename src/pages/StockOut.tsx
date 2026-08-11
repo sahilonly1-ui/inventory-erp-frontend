@@ -422,7 +422,7 @@ export function StockOut(){
           </div>
           <div style={{flex:1,overflowY:'auto',padding:'6px 0'}}>
             {sv.length===0?<div style={{padding:'20px 14px',textAlign:'center',color:'#cbd5e1',fontSize:12}}>Scan products to dispatch</div>
-              :sv.map(r=>(
+              :[...sv].sort((a,b)=>(a.model||a.ean).localeCompare(b.model||b.ean)).map(r=>(
               <div key={r.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 14px',fontSize:12}}>
               <div style={{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',fontSize:10,lineHeight:1.3,wordBreak:'break-word',flex:1,minWidth:0,color:'#374151'}}>{r.model||r.ean}</div>
                 <span style={{fontWeight:700,color:'#dc2626',flexShrink:0,marginLeft:6}}>-{r.qty}</span>

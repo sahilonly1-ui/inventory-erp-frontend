@@ -111,15 +111,19 @@ export function Imei() {
   const [imeiType,setImeiType] = useState('');
   const [swiped,setSwiped]     = useState('');
   const [activated,setActivated] = useState('');
+  const [brand,setBrand]       = useState('');
   const [page,setPage]         = useState(1);
   const [exporting,setExporting] = useState(false);
   const [showBulk,setShowBulk]   = useState(false);
   const [updatingId,setUpdatingId] = useState<string|null>(null);
   const [expandedId,setExpandedId] = useState<string|null>(null);
+  // Date picker for swiped/activated: { id, field: 'swiped'|'activated', date }
+  const [datePicker,setDatePicker] = useState<{id:string;field:'swiped'|'activated';date:string}|null>(null);
   const debRef = useRef<ReturnType<typeof setTimeout>>();
+  const today = new Date().toISOString().slice(0,10);
 
   const load = useCallback(async(
-    q=search, s=status, t=imeiType, sw=swiped, act=activated, pg=page
+    q=search, s=status, t=imeiType, sw=swiped, act=activated, pg=page, br=brand
   )=>{
     setLoading(true);
     try{
@@ -129,11 +133,12 @@ export function Imei() {
       if(t)   params.set('imeiType',t);
       if(sw)  params.set('swiped',sw);
       if(act) params.set('activated',act);
+      if(br)  params.set('brand',br);
       const d=await api<Page>(`/imei?${params}`);
       setData(d);
     }catch{}
     finally{setLoading(false);}
-  },[search,status,imeiType,swiped,activated,page]);
+  },[search,status,imeiType,swiped,activated,page,brand]);
 
   useEffect(()=>{load();},[load]);
 
@@ -143,47 +148,72 @@ export function Imei() {
     debRef.current=setTimeout(()=>load(v,status,imeiType,swiped,activated,1),350);
   };
 
-  const onFilterChange=(key:'status'|'imeiType'|'swiped'|'activated',val:string)=>{
+  const onFilterChange=(key:'status'|'imeiType'|'swiped'|'activated'|'brand',val:string)=>{
     const ns  = key==='status'    ? val : status;
     const nt  = key==='imeiType'  ? val : imeiType;
     const nsw = key==='swiped'    ? val : swiped;
     const nact= key==='activated' ? val : activated;
+    const nbr = key==='brand'     ? val : brand;
     if(key==='status')    setStatus(val);
     if(key==='imeiType')  setImeiType(val);
     if(key==='swiped')    setSwiped(val);
     if(key==='activated') setActivated(val);
+    if(key==='brand')     setBrand(val);
     setPage(1);
-    load(search,ns,nt,nsw,nact,1);
+    load(search,ns,nt,nsw,nact,1,nbr);
   };
 
   const clearAll=()=>{
-    setSearch('');setStatus('');setImeiType('');setSwiped('');setActivated('');setPage(1);
-    load('','','','','',1);
+    setSearch('');setStatus('');setImeiType('');setSwiped('');setActivated('');setBrand('');setPage(1);
+    load('','','','','',1,'');
   };
 
-  const toggleSwiped=async(id:string,cur:boolean)=>{
+  // When toggle is OFF → turn ON with date picker; when ON → turn OFF immediately
+  const handleSwipedClick=(id:string,cur:boolean)=>{
+    if(cur){
+      // Already swiped → toggle off immediately
+      commitSwiped(id,false,null);
+    } else {
+      // Not swiped → show date picker defaulting to today
+      setDatePicker({id,field:'swiped',date:today});
+    }
+  };
+
+  const handleActivatedClick=(id:string,cur:boolean)=>{
+    if(cur){
+      commitActivated(id,false,null);
+    } else {
+      setDatePicker({id,field:'activated',date:today});
+    }
+  };
+
+  const commitSwiped=async(id:string,newSwiped:boolean,dateStr:string|null)=>{
     setUpdatingId(id);
-    const newSwiped=!cur;
-    setData(d=>d?{...d,items:d.items.map(i=>i.id===id?{...i,swiped:newSwiped,swipedAt:newSwiped?new Date().toISOString():undefined}:i)}:d);
+    const isoDate = newSwiped && dateStr ? new Date(dateStr+'T12:00:00').toISOString() : null;
+    setData(d=>d?{...d,items:d.items.map(i=>i.id===id?{...i,swiped:newSwiped,swipedAt:isoDate??undefined}:i)}:d);
     try{
-      const res=await api<{id:string;swiped:boolean;swipedAt:string|null}>(`/imei/${id}/swiped`,{method:'PATCH',body:JSON.stringify({swiped:newSwiped})});
+      const body:any={swiped:newSwiped};
+      if(newSwiped&&dateStr) body.swipedAt=isoDate;
+      const res=await api<{id:string;swiped:boolean;swipedAt:string|null}>(`/imei/${id}/swiped`,{method:'PATCH',body:JSON.stringify(body)});
       setData(d=>d?{...d,items:d.items.map(i=>i.id===id?{...i,swiped:res.swiped,swipedAt:res.swipedAt??undefined}:i)}:d);
     }catch(e:any){
-      setData(d=>d?{...d,items:d.items.map(i=>i.id===id?{...i,swiped:cur,swipedAt:cur?i.swipedAt:undefined}:i)}:d);
+      setData(d=>d?{...d,items:d.items.map(i=>i.id===id?{...i,swiped:!newSwiped}:i)}:d);
       alert(e.message);
     }
     finally{setUpdatingId(null);}
   };
 
-  const toggleActivated=async(id:string,cur:boolean)=>{
+  const commitActivated=async(id:string,newVal:boolean,dateStr:string|null)=>{
     setUpdatingId(id);
-    const newVal=!cur;
-    setData(d=>d?{...d,items:d.items.map(i=>i.id===id?{...i,activated:newVal,activatedAt:newVal?new Date().toISOString():undefined}:i)}:d);
+    const isoDate = newVal && dateStr ? new Date(dateStr+'T12:00:00').toISOString() : null;
+    setData(d=>d?{...d,items:d.items.map(i=>i.id===id?{...i,activated:newVal,activatedAt:isoDate??undefined}:i)}:d);
     try{
-      const res=await api<{id:string;activated:boolean;activatedAt:string|null}>(`/imei/${id}/activated`,{method:'PATCH',body:JSON.stringify({activated:newVal})});
+      const body:any={activated:newVal};
+      if(newVal&&dateStr) body.activatedAt=isoDate;
+      const res=await api<{id:string;activated:boolean;activatedAt:string|null}>(`/imei/${id}/activated`,{method:'PATCH',body:JSON.stringify(body)});
       setData(d=>d?{...d,items:d.items.map(i=>i.id===id?{...i,activated:res.activated,activatedAt:res.activatedAt??undefined}:i)}:d);
     }catch(e:any){
-      setData(d=>d?{...d,items:d.items.map(i=>i.id===id?{...i,activated:cur,activatedAt:cur?i.activatedAt:undefined}:i)}:d);
+      setData(d=>d?{...d,items:d.items.map(i=>i.id===id?{...i,activated:!newVal}:i)}:d);
       alert(e.message);
     }
     finally{setUpdatingId(null);}
@@ -219,13 +249,16 @@ export function Imei() {
 
   const items = data?.items||[];
   const total = data?.total||0;
-  const hasFilters = !!(search||status||imeiType||swiped||activated);
+  const hasFilters = !!(search||status||imeiType||swiped||activated||brand);
+  // Derive unique brands from loaded items for the filter dropdown
+  const brandOptions:[string,string][] = [['','All Brands'],...Array.from(new Set(items.map(i=>i.product?.brand||'').filter(Boolean))).sort().map(b=>[b,b] as [string,string])];
 
   // Icons
   const IcoStatus    = <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>;
   const IcoType      = <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>;
   const IcoSwiped    = <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>;
   const IcoActivated = <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>;
+  const IcoBrand     = <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>;
 
   const thS:React.CSSProperties = {
     padding:'10px 14px',textAlign:'left',fontSize:10,fontWeight:700,
@@ -343,6 +376,11 @@ export function Imei() {
               ['false','Not Activated'],
             ]}
           />
+          <FilterPill
+            label="Brand" value={brand} icon={IcoBrand}
+            onChange={v=>onFilterChange('brand',v)}
+            options={brandOptions}
+          />
           {hasFilters && (
             <button onClick={clearAll} style={{
               height:34,padding:'0 14px',border:'1.5px solid #fca5a5',
@@ -414,7 +452,7 @@ export function Imei() {
                       </td>
                       {/* Swiped toggle */}
                       <td style={{padding:'10px 14px',textAlign:'center'}}>
-                        <button onClick={e=>{e.stopPropagation();toggleSwiped(item.id,item.swiped);}}
+                        <button onClick={e=>{e.stopPropagation();handleSwipedClick(item.id,item.swiped);}}
                           disabled={updatingId===item.id}
                           title={item.swiped?'Mark not swiped':'Mark as swiped'}
                           style={{width:44,height:24,borderRadius:12,border:'none',cursor:'pointer',
@@ -422,18 +460,18 @@ export function Imei() {
                           <span style={{position:'absolute',top:2,left:item.swiped?22:2,width:20,height:20,borderRadius:'50%',background:'#fff',transition:'left .2s',display:'block'}}/>
                         </button>
                       </td>
-                      {/* Swiped On */}
+                      {/* Swiped On — click to edit date */}
                       <td style={{padding:'10px 14px',whiteSpace:'nowrap',fontSize:11}}>
                         {item.swiped&&item.swipedAt?(
-                          <div>
-                            <div style={{color:'#2563eb',fontWeight:600}}>{fmt(item.swipedAt)}</div>
-                            <div style={{color:'#94a3b8',fontSize:10}}>{fmtTime(item.swipedAt)}</div>
+                          <div onClick={e=>{e.stopPropagation();setDatePicker({id:item.id,field:'swiped',date:item.swipedAt!.slice(0,10)});}} style={{cursor:'pointer',display:'inline-block'}}>
+                            <div style={{color:'#2563eb',fontWeight:600,textDecoration:'underline dotted'}}>{fmt(item.swipedAt)}</div>
+                            <div style={{color:'#94a3b8',fontSize:10}}>tap to edit</div>
                           </div>
                         ):'—'}
                       </td>
                       {/* Activated toggle */}
                       <td style={{padding:'10px 14px',textAlign:'center'}}>
-                        <button onClick={e=>{e.stopPropagation();toggleActivated(item.id,item.activated);}}
+                        <button onClick={e=>{e.stopPropagation();handleActivatedClick(item.id,item.activated);}}
                           disabled={updatingId===item.id}
                           title={item.activated?'Mark not activated':'Mark as activated'}
                           style={{width:44,height:24,borderRadius:12,border:'none',cursor:'pointer',
@@ -441,12 +479,12 @@ export function Imei() {
                           <span style={{position:'absolute',top:2,left:item.activated?22:2,width:20,height:20,borderRadius:'50%',background:'#fff',transition:'left .2s',display:'block'}}/>
                         </button>
                       </td>
-                      {/* Activated On */}
+                      {/* Activated On — click to edit date */}
                       <td style={{padding:'10px 14px',whiteSpace:'nowrap',fontSize:11}}>
                         {item.activated&&item.activatedAt?(
-                          <div>
-                            <div style={{color:'#7c3aed',fontWeight:600}}>{fmt(item.activatedAt)}</div>
-                            <div style={{color:'#94a3b8',fontSize:10}}>{fmtTime(item.activatedAt)}</div>
+                          <div onClick={e=>{e.stopPropagation();setDatePicker({id:item.id,field:'activated',date:item.activatedAt!.slice(0,10)});}} style={{cursor:'pointer',display:'inline-block'}}>
+                            <div style={{color:'#7c3aed',fontWeight:600,textDecoration:'underline dotted'}}>{fmt(item.activatedAt)}</div>
+                            <div style={{color:'#94a3b8',fontSize:10}}>tap to edit</div>
                           </div>
                         ):'—'}
                       </td>
@@ -514,8 +552,47 @@ export function Imei() {
       {showBulk && (
         <ImeiBulkUpload
           onClose={()=>setShowBulk(false)}
-          onDone={()=>{ load(search,status,imeiType,swiped,activated,page); }}
+          onDone={()=>{ load(search,status,imeiType,swiped,activated,page,brand); }}
         />
+      )}
+
+      {/* ── Date Picker Modal for Swiped / Activated ── */}
+      {datePicker && (
+        <div style={{position:'fixed',inset:0,zIndex:500,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div style={{position:'absolute',inset:0,background:'rgba(0,0,0,.35)'}} onClick={()=>setDatePicker(null)}/>
+          <div style={{position:'relative',background:'#fff',borderRadius:14,boxShadow:'0 8px 40px rgba(0,0,0,.18)',padding:'24px 28px',minWidth:280,zIndex:1}}>
+            <div style={{fontSize:14,fontWeight:800,color:'#0f172a',marginBottom:4}}>
+              {datePicker.field==='swiped'?'📄 Set Swiped Date':'✅ Set Activated Date'}
+            </div>
+            <div style={{fontSize:11,color:'#94a3b8',marginBottom:16}}>
+              {datePicker.field==='swiped'?'Date when SIM was swiped':'Date when device was activated'}
+            </div>
+            <input type="date" value={datePicker.date}
+              max={today}
+              onChange={e=>setDatePicker(p=>p?{...p,date:e.target.value}:p)}
+              style={{width:'100%',height:38,padding:'0 12px',border:'1.5px solid #d0d5dd',borderRadius:8,fontSize:14,outline:'none',boxSizing:'border-box',marginBottom:16}}
+            />
+            <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+              <button onClick={()=>setDatePicker(null)}
+                style={{height:34,padding:'0 16px',border:'1px solid #e2e8f0',borderRadius:7,background:'#f8fafc',fontSize:12,fontWeight:600,color:'#64748b',cursor:'pointer'}}>
+                Cancel
+              </button>
+              <button
+                onClick={()=>{
+                  if(!datePicker.date)return;
+                  const {id,field,date}=datePicker;
+                  setDatePicker(null);
+                  if(field==='swiped') commitSwiped(id,true,date);
+                  else commitActivated(id,true,date);
+                }}
+                style={{height:34,padding:'0 16px',border:'none',borderRadius:7,
+                  background:datePicker.field==='swiped'?'#2563eb':'#7c3aed',
+                  color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}}>
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

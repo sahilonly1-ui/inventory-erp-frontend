@@ -327,7 +327,7 @@ export function StockIn(){
   },[]);
 
   const sv=rows.filter(r=>r.status==='saved'&&r.qty>0);
-  const sm=Object.values(sv.reduce((a:any,r)=>{const k=r.model||r.ean;if(!a[k])a[k]={m:k,q:0};a[k].q+=r.qty;return a;},{})) as any[];
+  const sm=(Object.values(sv.reduce((a:any,r)=>{const k=r.model||r.ean;if(!a[k])a[k]={m:k,q:0};a[k].q+=r.qty;return a;},{})) as any[]).sort((a:any,b:any)=>a.m.localeCompare(b.m));
   const tot=sm.reduce((s,r)=>s+r.q,0);
   const sg=sHist.filter(x=>x.toLowerCase().includes(ss.toLowerCase())).slice(0,8);
   const CI=(ex:React.CSSProperties={}):React.CSSProperties=>({width:'100%',height:'100%',border:'none',padding:'0 10px',background:'transparent',fontSize:13,color:'#101828',outline:'none',fontFamily:'inherit',...ex});

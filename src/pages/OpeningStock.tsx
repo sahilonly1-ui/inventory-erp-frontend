@@ -387,7 +387,7 @@ export function OpeningStock() {
             <div style={{ padding: '12px 14px', borderBottom: '1px solid #e2e8f0', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '.06em' }}>Summary — {date.split('-').reverse().join('-')}</div>
             <div style={{ flex: 1, padding: '8px 14px' }}>
               {Object.entries(summary).length === 0 && <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 12, textAlign: 'center' }}>Scan products to see summary</div>}
-              {Object.entries(summary).map(([model, qty]) => (
+              {Object.entries(summary).sort(([a],[b])=>a.localeCompare(b)).map(([model, qty]) => (
                 <div key={model} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6, padding: '5px 0', borderBottom: '1px solid #f1f5f9', fontSize: 11 }}>
                   <span style={{ color: '#374151', wordBreak: 'break-word', lineHeight: 1.35, flex: 1 }}>{model}</span>
                   <span style={{ fontWeight: 700, color: '#d97706', flexShrink: 0, marginLeft: 6 }}>{qty}</span>
