@@ -248,8 +248,8 @@ body{font-family:Arial,sans-serif;font-size:7.5pt;color:#000;
   -webkit-print-color-adjust:exact;print-color-adjust:exact}
 h1{font-size:11pt;font-weight:800;margin-bottom:1mm}
 .meta{font-size:7pt;color:#444;margin-bottom:2mm;padding-bottom:1mm;border-bottom:1px solid #bbb}
-.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:3mm;align-items:start}
-.bb{break-inside:avoid}
+.grid{column-count:3;column-gap:3mm}
+.bb{break-inside:avoid;-webkit-column-break-inside:avoid;page-break-inside:avoid;display:inline-block;width:100%;margin-bottom:3mm}
 table{width:100%;border-collapse:collapse}
 th,td{border:.4pt solid #999;padding:1.5pt 3pt}
 .bh{background:#1e293b!important;color:#fff!important;font-size:8pt;font-weight:700;text-align:left;padding:2pt 4pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -297,7 +297,7 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
         const bTotal = bRows.reduce((s,r)=>s+r.totalQty,0);
         const bRet   = bRows.reduce((s,r)=>s+r.retail,0);
         const bAcc   = bRows.reduce((s,r)=>s+r.activated,0);
-        return `<div style="break-inside:avoid;border:1px solid #ccc;border-radius:6px;overflow:hidden;margin-bottom:8px">
+        return `<div style="break-inside:avoid;-webkit-column-break-inside:avoid;page-break-inside:avoid;display:inline-block;width:100%;border:1px solid #ccc;border-radius:6px;overflow:hidden;margin-bottom:8px">
           <div style="background:#1e293b;color:#fff;padding:4px 8px;font-size:9px;font-weight:800">${brand}</div>
           <table style="width:100%;border-collapse:collapse;font-size:8px">
             <tr style="background:#e8e8e8"><th style="padding:2px 6px;text-align:left;border:0.5px solid #aaa">Product Name</th><th style="padding:2px;text-align:center;width:32px;border:0.5px solid #aaa">Qty</th><th style="padding:2px;text-align:center;width:40px;border:0.5px solid #aaa;color:#16a34a">Retail</th><th style="padding:2px;text-align:center;width:30px;border:0.5px solid #aaa;color:#7c3aed">ACC</th></tr>
@@ -312,7 +312,7 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
           <div style="font-size:16px;font-weight:800;color:#1e293b">📦 iTechArena ERP — Stock Report</div>
           <div style="font-size:10px;color:#64748b">${fmtDate(new Date())} · Total: ${grandTotal} units · Retail: ${grandRetail} · ACC: ${grandActivated}</div>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;align-items:start">
+        <div style="column-count:3;column-gap:8px">
           ${brandSectionsHTML}
         </div>
         <div style="margin-top:8px;background:#1e293b;color:#fff;padding:6px 12px;border-radius:6px;display:flex;gap:24px;font-size:9px;font-weight:700">
@@ -451,14 +451,14 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
         </div>
       ) : (
         <div ref={reportRef} style={{ flex:1, overflowY:'auto', padding:'14px 16px' }}>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(340px,1fr))', gap:14 }}>
+          <div style={{ columnWidth:340, columnGap:14 }}>
             {brandList.map(brand => {
               const bRows  = byBrand[brand];
               const bTotal = bRows.reduce((s,r)=>s+r.totalQty,0);
               const bRet   = bRows.reduce((s,r)=>s+r.retail,0);
               const bAcc   = bRows.reduce((s,r)=>s+r.activated,0);
               return (
-                <div key={brand} style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:10, overflow:'hidden', boxShadow:'0 1px 3px rgba(0,0,0,.04)' }}>
+                <div key={brand} style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:10, overflow:'hidden', boxShadow:'0 1px 3px rgba(0,0,0,.04)', breakInside:'avoid', pageBreakInside:'avoid', marginBottom:14, display:'inline-block', width:'100%' }}>
                   <div style={{ background:'#1e293b', color:'#fff', padding:'7px 12px', fontSize:12, fontWeight:800 }}>{brand}</div>
                   <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
                     <thead>
