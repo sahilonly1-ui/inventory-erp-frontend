@@ -95,7 +95,10 @@ const TEMPLATE_HEADERS = ['EAN','Product Name','Brand','Category','Status','MRP'
 
 function downloadTemplate(){
   const sample=[
+    ['6921815600001','OnePlus Nord CE 4 Lite 8/256GB (Super Silver)','OnePlus','Smartphones','ACTIVE','24999','19500','CREATE'],
     ['8801234567890','Samsung Galaxy A55 8/128GB (Black)','Samsung','Smartphones','ACTIVE','22999','18000','UPDATE'],
+    ['4895180766260','','','','','','','DELETE'],
+    ['8904336803132','Portronics Konnect A Trio Multi-Functional Cable','Portronics','Cables & Chargers','ACTIVE','799','550',''],
   ];
   const csv=[TEMPLATE_HEADERS,...sample].map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
@@ -283,28 +286,94 @@ function BulkImportModal({categories,brands,onClose,onDone}:{categories:Category
         <div className="modal-body" style={{flex:1,overflowY:'auto'}}>
           {step==='upload'&&(
             <>
-              <div style={{background:'var(--info-bg)',border:'1px solid var(--info-bdr)',borderRadius:'var(--r-md)',padding:'12px 14px',marginBottom:14,fontSize:12,color:'var(--info)'}}>
-                <strong>How to use:</strong> Download the template, fill in your products, save as CSV, then upload here.
-              </div>
-              <button onClick={downloadTemplate}
-                style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',background:'var(--surf-1)',border:'1px solid var(--bdr)',borderRadius:'var(--r-md)',cursor:'pointer',fontSize:13,fontWeight:500,marginBottom:14,width:'100%'}}>
-                <span style={{fontSize:16}}>📄</span>
-                <div style={{textAlign:'left'}}>
-                  <div style={{fontWeight:600,color:'var(--txt)'}}>Download Template CSV</div>
-                  <div style={{fontSize:11,color:'var(--txt-3)'}}>Pre-filled column headers: {TEMPLATE_HEADERS.join(', ')}</div>
+              {/* ── ACTION column guide ── */}
+              <div style={{marginBottom:14}}>
+                <div style={{fontSize:11,fontWeight:700,color:'var(--txt-3)',marginBottom:8,textTransform:'uppercase',letterSpacing:'.06em'}}>
+                  Action Column — What to Write
                 </div>
+                <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                  {([
+                    {action:'CREATE',color:'#15803d',bg:'#f0fdf4',bdr:'#bbf7d0',
+                     desc:'New product. All columns required: EAN, Name, Brand, Category, Status, MRP, Cost.'},
+                    {action:'UPDATE',color:'#1d4ed8',bg:'#eff6ff',bdr:'#bfdbfe',
+                     desc:'Edit existing product. Only EAN required — fill only columns you want to change. Blank = keep current value.'},
+                    {action:'DELETE',color:'#dc2626',bg:'#fef2f2',bdr:'#fca5a5',
+                     desc:'Remove / discontinue a product. Only EAN needed — all other columns can be blank.'},
+                    {action:'(blank)',color:'#64748b',bg:'#f8fafc',bdr:'#e2e8f0',
+                     desc:'Leaving Action empty is the same as UPDATE.'},
+                  ] as {action:string;color:string;bg:string;bdr:string;desc:string}[]).map(({action,color,bg,bdr,desc})=>(
+                    <div key={action} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'8px 10px',borderRadius:8,border:`1px solid ${bdr}`,background:bg}}>
+                      <span style={{flexShrink:0,display:'inline-flex',alignItems:'center',height:22,padding:'0 10px',borderRadius:20,background:'rgba(255,255,255,.7)',border:`1.5px solid ${bdr}`,color,fontSize:11,fontWeight:800,marginTop:1}}>
+                        {action}
+                      </span>
+                      <span style={{fontSize:12,color:'#374151',lineHeight:1.5}}>{desc}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* ── Column reference ── */}
+              <div style={{marginBottom:14}}>
+                <div style={{fontSize:11,fontWeight:700,color:'var(--txt-3)',marginBottom:8,textTransform:'uppercase',letterSpacing:'.06em'}}>
+                  Column Reference
+                </div>
+                <div style={{border:'1px solid var(--bdr)',borderRadius:'var(--r-md)',overflow:'hidden'}}>
+                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+                    <thead>
+                      <tr style={{background:'var(--surf-1)'}}>
+                        {['Column','For CREATE','For UPDATE','Example Value'].map(h=>(
+                          <th key={h} style={{padding:'6px 10px',textAlign:'left',fontWeight:700,color:'var(--txt-3)',fontSize:10,textTransform:'uppercase',borderBottom:'1px solid var(--bdr)'}}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {([
+                        ['EAN','Required','Required','8801234567890'],
+                        ['Product Name','Required','Optional','Samsung Galaxy A55 8/128GB (Black)'],
+                        ['Brand','Required','Optional','Samsung'],
+                        ['Category','Required','Optional','Smartphones'],
+                        ['Status','Required','Optional','ACTIVE / INACTIVE / DISCONTINUED'],
+                        ['MRP (Selling Price \u20B9)','Required','Optional','22999'],
+                        ['Cost Price \u20B9','Required','Optional','18000'],
+                        ['Action','Required','Required','CREATE / UPDATE / DELETE'],
+                      ] as string[][]).map(([col,cr,up,ex],i)=>(
+                        <tr key={i} style={{borderBottom:'1px solid var(--bdr-s)',background:i%2===0?'transparent':'var(--surf-1)'}}>
+                          <td style={{padding:'6px 10px',fontWeight:600,color:'var(--txt)',whiteSpace:'nowrap'}}>{col}</td>
+                          <td style={{padding:'6px 10px',color:'#15803d',fontWeight:600}}>{cr}</td>
+                          <td style={{padding:'6px 10px',color:'#64748b'}}>{up}</td>
+                          <td style={{padding:'6px 10px',fontFamily:'monospace',color:'var(--txt-3)',fontSize:10}}>{ex}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* ── Download template ── */}
+              <button onClick={downloadTemplate}
+                style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:'var(--surf-1)',border:'1.5px solid var(--bdr)',borderRadius:'var(--r-md)',cursor:'pointer',fontSize:13,fontWeight:500,marginBottom:10,width:'100%'}}>
+                <span style={{fontSize:18}}>📄</span>
+                <div style={{textAlign:'left',flex:1}}>
+                  <div style={{fontWeight:700,color:'var(--txt)'}}>Download Template CSV</div>
+                  <div style={{fontSize:11,color:'var(--txt-3)',marginTop:1}}>4 sample rows — CREATE, UPDATE, DELETE, blank Action</div>
+                </div>
+                <svg style={{flexShrink:0}} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
               </button>
-              <div style={{border:'2px dashed var(--bdr)',borderRadius:'var(--r-lg)',padding:'28px',textAlign:'center',cursor:'pointer'}}
+
+              {/* ── Upload zone ── */}
+              <div style={{border:'2px dashed var(--bdr)',borderRadius:'var(--r-lg)',padding:'22px',textAlign:'center',cursor:'pointer',background:'var(--surf-2)'}}
                 onClick={()=>document.getElementById('import-file')?.click()}>
-                <div style={{fontSize:28,marginBottom:8}}>📂</div>
-                <div style={{fontSize:14,fontWeight:600,color:'var(--txt)',marginBottom:4}}>Click to upload CSV file</div>
-                <div style={{fontSize:12,color:'var(--txt-3)'}}>Accepts .csv files exported from Excel or Google Sheets</div>
+                <div style={{fontSize:26,marginBottom:6}}>📂</div>
+                <div style={{fontSize:13,fontWeight:600,color:'var(--txt)',marginBottom:3}}>Click to upload or drag & drop CSV</div>
+                <div style={{fontSize:11,color:'var(--txt-3)'}}>Save your Excel file as CSV (.csv) before uploading</div>
                 <input id="import-file" type="file" accept=".csv,.txt" style={{display:'none'}} onChange={handleFile}/>
               </div>
               {err&&<div className="alert alert-err" style={{marginTop:10}}>{err}</div>}
             </>
           )}
-          {step==='preview'&&(
+                    {step==='preview'&&(
             <>
               <div style={{fontSize:13,fontWeight:500,marginBottom:6,color:'var(--txt)'}}>
                 {rows.length} products ready to import. Review before importing:
