@@ -258,7 +258,7 @@ export function ImeiBulkUpload({ onClose, onDone }: { onClose: () => void; onDon
               <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:12, marginBottom:20 }}>
                 {[
                   { label:'Updated', val:summary.ok, bg:'#f0fdf4', color:'#16a34a', border:'#bbf7d0' },
-                  { label:'Not Found', val:summary.not_found, bg:'#fffbeb', color:'#d97706', border:'#fde68a' },
+                  { label:'Not In Stock', val:summary.not_found, bg:'#fffbeb', color:'#d97706', border:'#fde68a' },
                   { label:'Errors', val:summary.errors, bg:'#fef2f2', color:'#dc2626', border:'#fca5a5' },
                 ].map(k => (
                   <div key={k.label} style={{ background:k.bg, border:`1.5px solid ${k.border}`, borderRadius:10, padding:'14px 12px', textAlign:'center' }}>
@@ -276,7 +276,7 @@ export function ImeiBulkUpload({ onClose, onDone }: { onClose: () => void; onDon
                       <div key={i} style={{ padding:'8px 12px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', gap:10, fontSize:12 }}>
                         <span style={{ fontFamily:'monospace', color:'#374151', fontWeight:600 }}>{r.imei}</span>
                         <span style={{ color: r.status === 'not_found' ? '#d97706' : '#dc2626', background: r.status === 'not_found' ? '#fffbeb' : '#fef2f2', padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:600 }}>
-                          {r.status === 'not_found' ? 'Not in system' : `Error: ${r.msg}`}
+                          {r.status === 'not_found' ? '✕ Not in stock — cannot swipe/activate' : `Error: ${r.msg}`}
                         </span>
                       </div>
                     ))}
