@@ -187,6 +187,13 @@ export function OpeningStock() {
   const handleSrno = useCallback((i: number, v: string) => {
     const srno = v.trim();
     if (!srno) { moveTo(i, 'srno'); return; }
+    // Mirror the server's accepted character set so a bad serial is caught on
+    // the row that produced it, not after a whole batch has been scanned.
+    if (!/^[A-Za-z0-9\-\/._]+$/.test(srno) || srno.length < 4 || srno.length > 48) {
+      upd(i, { srno, errMsg: 'Serial can use letters, digits and - / . _ (4-48 chars)', status: 'err', errField: 'srno' });
+      moveTo(i, 'srno');
+      return;
+    }
     const curRowId2=rows[i]?.id;const dup = rows.findIndex(r => r.id !== curRowId2 && r.srno === srno);
     if (dup !== -1) { upd(i, { errMsg: `Duplicate! Sr. No. already in row ${dup + 1}`, status: 'err', errField: 'srno' }); moveTo(i, 'srno'); return; }
 
