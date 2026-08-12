@@ -171,7 +171,7 @@ export function OpeningStock() {
     const imei = v.trim();
     if (!imei) { moveTo(i, 'imei'); return; }
     if (!/^\d{15}$/.test(imei)) { upd(i, { errMsg: 'IMEI must be exactly 15 digits', status: 'err', errField: 'imei' }); moveTo(i, 'imei'); return; }
-    const dup = rows.findIndex((r, ri) => ri !== i && r.imei === imei);
+    const curRowId=rows[i]?.id;const dup = rows.findIndex(r => r.id !== curRowId && r.imei === imei);
     if (dup !== -1) { upd(i, { errMsg: `Duplicate! IMEI already in row ${dup + 1}`, status: 'err', errField: 'imei' }); moveTo(i, 'imei'); return; }
 
     // Accept the scan and move on immediately — the operator should never wait
@@ -191,7 +191,7 @@ export function OpeningStock() {
   const handleSrno = useCallback((i: number, v: string) => {
     const srno = v.trim();
     if (!srno) { moveTo(i, 'srno'); return; }
-    const dup = rows.findIndex((r, ri) => ri !== i && r.srno === srno);
+    const curRowId2=rows[i]?.id;const dup = rows.findIndex(r => r.id !== curRowId2 && r.srno === srno);
     if (dup !== -1) { upd(i, { errMsg: `Duplicate! Sr. No. already in row ${dup + 1}`, status: 'err', errField: 'srno' }); moveTo(i, 'srno'); return; }
 
     // Same non-blocking flow as IMEI — accept, advance, verify in background.

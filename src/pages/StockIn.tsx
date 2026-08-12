@@ -168,7 +168,8 @@ export function StockIn(){
     if(!row.productId){upd(i,{errMsg:'Scan the EAN barcode first, then IMEI.',status:'err',errField:'imei'});moveTo(i,'imei');return;}
 
     // 2. Within-session duplicate (same IMEI scanned twice in this draft)
-    const sessDup=rows.findIndex((r,ri)=>ri!==i&&r.imei===v);
+    const curId=rows[i]?.id;
+    const sessDup=rows.findIndex(r=>r.id!==curId&&r.imei===v);
     if(sessDup!==-1){
       upd(i,{errMsg:`Duplicate scan! IMEI already entered in row ${sessDup+1} of this entry.`,status:'err',errField:'imei'});
       moveTo(i,'imei');return;
@@ -208,7 +209,8 @@ export function StockIn(){
       const ni=ins(i);moveTo(ni,'ean');return;
     }
     // Within-session duplicate Sr.No.
-    const sessDup=rows.findIndex((r,ri)=>ri!==i&&r.srno===v);
+    const curId2=rows[i]?.id;
+    const sessDup=rows.findIndex(r=>r.id!==curId2&&r.srno===v);
     if(sessDup!==-1){
       upd(i,{errMsg:`Duplicate! Sr.No. "${v}" already in row ${sessDup+1} of this entry.`,status:'err',errField:'srno'});
       moveTo(i,'srno');return;
