@@ -146,13 +146,15 @@ export function Imei() {
 
   useEffect(()=>{load();},[load]);
 
-  // Brands come from the master list, not from the rows currently on screen —
-  // otherwise filtering to one brand collapses the dropdown to just that brand.
+  // Brands are fetched once from the tracker itself: the full Product Master
+  // list includes dozens of brands with no tracked units, and deriving them
+  // from the visible page would collapse the dropdown as soon as a filter is
+  // applied. This gives exactly the brands that have IMEIs or serials.
   useEffect(()=>{
     (async()=>{
       try{
-        const bs=await api<any[]>('/products/brands/list');
-        setAllBrands(bs.map((b:any)=>typeof b==='string'?b:b.name).filter(Boolean).sort());
+        const bs=await api<any[]>('/imei/brands');
+        setAllBrands(bs.map((b:any)=>typeof b==='string'?b:b.name).filter(Boolean));
       }catch{ /* fall back to brands seen in the current page */ }
     })();
   },[]);
