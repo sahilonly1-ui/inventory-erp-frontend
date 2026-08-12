@@ -271,7 +271,13 @@ export function StockReport() {
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact;margin:0;padding:0;overflow:hidden}
 /* One sheet only: never let a stray element open a second page. */
-@media print{html,body{height:auto}#wrap{page-break-after:avoid;page-break-inside:avoid;break-inside:avoid}}
+@media print{
+  html,body{height:auto}
+  /* Belt and braces: a single sheet is the whole point of this view, so the
+     wrapper is not allowed to break, and nothing may follow it. */
+  #wrap{page-break-after:avoid;page-break-inside:avoid;break-inside:avoid;break-after:avoid}
+  #wrap *{break-after:avoid;page-break-after:avoid}
+}
 body{font-family:Arial,sans-serif;font-size:7.5pt;color:#000}
 #wrap{transform-origin:top left}
 h1{font-size:11pt;font-weight:800;margin-bottom:1mm}
@@ -286,7 +292,7 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
 .cn{text-align:left;font-size:7pt}
 .cq,.cr,.ca{text-align:center;width:22pt;font-weight:700;font-size:7.5pt}
 .bt td{background:#f0f0f0!important;font-weight:700;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.gt{margin-top:3mm;background:#1e293b!important;color:#fff!important;padding:3pt 8pt;font-size:8.5pt;font-weight:700;display:flex;gap:15mm;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.gt{margin-top:2mm;background:#1e293b!important;color:#fff!important;padding:2.5pt 8pt;font-size:8pt;font-weight:700;display:flex;gap:15mm;break-inside:avoid;page-break-inside:avoid;break-before:avoid;page-break-before:avoid;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 </style></head><body>
 <div id="wrap">
   <h1>📦 iTechArena ERP — Stock Report</h1>
@@ -303,21 +309,28 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
   // against the original box and pushes the overflow onto a second sheet.
   // Zoom reflows the layout, so pagination sees the reduced size.
   var MM = 96 / 25.4;                 // px per mm at CSS 96dpi
-  var availW = (297 - 10) * MM;       // page width  minus 5mm margins
-  var availH = (210 - 10) * MM;       // page height minus 5mm margins
+
+  // Budget for margins we do not control. The @page rule asks for 5mm, but
+  // Chrome's "Default" margin setting can override it with roughly 10mm per
+  // side, and that extra loss is exactly what pushed the grand total onto a
+  // second sheet. Assume the worst case so the fit holds either way.
+  var MARGIN_MM = 12;                 // per side, worst case
+  var availW = (297 - MARGIN_MM * 2) * MM;
+  var availH = (210 - MARGIN_MM * 2) * MM;
+
   var wrap = document.getElementById('wrap');
   wrap.style.width = availW + 'px';
 
   // Reflowing at a smaller zoom re-wraps product names, which changes the
   // height again — so converge with a few passes instead of one division.
   var zoom = 1;
-  for (var pass = 0; pass < 6; pass++) {
+  for (var pass = 0; pass < 8; pass++) {
     wrap.style.zoom = zoom;
     var h = wrap.getBoundingClientRect().height;   // already includes zoom
     if (h <= availH) break;
-    // Undershoot slightly so borders and the final row never tip onto page 2.
-    zoom = zoom * (availH / h) * 0.985;
-    if (zoom < 0.25) { zoom = 0.25; wrap.style.zoom = zoom; break; }
+    // Undershoot so borders and the final row never tip onto page 2.
+    zoom = zoom * (availH / h) * 0.97;
+    if (zoom < 0.2) { zoom = 0.2; wrap.style.zoom = zoom; break; }
   }
   window.__reportZoom = zoom;   // read by the caller before printing
   window.__reportReady = true;
