@@ -12,6 +12,12 @@ interface AuditEntry {
   createdAt: string;
   userName: string;
   entity: { id: string; model: string; ean: string; isDeleted: boolean } | null;
+  // Grouped feed: changes made together are returned as one entry.
+  ids?: string[];
+  changeCount?: number;
+  unitTotal?: number;
+  products?: { model: string; qty: number }[];
+  single?: AuditEntry | null;
 }
 interface Paged { items: AuditEntry[]; total: number; page: number; limit: number; totalPages: number; }
 
@@ -190,11 +196,30 @@ export function Versions() {
                   const meta = ACTION_META[h.action] || ACTION_META.UPDATE;
                   const isBulkTxn = h.entityName === 'inventory_transactions' && (h.oldValue as any)?.bulk;
                   const isTxnDelete = h.action === 'DELETE' && h.entityName === 'inventory_transactions';
-                  const canRestore = isTxnDelete || (h.action !== 'CREATE' && h.action !== 'LOGIN' && h.entityName === 'products');
-                  const lines = formatLines(h);
+                  const isGroup = (h.changeCount ?? 1) > 1;
+                  const canRestore = !isGroup && (isTxnDelete || (h.action !== 'CREATE' && h.action !== 'LOGIN' && h.entityName === 'products'));
+                  // The grouped feed already summarises a batch as
+                  // product → units; fall back to the per-row formatter only
+                  // for entries that arrive ungrouped.
+                  const grouped = (h.changeCount ?? 1) > 1 && !!h.products?.length;
+                  const lines = grouped
+                    ? h.products!.map(p => `${p.model} — ${p.qty} ${p.qty === 1 ? 'unit' : 'units'}`)
+                    : (h.products?.length
+                        ? h.products.map(p => `${p.model} — ${p.qty} ${p.qty === 1 ? 'unit' : 'units'}`)
+                        : formatLines(h));
 
                   // Title: bulk txn deletions show supplier+summary; individual txns show product; products show model·ean
-                  const title = isBulkTxn
+                  const ENTITY_LABEL: Record<string,string> = {
+                    inventory_transactions: 'Stock Movement',
+                    products: 'Product',
+                    imei_inventory: 'IMEI / Serial',
+                    roles: 'Roles & Permissions',
+                    users: 'User',
+                  };
+                  const title = grouped
+                    ? `${ENTITY_LABEL[h.entityName] || h.entityName} — ${h.products!.length} product${h.products!.length !== 1 ? 's' : ''}` +
+                      (h.unitTotal ? `, ${h.unitTotal} unit${h.unitTotal !== 1 ? 's' : ''}` : '')
+                    : isBulkTxn
                     ? `${(h.oldValue as any).vendor} — ${(h.oldValue as any).totalQty} units (${(h.oldValue as any).txnIds?.length ?? 1} transactions)`
                     : isTxnDelete
                     ? `Stock Entry — ${(h.oldValue as any)?.product ?? 'product'}`
@@ -219,14 +244,15 @@ export function Versions() {
                           <span style={{ fontWeight: 600, fontSize: 13 }}>{title}</span>
                           {batchLabel && <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--txt-3)', background: 'var(--surf-1)', padding: '1px 7px', borderRadius: 'var(--r-full)' }}>{batchLabel}</span>}
                           {isBulkTxn && <span style={{ fontSize: 10, fontWeight: 600, color: '#7c3aed', background: '#f5f3ff', padding: '1px 7px', borderRadius: 'var(--r-full)' }}>Bulk Entry</span>}
+                          {grouped && <span style={{ fontSize: 10, fontWeight: 700, color: '#0369a1', background: '#e0f2fe', padding: '1px 7px', borderRadius: 'var(--r-full)' }}>{h.changeCount} changes</span>}
                         </div>
                         <div style={{ fontSize: 11, color: 'var(--txt-3)', marginTop: 1 }}>
                           {fmtTime(h.createdAt)} · {h.userName}
                           {h.entityName === 'inventory_transactions' && <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--txt-3)' }}>· Stock Movement</span>}
                         </div>
                         <div style={{ fontSize: 12, color: 'var(--txt-2)', marginTop: 4, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                          {lines.slice(0, 5).map((line, li) => <div key={li}>{line}</div>)}
-                          {lines.length > 5 && <div style={{ color: 'var(--txt-3)', fontSize: 11 }}>+{lines.length - 5} more products…</div>}
+                          {lines.slice(0, 8).map((line, li) => <div key={li}>{line}</div>)}
+                          {lines.length > 8 && <div style={{ color: 'var(--txt-3)', fontSize: 11 }}>+{lines.length - 8} more products…</div>}
                         </div>
                       </div>
                       {canRestore && (
