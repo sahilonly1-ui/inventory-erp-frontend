@@ -314,7 +314,7 @@ export function Imei() {
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
           <input value={search} onChange={e=>onSearch(e.target.value)}
-            placeholder="Search IMEI, serial no., product name, brand…"
+            placeholder="Search IMEI, EAN, serial no., product name, brand…"
             style={{
               width:'100%',height:36,paddingLeft:34,paddingRight:search?32:10,
               border:'1.5px solid #e2e8f0',borderRadius:8,fontSize:13,outline:'none',
