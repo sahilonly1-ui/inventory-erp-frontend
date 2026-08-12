@@ -269,7 +269,9 @@ export function StockReport() {
 <style>
 @page{size:A4 landscape;margin:5mm 5mm}
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact;margin:0;padding:0;overflow:hidden}
+/* One sheet only: never let a stray element open a second page. */
+@media print{html,body{height:auto}#wrap{page-break-after:avoid;page-break-inside:avoid;break-inside:avoid}}
 body{font-family:Arial,sans-serif;font-size:7.5pt;color:#000}
 #wrap{transform-origin:top left}
 h1{font-size:11pt;font-weight:800;margin-bottom:1mm}
@@ -294,19 +296,31 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
 </div>
 <script>
 (function(){
-  // Scale the whole report down until it fits inside one A4 landscape page.
+  // Shrink the report until it fits one A4 landscape page.
+  //
+  // The zoom property is used rather than transform:scale on purpose: a
+  // transform only changes what is painted, so the browser still paginates
+  // against the original box and pushes the overflow onto a second sheet.
+  // Zoom reflows the layout, so pagination sees the reduced size.
   var MM = 96 / 25.4;                 // px per mm at CSS 96dpi
   var availW = (297 - 10) * MM;       // page width  minus 5mm margins
   var availH = (210 - 10) * MM;       // page height minus 5mm margins
   var wrap = document.getElementById('wrap');
-  wrap.style.width = availW + 'px';   // lay out at full page width first
-  var h = wrap.scrollHeight, w = wrap.scrollWidth;
-  var k = Math.min(1, availH / h, availW / w);
-  if (k < 1) {
-    wrap.style.transform = 'scale(' + k + ')';
-    document.body.style.width  = (w * k) + 'px';
-    document.body.style.height = (h * k) + 'px';
+  wrap.style.width = availW + 'px';
+
+  // Reflowing at a smaller zoom re-wraps product names, which changes the
+  // height again — so converge with a few passes instead of one division.
+  var zoom = 1;
+  for (var pass = 0; pass < 6; pass++) {
+    wrap.style.zoom = zoom;
+    var h = wrap.getBoundingClientRect().height;   // already includes zoom
+    if (h <= availH) break;
+    // Undershoot slightly so borders and the final row never tip onto page 2.
+    zoom = zoom * (availH / h) * 0.985;
+    if (zoom < 0.25) { zoom = 0.25; wrap.style.zoom = zoom; break; }
   }
+  window.__reportZoom = zoom;   // read by the caller before printing
+  window.__reportReady = true;
 })();
 <\/script>
 </body></html>`;
@@ -318,7 +332,16 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
     w.document.write(buildPrintHTML());
     w.document.close();
     w.focus();
-    setTimeout(() => { w.print(); w.close(); }, 500);
+    // Print only once the fit-to-one-page pass has run, otherwise the dialog
+    // can open against the un-zoomed layout and paginate onto a second sheet.
+    let waited = 0;
+    const tick = () => {
+      const done = (w as any).__reportReady === true;
+      if (done || waited > 3000) { w.print(); w.close(); return; }
+      waited += 100;
+      setTimeout(tick, 100);
+    };
+    setTimeout(tick, 150);
   };
 
   // Download as PNG image using html2canvas via CDN
