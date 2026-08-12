@@ -255,12 +255,12 @@ export function StockIn(){
       return;
     }
     // Block rows that still need IMEI or SrNo
-    const stillPending=rows.filter(r=>r.productId&&r.status==='found');
+    const stillPending=rows.filter(r=>r.productId&&r.status==='found'&&!r.imei&&!r.srno);
     if(stillPending.length){
-      const msgs=stillPending.map(r=>`  • ${r.model}${r.imeiRequired&&!r.imei?' — IMEI missing':''}${r.srnoRequired&&!r.imei&&!r.srno?' — Sr.No. missing':''}`).join('\n');
+      const msgs=stillPending.map(r=>`  • ${r.model} — IMEI or Sr. No. missing`).join('\n');
       alert(`⚠ ${stillPending.length} row(s) incomplete:\n${msgs}\n\nPlease complete scanning before saving.`);
-      const fi=rows.findIndex(r=>r.productId&&r.status==='found');
-      if(fi>=0)moveTo(fi,stillPending[0]?.imeiRequired?'imei':'srno');return;
+      const fi=rows.findIndex(r=>r.productId&&r.status==='found'&&!r.imei&&!r.srno);
+      if(fi>=0)moveTo(fi,'imei');return;
     }
         const sv=rows.filter(r=>r.status==='saved'&&r.productId);
     if(!sv.length||!whId)return;
