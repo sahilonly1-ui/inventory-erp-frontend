@@ -117,6 +117,7 @@ export function Imei() {
   const [page,setPage]         = useState(1);
   const [exporting,setExporting] = useState(false);
   const [restoring,setRestoring] = useState(false);
+  const [allBrands,setAllBrands] = useState<string[]>([]);
   const [showBulk,setShowBulk]   = useState(false);
   const [updatingId,setUpdatingId] = useState<string|null>(null);
   const [expandedId,setExpandedId] = useState<string|null>(null);
@@ -144,6 +145,17 @@ export function Imei() {
   },[search,status,imeiType,swiped,activated,page,brand]);
 
   useEffect(()=>{load();},[load]);
+
+  // Brands come from the master list, not from the rows currently on screen —
+  // otherwise filtering to one brand collapses the dropdown to just that brand.
+  useEffect(()=>{
+    (async()=>{
+      try{
+        const bs=await api<any[]>('/products/brands/list');
+        setAllBrands(bs.map((b:any)=>typeof b==='string'?b:b.name).filter(Boolean).sort());
+      }catch{ /* fall back to brands seen in the current page */ }
+    })();
+  },[]);
 
   const onSearch=(v:string)=>{
     setSearch(v);setPage(1);
@@ -289,7 +301,10 @@ export function Imei() {
   const total = data?.total||0;
   const hasFilters = !!(search||status||imeiType||swiped||activated||brand);
   // Derive unique brands from loaded items for the filter dropdown
-  const brandOptions:[string,string][] = [['','All Brands'],...Array.from(new Set(items.map(i=>i.product?.brand||'').filter(Boolean))).sort().map(b=>[b,b] as [string,string])];
+  const brandSource = allBrands.length
+    ? allBrands
+    : Array.from(new Set(items.map(i=>i.product?.brand||'').filter(Boolean))).sort();
+  const brandOptions:[string,string][] = [['','All Brands'],...brandSource.map(b=>[b,b] as [string,string])];
 
   // Icons
   const IcoStatus    = <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>;
