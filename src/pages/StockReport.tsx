@@ -279,17 +279,17 @@ html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact;margin:0;pad
   #wrap *{break-after:avoid;page-break-after:avoid}
 }
 body{font-family:Arial,sans-serif;font-size:7.5pt;color:#000}
-#wrap{transform-origin:top left}
+#wrap{transform-origin:top left;width:max-content}
 h1{font-size:11pt;font-weight:800;margin-bottom:1mm}
 .meta{font-size:7pt;color:#444;margin-bottom:2mm;padding-bottom:1mm;border-bottom:1px solid #bbb}
-.cols{display:flex;gap:3mm;align-items:flex-start}
-.col{flex:1 1 0;min-width:0}
+.cols{display:flex;gap:3mm;align-items:flex-start;width:max-content}
+.col{flex:0 0 auto}
 .bb{margin-bottom:3mm;break-inside:avoid;page-break-inside:avoid}
-table{width:100%;border-collapse:collapse}
+table{width:auto;border-collapse:collapse}
 th,td{border:.4pt solid #999;padding:1.5pt 3pt}
 .bh{background:#1e293b!important;color:#fff!important;font-size:8pt;font-weight:700;text-align:left;padding:2pt 4pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .ch th{background:#e8e8e8!important;font-size:7pt;font-weight:700;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.cn{text-align:left;font-size:7pt}
+.cn{text-align:left;font-size:7pt;white-space:nowrap}
 .cq,.cr,.ca{text-align:center;width:22pt;font-weight:700;font-size:7.5pt}
 .bt td{background:#f0f0f0!important;font-weight:700;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .gt{margin-top:2mm;background:#1e293b!important;color:#fff!important;padding:2.5pt 8pt;font-size:8pt;font-weight:700;display:flex;gap:15mm;break-inside:avoid;page-break-inside:avoid;break-before:avoid;page-break-before:avoid;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -319,18 +319,23 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
   var availH = (210 - MARGIN_MM * 2) * MM;
 
   var wrap = document.getElementById('wrap');
-  wrap.style.width = availW + 'px';
 
-  // Reflowing at a smaller zoom re-wraps product names, which changes the
-  // height again — so converge with a few passes instead of one division.
+  // The report now lays out at its natural width with product names on a
+  // single line, so BOTH dimensions can be the binding constraint. Scale by
+  // whichever runs out first — that fills the sheet and keeps the type as
+  // large as it can be.
   var zoom = 1;
   for (var pass = 0; pass < 8; pass++) {
     wrap.style.zoom = zoom;
-    var h = wrap.getBoundingClientRect().height;   // already includes zoom
-    if (h <= availH) break;
-    // Undershoot so borders and the final row never tip onto page 2.
-    zoom = zoom * (availH / h) * 0.97;
+    var r = wrap.getBoundingClientRect();          // already includes zoom
+    var fitW = availW / r.width;
+    var fitH = availH / r.height;
+    var fit = Math.min(fitW, fitH);
+    if (fit >= 1 && fit < 1.02) break;             // close enough, stop
+    // Undershoot a touch so borders never tip onto a second sheet.
+    zoom = zoom * fit * 0.98;
     if (zoom < 0.2) { zoom = 0.2; wrap.style.zoom = zoom; break; }
+    if (zoom > 3)   { zoom = 3;   wrap.style.zoom = zoom; break; }
   }
   window.__reportZoom = zoom;   // read by the caller before printing
   window.__reportReady = true;
@@ -382,8 +387,8 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
         return `<div style="border:1px solid #ccc;border-radius:6px;overflow:hidden;margin-bottom:8px">
           <div style="background:#1e293b;color:#fff;padding:4px 8px;font-size:9px;font-weight:800">${brand}</div>
           <table style="width:100%;border-collapse:collapse;font-size:8px">
-            <tr style="background:#e8e8e8"><th style="padding:2px 6px;text-align:left;border:0.5px solid #aaa">Product Name</th><th style="padding:2px;text-align:center;width:32px;border:0.5px solid #aaa">Qty</th><th style="padding:2px;text-align:center;width:40px;border:0.5px solid #aaa;color:#16a34a">Retail</th><th style="padding:2px;text-align:center;width:30px;border:0.5px solid #aaa;color:#7c3aed">ACC</th></tr>
-            ${bRows.map((r,i)=>`<tr style="background:${i%2===0?'#fff':'#fafafa'}"><td style="padding:2px 6px;border:0.5px solid #eee">${r.model}</td><td style="padding:2px;text-align:center;font-weight:700;border:0.5px solid #eee">${r.totalQty}</td><td style="padding:2px;text-align:center;font-weight:700;color:#16a34a;border:0.5px solid #eee">${r.retail}</td><td style="padding:2px;text-align:center;font-weight:700;color:${r.activated>0?'#7c3aed':'#ccc'};border:0.5px solid #eee">${r.activated||0}</td></tr>`).join('')}
+            <tr style="background:#e8e8e8"><th style="padding:2px 6px;text-align:left;border:0.5px solid #aaa;white-space:nowrap">Product Name</th><th style="padding:2px;text-align:center;width:32px;border:0.5px solid #aaa">Qty</th><th style="padding:2px;text-align:center;width:40px;border:0.5px solid #aaa;color:#16a34a">Retail</th><th style="padding:2px;text-align:center;width:30px;border:0.5px solid #aaa;color:#7c3aed">ACC</th></tr>
+            ${bRows.map((r,i)=>`<tr style="background:${i%2===0?'#fff':'#fafafa'}"><td style="padding:2px 6px;border:0.5px solid #eee;white-space:nowrap">${r.model}</td><td style="padding:2px;text-align:center;font-weight:700;border:0.5px solid #eee">${r.totalQty}</td><td style="padding:2px;text-align:center;font-weight:700;color:#16a34a;border:0.5px solid #eee">${r.retail}</td><td style="padding:2px;text-align:center;font-weight:700;color:${r.activated>0?'#7c3aed':'#ccc'};border:0.5px solid #eee">${r.activated||0}</td></tr>`).join('')}
             <tr style="background:#f0f0f0;font-weight:700"><td style="padding:2px 6px;border:0.5px solid #ccc">Total — ${brand}</td><td style="padding:2px;text-align:center;border:0.5px solid #ccc">${bTotal}</td><td style="padding:2px;text-align:center;color:#16a34a;border:0.5px solid #ccc">${bRet}</td><td style="padding:2px;text-align:center;color:#7c3aed;border:0.5px solid #ccc">${bAcc}</td></tr>
           </table>
         </div>`;
