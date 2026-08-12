@@ -113,6 +113,41 @@ export function Versions() {
 
   const showToast = (text: string) => { setToast(text); setTimeout(() => setToast(''), 4000); };
 
+  // Revert an entire grouped batch. Previews first: a batch mixes entries that
+  // can and cannot be reverted, and the operator should see that split before
+  // anything is written.
+  const restoreBatch = async (entry: AuditEntry) => {
+    const ids = entry.ids ?? [];
+    if (!ids.length) return;
+    setRestoringId(entry.id);
+    try {
+      const pv = await api<{ total: number; restorable: number; skipped: number; plan: { label: string; willRestore: boolean; reason?: string }[] }>(
+        '/audit/restore-batch', { method: 'POST', body: JSON.stringify({ auditIds: ids, dryRun: true }) });
+
+      if (!pv.restorable) {
+        const why = pv.plan.find(p => p.reason)?.reason;
+        showToast(`Nothing in this batch can be reverted${why ? ` — ${why}` : ''}`);
+        return;
+      }
+
+      const sample = pv.plan.filter(p => p.willRestore).slice(0, 8).map(p => `  • ${p.label}`).join('\n');
+      const more = pv.restorable - Math.min(8, pv.restorable);
+      const msg =
+        `Revert ${pv.restorable} change${pv.restorable !== 1 ? 's' : ''} in this batch?\n\n` +
+        `${sample}${more > 0 ? `\n  …and ${more} more` : ''}\n\n` +
+        (pv.skipped ? `${pv.skipped} entr${pv.skipped !== 1 ? 'ies' : 'y'} will be skipped (nothing to revert to).\n\n` : '') +
+        `Each revert is recorded, so this can itself be undone.`;
+      if (!window.confirm(msg)) return;
+
+      const res = await api<{ restored: number; failed: number; skipped: number }>(
+        '/audit/restore-batch', { method: 'POST', body: JSON.stringify({ auditIds: ids }) });
+      showToast(`✓ Reverted ${res.restored}${res.failed ? ` · ${res.failed} failed` : ''}${res.skipped ? ` · ${res.skipped} skipped` : ''}`);
+      load();
+    } catch (e: any) {
+      showToast('Batch restore failed: ' + e.message);
+    } finally { setRestoringId(null); }
+  };
+
   const restore = async (entry: AuditEntry) => {
     const isTransactionDelete = entry.action === 'DELETE' && entry.entityName === 'inventory_transactions';
     const isBulkTxn = isTransactionDelete && (entry.oldValue as any)?.bulk;
@@ -255,6 +290,20 @@ export function Versions() {
                           {lines.length > 8 && <div style={{ color: 'var(--txt-3)', fontSize: 11 }}>+{lines.length - 8} more products…</div>}
                         </div>
                       </div>
+                      {isGroup && (h.ids?.length ?? 0) > 0 && (
+                        <div style={{ flexShrink: 0 }}>
+                          <button
+                            disabled={restoringId === h.id}
+                            onClick={() => restoreBatch(h)}
+                            title="Revert every change in this batch"
+                            style={{
+                              height: 28, padding: '0 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                              borderRadius: 'var(--r-md)', border: '1px solid var(--bdr)', background: 'var(--surf-0)', color: 'var(--brand)',
+                            }}>
+                            {restoringId === h.id ? 'Reverting…' : '↺ Restore Batch'}
+                          </button>
+                        </div>
+                      )}
                       {canRestore && (
                         <div style={{ flexShrink: 0 }}>
                           <button
