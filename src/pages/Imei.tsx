@@ -116,6 +116,7 @@ export function Imei() {
   const [brand,setBrand]       = useState('');
   const [page,setPage]         = useState(1);
   const [exporting,setExporting] = useState(false);
+  const [restoring,setRestoring] = useState(false);
   const [showBulk,setShowBulk]   = useState(false);
   const [updatingId,setUpdatingId] = useState<string|null>(null);
   const [expandedId,setExpandedId] = useState<string|null>(null);
@@ -229,6 +230,42 @@ export function Imei() {
     finally{setUpdatingId(null);}
   };
 
+  // Recover swipe/activation history that an entry edit wiped.
+  // Runs a dry pass first and reports what it found, so nothing is written
+  // until the numbers have been seen and confirmed.
+  const restoreActivations=async()=>{
+    setRestoring(true);
+    try{
+      const preview=await api<{candidates:number;liveMatched:number;restored:number;sample:any[]}>(
+        '/imei/restore-activations',{method:'POST',body:JSON.stringify({dryRun:true})});
+
+      if(!preview.restored){
+        alert(`No activation history to restore.\n\nFound ${preview.candidates} archived record(s), but nothing is missing on the current units.`);
+        return;
+      }
+
+      const lines=preview.sample.slice(0,10).map((x:any)=>{
+        const bits=[];
+        if(x.activated) bits.push(`Activated ${x.activatedAt?new Date(x.activatedAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric',timeZone:'UTC'}):''}`);
+        if(x.swiped) bits.push(`Swiped ${x.swipedAt?new Date(x.swipedAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric',timeZone:'UTC'}):''}`);
+        return `  ${x.imei} — ${bits.join(' · ')}`;
+      }).join('\n');
+
+      const goAhead=confirm(
+        `Restore ${preview.restored} unit(s)?\n\n`+
+        `Examples:\n${lines}${preview.restored>10?`\n  …and ${preview.restored-10} more`:''}\n\n`+
+        `Only blank flags are filled in — anything you have set since stays as it is.`);
+      if(!goAhead) return;
+
+      const done=await api<{restored:number}>('/imei/restore-activations',
+        {method:'POST',body:JSON.stringify({dryRun:false})});
+      alert(`✓ Restored ${done.restored} unit(s).`);
+      load(search,status,imeiType,swiped,activated,page,brand);
+    }catch(e:any){
+      alert(`Could not restore\n\n${e.message}`);
+    }finally{ setRestoring(false); }
+  };
+
   const exportXlsx=async()=>{
     setExporting(true);
     try{
@@ -293,6 +330,19 @@ export function Imei() {
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
             {exporting?'Exporting…':'Download XLSX'}
+          </button>
+          <button onClick={restoreActivations} disabled={restoring}
+            title="Recover swipe/activation dates lost when a stock-in entry was edited"
+            style={{
+            height:32,padding:'0 14px',border:'1px solid #fde68a',borderRadius:7,
+            background:'#fffbeb',fontSize:12,fontWeight:600,color:'#92400e',
+            cursor:restoring?'wait':'pointer',display:'flex',alignItems:'center',gap:6,
+            opacity:restoring?0.6:1,
+          }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+              <path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 3 3 9 9 9"/>
+            </svg>
+            {restoring?'Checking…':'Restore Activations'}
           </button>
           <button onClick={()=>setShowBulk(true)} style={{
             height:32,padding:'0 14px',border:'1.5px solid #c7d2fe',borderRadius:7,
