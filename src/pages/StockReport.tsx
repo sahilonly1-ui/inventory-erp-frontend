@@ -285,7 +285,7 @@ h1{font-size:11pt;font-weight:800;margin-bottom:1mm}
 .cols{display:flex;gap:3mm;align-items:flex-start;width:max-content}
 .col{flex:0 0 auto}
 .bb{margin-bottom:3mm;break-inside:avoid;page-break-inside:avoid}
-table{width:auto;border-collapse:collapse}
+table{width:100%;border-collapse:collapse}
 th,td{border:.4pt solid #999;padding:1.5pt 3pt}
 .bh{background:#1e293b!important;color:#fff!important;font-size:8pt;font-weight:700;text-align:left;padding:2pt 4pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .ch th{background:#e8e8e8!important;font-size:7pt;font-weight:700;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -320,10 +320,22 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
 
   var wrap = document.getElementById('wrap');
 
-  // The report now lays out at its natural width with product names on a
-  // single line, so BOTH dimensions can be the binding constraint. Scale by
-  // whichever runs out first — that fills the sheet and keeps the type as
-  // large as it can be.
+  // Give every column the same width: the widest one. Letting each column size
+  // to its own content leaves the cards ragged and misaligned, so measure the
+  // natural widths first, then lock them all to the largest. Product names stay
+  // on one line, and the three columns still line up on a single grid.
+  var cols = wrap.querySelectorAll('.col');
+  var i, maxW = 0;
+  for (i = 0; i < cols.length; i++) cols[i].style.width = 'max-content';
+  for (i = 0; i < cols.length; i++) {
+    var cw = cols[i].getBoundingClientRect().width;
+    if (cw > maxW) maxW = cw;
+  }
+  for (i = 0; i < cols.length; i++) cols[i].style.width = maxW + 'px';
+
+  // With names on a single line, BOTH dimensions can be the binding
+  // constraint. Scale by whichever runs out first — that fills the sheet and
+  // keeps the type as large as it can be.
   var zoom = 1;
   for (var pass = 0; pass < 8; pass++) {
     wrap.style.zoom = zoom;
