@@ -140,7 +140,7 @@ export function OpeningStock() {
       if (!p) {
         return rs.map((r, x) => x === i ? { ...r, status: 'not_found' as const, errMsg: 'EAN not found in Product Master' } : r);
       }
-      return rs.map((r, x) => x === i ? { ...r, ...p!, status: 'found' as const, qty: 1 } : r);
+      return rs.map((r, x) => x === i ? { ...r, ...p!, status: 'saved' as const, qty: 1 } : r);
     });
   }, [upd, moveTo]);
 
@@ -233,6 +233,19 @@ export function OpeningStock() {
     }
 
     const sv = rows.filter(r => r.status === 'saved' && r.productId);
+
+    // Accessories (earphones, cables) legitimately have neither an IMEI nor a
+    // serial, so a missing code cannot block the save. Warn once instead, so a
+    // phone that genuinely needs one is still caught before it slips through.
+    const noCode = sv.filter(r => !r.imei && !r.srno);
+    if (noCode.length) {
+      const names = [...new Set(noCode.map(r => r.model))].slice(0, 6).map(m => `  • ${m}`).join('\n');
+      const extra = noCode.length - Math.min(6, noCode.length);
+      const proceed = confirm(
+        `${noCode.length} row(s) have no IMEI or Sr. No.:\n\n${names}${extra > 0 ? `\n  …and ${extra} more` : ''}\n\n` +
+        `That is expected for accessories. Save anyway?`);
+      if (!proceed) return;
+    }
 
     // Catch duplicate IMEIs / serial numbers before hitting the server — both
     // share one unique index, so the DB would reject the whole batch.

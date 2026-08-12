@@ -149,7 +149,7 @@ export function StockIn(){
         return rs.map((r,x)=>x===i?{...r,status:'not_found' as const,errMsg:`EAN ${v} not in Product Master — tap to add`}:r);
       }
       const needsSrno=p!.srnoRequired||false;
-      return rs.map((r,x)=>x===i?{...r,...p!,srnoRequired:needsSrno,status:'found' as const,qty:1}:r);
+      return rs.map((r,x)=>x===i?{...r,...p!,srnoRequired:needsSrno,status:'saved' as const,qty:1}:r);
     });
   },[upd,ins,moveTo,setDrawer,setDf]);
   useEffect(()=>{ERef.current=handleEan;},[handleEan]);
@@ -249,20 +249,25 @@ export function StockIn(){
         if(r.vendor){resolvedSuppId=r.vendor.id;setSuppId(r.vendor.id);}}catch{}
     }
     // Block rows that still need IMEI
-    const needsImei=rows.filter(r=>r.productId&&(r.status==='found'||(r.imeiRequired&&!r.imei&&r.status==='saved')));
-    if(needsImei.length){
-      alert(`⚠ ${needsImei.length} row(s) are missing IMEI:\n${needsImei.map(r=>`  • ${r.model}`).join('\n')}\n\nPlease scan the IMEI for each product before saving.`);
-      const fi=rows.findIndex(r=>r.productId&&(r.status==='found'||(r.imeiRequired&&!r.imei)));
+    // Only rows still awaiting their product lookup block the save. Missing
+    // codes are handled below with a confirm, because accessories legitimately
+    // have neither an IMEI nor a serial.
+    const stillResolving=rows.filter(r=>r.productId&&r.status==='found');
+    if(stillResolving.length){
+      alert(`⚠ ${stillResolving.length} row(s) are still being checked:\n${stillResolving.map(r=>`  • ${r.model}`).join('\n')}\n\nTry again in a moment.`);
+      const fi=rows.findIndex(r=>r.productId&&r.status==='found');
       if(fi>=0)moveTo(fi,'imei');
       return;
     }
     // Block rows that still need IMEI or SrNo
-    const stillPending=rows.filter(r=>r.productId&&r.status==='found'&&!r.imei&&!r.srno);
-    if(stillPending.length){
-      const msgs=stillPending.map(r=>`  • ${r.model} — IMEI or Sr. No. missing`).join('\n');
-      alert(`⚠ ${stillPending.length} row(s) incomplete:\n${msgs}\n\nPlease complete scanning before saving.`);
-      const fi=rows.findIndex(r=>r.productId&&r.status==='found'&&!r.imei&&!r.srno);
-      if(fi>=0)moveTo(fi,'imei');return;
+    const noCode=rows.filter(r=>r.status==='saved'&&r.productId&&!r.imei&&!r.srno);
+    if(noCode.length){
+      const names=[...new Set(noCode.map(r=>r.model))].slice(0,6).map(m=>`  • ${m}`).join('\n');
+      const extra=noCode.length-Math.min(6,noCode.length);
+      const proceed=confirm(
+        `${noCode.length} row(s) have no IMEI or Sr. No.:\n\n${names}${extra>0?`\n  …and ${extra} more`:''}\n\n`+
+        `That is expected for accessories. Save anyway?`);
+      if(!proceed)return;
     }
         const sv=rows.filter(r=>r.status==='saved'&&r.productId);
     if(!sv.length||!whId)return;
