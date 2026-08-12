@@ -455,7 +455,9 @@ export function OpeningStock() {
                             onFocus={() => setAr(i)}
                             style={CI({ textAlign: 'center', fontWeight: 700, color: '#16a34a', fontSize: 14 })} />
                         ) : (
-                          <span style={{ fontSize: 13, fontWeight: 700, color: row.imei ? '#16a34a' : '#94a3b8' }}>{row.productId ? (row.imei ? 1 : '—') : '—'}</span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: '#16a34a' }}>
+                            {row.productId ? (row.imei || row.srno ? 1 : row.qty || 1) : '—'}
+                          </span>
                         )}
                       </td>
                       <td style={{ borderBottom: '1px solid #e2e8f0', borderRight: '1px solid #e2e8f0', outline: row.errField === 'imei' ? '1px solid #fca5a5' : '1px solid transparent', padding: 0 }}>
