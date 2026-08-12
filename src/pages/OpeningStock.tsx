@@ -179,11 +179,7 @@ export function OpeningStock() {
     // and flags the row if this IMEI turns out to be already registered.
     upd(i, { imei, status: 'saved', errMsg: '', errField: '' });
     const nextIdx = i + 1;
-    if (nextIdx < rows.length && rows[nextIdx].productId) {
-      moveTo(nextIdx, rows[nextIdx].imeiRequired ? 'imei' : rows[nextIdx].srnoRequired ? 'srno' : 'ean');
-    } else if (nextIdx < rows.length) {
-      moveTo(nextIdx, 'ean');
-    }
+    if (nextIdx < rows.length) moveTo(nextIdx, 'imei');
     void verifyCode(i, imei, 'imei');
   }, [rows, upd, ins, moveTo, verifyCode]);
 
@@ -197,11 +193,7 @@ export function OpeningStock() {
     // Same non-blocking flow as IMEI — accept, advance, verify in background.
     upd(i, { srno, status: 'saved', errMsg: '', errField: '' });
     const nextIdx = i + 1;
-    if (nextIdx < rows.length && rows[nextIdx].productId) {
-      moveTo(nextIdx, rows[nextIdx].imeiRequired ? 'imei' : rows[nextIdx].srnoRequired ? 'srno' : 'ean');
-    } else if (nextIdx < rows.length) {
-      moveTo(nextIdx, 'ean');
-    }
+    if (nextIdx < rows.length) moveTo(nextIdx, 'srno');
     void verifyCode(i, srno, 'srno');
   }, [rows, upd, moveTo, verifyCode]);
 
