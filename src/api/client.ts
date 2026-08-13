@@ -2,6 +2,20 @@
 // 401 (rotation-aware), and unwraps the backend's { success, data } envelope.
 const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? 'https://inventory-erp-backend-iplr.onrender.com/api/v1';
 
+/**
+ * The request never reached the server — no signal, DNS failure, or timeout.
+ *
+ * Distinct from an ordinary Error because callers must treat it differently:
+ * a network failure is worth queueing and retrying, whereas a rejection the
+ * server issued (duplicate IMEI, validation) will fail identically forever.
+ */
+export class NetworkError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NetworkError';
+  }
+}
+
 let accessToken: string | null = null;
 export const setAccessToken = (t: string | null) => { accessToken = t; };
 export const getAccessToken = () => accessToken;
@@ -48,7 +62,11 @@ export async function api<T = unknown>(path: string, init: RequestInit = {}, wit
     res = await rawFetch(path, init, withAuth, timeoutMs);
   } catch (err: any) {
     if (err?.name === 'AbortError') {
-      throw new Error('Request timed out — the server may be starting up, please try again in a moment.');
+      throw new NetworkError('Request timed out — the server may be starting up, please try again in a moment.');
+    }
+    // fetch() rejects with a TypeError when the request could not be sent.
+    if (err instanceof TypeError) {
+      throw new NetworkError('No connection — check your network and try again.');
     }
     throw err;
   }

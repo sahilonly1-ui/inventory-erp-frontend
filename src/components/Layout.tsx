@@ -1,6 +1,7 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import OfflineBanner from '../native/OfflineBanner';
 
 type NavItem = { to: string; label: string; short?: string; svg: string; perm?: string; primary?: boolean };
 
@@ -79,6 +80,8 @@ export function Layout({ children }: { children: ReactNode }) {
             {user?.fullName?.charAt(0)?.toUpperCase() || 'A'}
           </div>
         </header>
+
+        <OfflineBanner />
 
         {/* Bottom padding clears the tab bar and the floating scan button. */}
         <main style={{ flex: 1, minHeight: 0, paddingBottom: 78 }}>{children}</main>
@@ -240,6 +243,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
       {/* Content */}
       <main style={{ marginLeft: 220, flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100vh', overflow: 'hidden' }}>
+        <OfflineBanner />
         {children}
       </main>
     </div>

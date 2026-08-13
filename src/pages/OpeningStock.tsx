@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import ScanButton from '../native/ScanButton';
-import { api } from '../api/client';
+import { api, NetworkError } from '../api/client';
+import { rememberProduct, lookupCachedProduct, enqueue, isOnline } from '../native/offline';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface Warehouse { id: string; name: string; }
@@ -130,11 +131,27 @@ export function OpeningStock() {
         p = { productId: r.product.id, model: r.product.model, brand: r.product.brand,
               imeiRequired: r.product.imeiRequired, srnoRequired: r.product.srnoRequired || false };
         eCache.current.set(v, p);
-      } catch {
-        // Don't cache failures — next scan should retry
-        p = eCache.current.get(v) ?? null;
+      } catch (err) {
+        // Offline, or the product simply isn't known. The on-device cache
+        // covers the first case, so a barcode scanned before still resolves
+        // with no signal at all.
+        const cached = await lookupCachedProduct(v);
+        if (cached) {
+          p = cached;
+          eCache.current.set(v, p);
+        } else {
+          // Don't cache a miss — the next scan should retry.
+          p = eCache.current.get(v) ?? null;
+          if (err instanceof NetworkError) {
+            setRows(rs => rs[i]?.ean === v
+              ? rs.map((r, x) => x === i ? { ...r, status: 'not_found' as const, errMsg: 'Offline — this EAN has not been scanned on this device before' } : r)
+              : rs);
+            return;
+          }
+        }
       }
     }
+    if (p) void rememberProduct(v, p);
 
     setRows(rs => {
       if (rs[i]?.ean !== v) return rs;
@@ -291,22 +308,47 @@ export function OpeningStock() {
         if (!a[r.productId]) a[r.productId] = { productId: r.productId, imeis: [] };
         a[r.productId].imeis.push({ imei1: (r.imei || r.srno).trim(), imeiType: 'NIL' }); return a;
       }, {});
-      for (const [, d] of Object.entries(codeByProd) as any[]) {
-        await api('/imei/receive', { method: 'POST', body: JSON.stringify({ productId: d.productId, warehouseId: whId, imeis: d.imeis, force: true, type: 'OPENING', remarks: rmk }) });
-      }
-
       // Everything with no code at all — plain quantity accessories.
       const nonImeiByProd = sv.filter(r => !r.imei && !r.srno).reduce((a: Record<string,any>, r) => {
         if (!a[r.productId]) a[r.productId] = { productId: r.productId, qty: 0 };
         a[r.productId].qty += (r.qty || 1); return a;
       }, {});
-      for (const [, d] of Object.entries(nonImeiByProd) as any[]) {
-        await api('/inventory/opening-stock', { method: 'POST', body: JSON.stringify({ productId: d.productId, warehouseId: whId, quantity: d.qty, remarks: rmk }) });
+
+      // Build the exact calls first, then decide how to send them. Queuing
+      // whole batches (rather than retrying mid-way) keeps an entry from being
+      // half-saved when signal cuts out partway through.
+      const calls: { path: string; body: any }[] = [
+        ...(Object.values(codeByProd) as any[]).map(d => ({
+          path: '/imei/receive',
+          body: { productId: d.productId, warehouseId: whId, imeis: d.imeis, force: true, type: 'OPENING', remarks: rmk },
+        })),
+        ...(Object.values(nonImeiByProd) as any[]).map(d => ({
+          path: '/inventory/opening-stock',
+          body: { productId: d.productId, warehouseId: whId, quantity: d.qty, remarks: rmk },
+        })),
+      ];
+
+      if (!isOnline()) {
+        for (const c of calls) await enqueue(c.path, 'POST', c.body, `Opening Stock — ${sv.length} unit(s)`);
+        eCache.current.clear(); iCache.current.clear(); setRows([mk()]); localStorage.removeItem(DK);
+        alert(`📥 Saved on this device\n\n${sv.length} item(s) are queued and will sync automatically when you're back online.`);
+        return;
+      }
+
+      for (const c of calls) {
+        await api(c.path, { method: 'POST', body: JSON.stringify(c.body) });
       }
       eCache.current.clear(); iCache.current.clear(); setRows([mk()]); localStorage.removeItem(DK);
       alert(`✓ ${sv.length} item(s) added as Opening Stock`);
       setTab('history');
-    } catch (e: any) { alert(`⚠ Could not save\n\n${e.message}\n\nYour scanned rows have been kept — fix the issue above and click Save again.`); }
+    } catch (e: any) {
+      // Losing signal mid-save must not lose the scan session.
+      if (e instanceof NetworkError) {
+        alert(`📶 Connection lost\n\nYour ${sv.length} scanned row(s) are still here. Reconnect and press Save again.`);
+      } else {
+        alert(`⚠ Could not save\n\n${e.message}\n\nYour scanned rows have been kept — fix the issue above and click Save again.`);
+      }
+    }
     finally { setBusy(false); }
   }, [rows, whId, date, moveTo]);
 
