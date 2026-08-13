@@ -328,10 +328,8 @@ export function Imei() {
       });
       if(!resp.ok)throw new Error('Export failed');
       const blob=await resp.blob();
-      const url=URL.createObjectURL(blob);
-      const a=document.createElement('a');a.href=url;
-      a.download=`IMEI_Export_${new Date().toISOString().slice(0,10)}.xlsx`;
-      document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+      const {saveFile}=await import('../native/download');
+      await saveFile(`IMEI_Export_${new Date().toISOString().slice(0,10)}.xlsx`,blob,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     }catch(e:any){alert(e.message);}
     finally{setExporting(false);}
   };

@@ -48,7 +48,7 @@ export function MScanCard({ row, eanInput, imeiInput, srnoInput, qtyInput, onRem
   return (
     <MCard tone={tone} style={{ padding: 0, overflow: 'hidden' }}>
       {/* Header strip: row number, product, status, delete */}
-      <div style={{
+      <div data-keep-row style={{
         display: 'flex', alignItems: 'flex-start', gap: 9,
         padding: `10px ${M.pad}px`,
         borderBottom: hasProduct || isError ? `1px solid ${M.color.line}` : 'none',
@@ -133,7 +133,7 @@ export function MScanFooter({
   items: number; units: number; onSave: () => void; saving?: boolean; saveLabel?: string;
 }) {
   return (
-    <div style={{
+    <div data-keep-row style={{
       position: 'fixed', left: 0, right: 0, bottom: 62, zIndex: 110,
       background: 'rgba(255,255,255,.97)', backdropFilter: 'blur(6px)',
       borderTop: `1px solid ${M.color.line}`,

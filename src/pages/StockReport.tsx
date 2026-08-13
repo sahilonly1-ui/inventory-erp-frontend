@@ -428,20 +428,14 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
       container.style.opacity = '1';
       container.style.zIndex = '9999';
 
-      // Load html2canvas dynamically
-      const script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-      document.head.appendChild(script);
-      
-      await new Promise<void>((resolve, reject) => {
-        script.onload = () => resolve();
-        script.onerror = () => reject(new Error('Failed to load html2canvas'));
-        setTimeout(resolve, 3000); // fallback
-      });
+      // html2canvas is bundled rather than pulled from a CDN: inside the APK
+      // the page is served from a local origin and the external script was
+      // blocked, so the download silently produced nothing.
+      const html2canvas = (await import('html2canvas')).default;
 
-      await new Promise(r => setTimeout(r, 200)); // let DOM render
+      await new Promise(r => setTimeout(r, 200)); // let the DOM settle
 
-      const canvas = await (window as any).html2canvas(container, {
+      const canvas = await html2canvas(container, {
         scale: 2,
         useCORS: true,
         backgroundColor: '#ffffff',
@@ -450,13 +444,10 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
       });
 
       document.body.removeChild(container);
-      document.head.removeChild(script);
 
-      // Download
-      const link = document.createElement('a');
-      link.download = `StockReport_${new Date().toISOString().slice(0,10)}.png`;
-      link.href = canvas.toDataURL('image/png');
-      link.click();
+      const { saveFile, canvasToBlob } = await import('../native/download');
+      const blob = await canvasToBlob(canvas);
+      await saveFile(`StockReport_${new Date().toISOString().slice(0,10)}.png`, blob, 'image/png');
     } catch (e: any) {
       alert('Image download failed: ' + e.message + '\n\nTip: Use Print → Save as PDF instead.');
     } finally {

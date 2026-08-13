@@ -335,12 +335,8 @@ export function Dashboard() {
       const cd=resp.headers.get('Content-Disposition')||'';
       const named=/filename="?([^"]+)"?/.exec(cd)?.[1];
       const blob=await resp.blob();
-      const url=URL.createObjectURL(blob);
-      const a=document.createElement('a');
-      a.href=url;
-      a.download=named||`${label}.xlsx`;
-      document.body.appendChild(a);a.click();a.remove();
-      URL.revokeObjectURL(url);
+      const {saveFile}=await import('../native/download');
+      await saveFile(named||`${label}.xlsx`,blob,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     }catch(e:any){alert(`Could not download\n\n${e.message}`);}
     finally{setDownloading(null);}
   };

@@ -383,7 +383,7 @@ export function StockIn(){
             <span style={{fontSize:13,fontWeight:700,color:'#0f172a',marginLeft:4}}>Stock In Entry</span>
           )}
           <div style={{flex:1}}/>
-          <span style={{fontSize:11,color:'#94a3b8'}}>{sv.length} items · {tot} units</span>
+          {!isMobile&&<span style={{fontSize:11,color:'#94a3b8'}}>{sv.length} items · {tot} units</span>}
           {editMode&&(
             <button onClick={()=>{if(!confirm('Discard changes and go back to Dashboard?'))return;setEditMode(null);localStorage.removeItem(DK);window.location.href='/';}}
               style={{height:28,padding:'0 10px',border:'1px solid #fecdd3',borderRadius:6,background:'#fff5f5',color:'#dc2626',fontSize:11,fontWeight:600,cursor:'pointer'}}>
@@ -393,11 +393,13 @@ export function StockIn(){
           {!editMode&&(
             <button onClick={clear} style={{height:28,padding:'0 10px',border:'1px solid #fecdd3',borderRadius:6,background:'#fff5f5',color:'#dc2626',fontSize:11,fontWeight:600,cursor:'pointer'}}>Clear All</button>
           )}
-          <button onClick={commit} disabled={!sv.length||busy} style={{height:30,padding:'0 18px',border:'none',borderRadius:7,background:(!sv.length||busy)?'#94a3b8':'#16a34a',color:'#fff',fontSize:12,fontWeight:700,cursor:(!sv.length||busy)?'not-allowed':'pointer'}}>
-            {busy?(editMode?'Updating…':'Saving…'):editMode?`💾 Update (${sv.length})`:`✓ Done (${sv.length})`}
-          </button>
+          {!isMobile&&(
+            <button onClick={commit} disabled={!sv.length||busy} style={{height:30,padding:'0 18px',border:'none',borderRadius:7,background:(!sv.length||busy)?'#94a3b8':'#16a34a',color:'#fff',fontSize:12,fontWeight:700,cursor:(!sv.length||busy)?'not-allowed':'pointer'}}>
+              {busy?(editMode?'Updating…':'Saving…'):editMode?`💾 Update (${sv.length})`:`✓ Done (${sv.length})`}
+            </button>
+          )}
         </div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 148px 200px 180px',gap:8}}>
+        <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 148px 200px 180px',gap:8}}>
           <div style={{position:'relative'}}>
             <label style={{fontSize:9,fontWeight:800,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'.08em',display:'block',marginBottom:3}}>SUPPLIER / RECEIVED FROM *</label>
             <input value={ss||(supp?toT(supp):'')} placeholder="Type supplier name…"
@@ -620,8 +622,8 @@ export function StockIn(){
           )}
         </div>
 
-        {/* Live Summary */}
-        <div style={{width:240,borderLeft:'1px solid #e2e8f0',background:'#fff',display:'flex',flexDirection:'column',flexShrink:0}}>
+        {/* Live Summary — desktop only; the phone footer shows the totals */}
+        <div style={{width:240,borderLeft:'1px solid #e2e8f0',background:'#fff',display:isMobile?'none':'flex',flexDirection:'column',flexShrink:0}}>
           <div style={{padding:'10px 14px 8px',borderBottom:'1px solid #f1f5f9'}}>
             <div style={{fontSize:9,fontWeight:800,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'.1em'}}>STOCK RECEIVED — {date}</div>
             {supp?<div style={{fontSize:11,color:'#2563eb',fontWeight:600,marginTop:2}}>↑ {toT(supp)}</div>:<div style={{fontSize:10,color:'#cbd5e1',marginTop:2}}>No supplier selected</div>}

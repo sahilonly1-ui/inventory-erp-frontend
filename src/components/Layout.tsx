@@ -59,7 +59,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
     return (
       <div style={{ minHeight: '100vh', background: '#f5f7fa', display: 'flex', flexDirection: 'column' }}>
-        <header style={{
+        <header data-keep-row style={{
           position: 'sticky', top: 0, zIndex: 120, background: '#fff',
           borderBottom: '1px solid #e4e7ec', display: 'flex', alignItems: 'center',
           gap: 12, padding: '10px 14px', paddingTop: 'max(10px, env(safe-area-inset-top))',
@@ -95,7 +95,7 @@ export function Layout({ children }: { children: ReactNode }) {
           {tabs.map(n => {
             const active = isActive(n.to);
             return (
-              <Link key={n.to} to={n.to} style={{
+              <Link key={n.to} to={n.to} data-keep-row style={{
                 display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                 gap: 3, padding: '9px 2px 7px', textDecoration: 'none',
                 color: active ? '#2563eb' : '#98a2b3', fontSize: 10.5, fontWeight: active ? 700 : 500,
@@ -111,7 +111,7 @@ export function Layout({ children }: { children: ReactNode }) {
             color: '#98a2b3', fontSize: 10.5, fontWeight: 500, cursor: 'pointer',
           }}>
             <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" />
+              <line x1="4" y1="7" x2="20" y2="7" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="17" x2="20" y2="17" />
             </svg>
             <span>More</span>
           </button>

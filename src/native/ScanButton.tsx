@@ -54,12 +54,14 @@ export default function ScanButton({ onScan, continuous = true, label }: Props) 
       disabled={active}
       style={{
         position: 'fixed',
-        right: 18,
-        bottom: 22,
+        right: 16,
+        // Clears both the bottom tab bar and the sticky save bar above it,
+        // which the button previously covered.
+        bottom: 138,
         zIndex: 400,
-        height: 58,
-        paddingLeft: 20,
-        paddingRight: 22,
+        height: 54,
+        paddingLeft: 18,
+        paddingRight: 20,
         borderRadius: 999,
         border: 'none',
         background: active ? '#475569' : '#2563eb',

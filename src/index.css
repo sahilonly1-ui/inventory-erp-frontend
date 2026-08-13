@@ -424,19 +424,84 @@ html, body {
   }
 }
 
-/* ── Phone spacing ────────────────────────────────────────────────────────
-   Pages were laid out for a 1400px canvas; on a phone the generous padding
-   costs a quarter of the usable width. */
+/* ── Phone layout ─────────────────────────────────────────────────────────
+   Pages were built for a 1400px canvas. On a phone the fixed toolbars and
+   wide rows pushed the document past the viewport, so every screen needed
+   sideways scrolling to reach half its controls. */
 @media (max-width: 899px) {
-  main > div,
-  main > div > div:first-child {
+  html, body, #root {
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
+  main {
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
+  /* Toolbars and header rows wrap onto the next line rather than running off
+     the screen. Components that must stay on one line opt out with
+     data-keep-row (the tab bar, the scan footer, card headers). */
+  main div[style*="display:flex"]:not([data-keep-row]),
+  main div[style*="display: flex"]:not([data-keep-row]) {
+    flex-wrap: wrap;
+  }
+
+  /* Anything sized for a desktop column should not force page width. */
+  main div, main span, main label, main select, main button {
+    max-width: 100%;
+  }
+
+  /* Tables keep their own internal scroll so columns stay readable. */
+  main table {
+    max-width: 100%;
+  }
+
+  /* Page padding tuned for a small screen. */
+  main > div {
     padding-left: 12px !important;
     padding-right: 12px !important;
   }
 
   /* Modal dialogs are sized for a desktop canvas; let them use the screen. */
-  div[role="dialog"], .m-modal {
+  div[role="dialog"] {
     width: 100% !important;
     max-width: 100% !important;
+  }
+}
+
+/* ── Shared page chrome on phones ─────────────────────────────────────────
+   .page-header is a fixed 52px row with nowrap actions, so on a phone the
+   title and the filter controls overlapped each other. Let it grow and wrap. */
+@media (max-width: 899px) {
+  .page-header {
+    height: auto;
+    min-height: 52px;
+    padding: 10px 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .page-actions {
+    flex-wrap: wrap;
+    width: 100%;
+    gap: 8px;
+  }
+
+  .page-actions > * {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .page-body {
+    padding: 12px;
+  }
+
+  /* Filter selects sized for a desktop row shrink to fit two per line. */
+  .f-select {
+    width: auto !important;
+    min-width: 0;
+    flex: 1 1 45%;
   }
 }

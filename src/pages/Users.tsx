@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useIsPhone, M, MCard, MPill, MButton } from '../mobile/ui';
 import { api } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 
@@ -95,6 +96,7 @@ export default function Users() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState('');
+  const isPhone = useIsPhone();
 
   const [showCreate, setShowCreate] = useState(false);
   const [nf, setNf] = useState({ fullName:'', email:'', password:'', roleId:'' });
@@ -204,7 +206,52 @@ export default function Users() {
       </div>
 
       {/* ── USERS TAB ────────────────────────────────────────── */}
-      {tab === 'users' && (
+      {tab === 'users' && isPhone && (
+        <div style={{ display:'grid', gap:M.gap }}>
+          {users.filter(u => !u.isDeleted).map(u => {
+            const rn = roleNames(u);
+            const isMe = u.id === me?.id;
+            const active = u.isActive !== false;
+            return (
+              <MCard key={u.id}>
+                <div style={{ display:'flex', alignItems:'flex-start', gap:10 }}>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:16, fontWeight:800, color:M.color.ink }}>
+                      {u.fullName}
+                      {isMe && <span style={{ marginLeft:8, fontSize:10, background:'#e0e7ff', color:'#4338ca', padding:'2px 8px', borderRadius:20, fontWeight:700 }}>You</span>}
+                    </div>
+                    <div style={{ fontSize:M.text.meta, color:M.color.muted, marginTop:3, wordBreak:'break-all' }}>{u.email}</div>
+                  </div>
+                  <MPill tone={active ? 'good' : 'bad'}>{active ? 'Active' : 'Inactive'}</MPill>
+                </div>
+
+                <div style={{ marginTop:10 }}>
+                  {rn.length === 0
+                    ? <MPill tone="bad">⚠ No role — cannot use the app</MPill>
+                    : rn.map(n => <span key={n} style={{ marginRight:6 }}><MPill tone={n === 'ADMIN' ? 'warn' : 'brand'}>{n}</MPill></span>)}
+                </div>
+
+                {canManage && (
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginTop:12 }}>
+                    <MButton onClick={() => { setEditUser(u); setDraftRoles(new Set(roles.filter(r => rn.includes(r.name)).map(r => r.id))); }}>
+                      Change Role
+                    </MButton>
+                    <MButton onClick={() => resetPw(u)}>Reset Password</MButton>
+                    {!isMe && (
+                      <MButton tone={active ? 'danger' : 'plain'} onClick={() => toggleActive(u)} disabled={busy}
+                        style={{ gridColumn:'1 / -1' }}>
+                        {active ? 'Deactivate' : 'Activate'}
+                      </MButton>
+                    )}
+                  </div>
+                )}
+              </MCard>
+            );
+          })}
+        </div>
+      )}
+
+      {tab === 'users' && !isPhone && (
         <div style={S.card}>
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
             <thead>
