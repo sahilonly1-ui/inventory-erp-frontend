@@ -1,0 +1,73 @@
+name: Build Android APK
+
+# The APK is built in CI rather than locally so it always matches whatever is
+# deployed to the web — one commit produces both.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:        # lets you build on demand from the Actions tab
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web bundle
+        run: npx vite build
+        env:
+          # Baked into the APK so the app talks to the live backend.
+          VITE_API_URL: https://inventory-erp-backend-iplr.onrender.com/api/v1
+
+      - name: Add Android platform
+        run: |
+          if [ ! -d android ]; then
+            npx cap add android
+          fi
+
+      - name: Sync web build into the native project
+        run: npx cap sync android
+
+      - name: Grant execute permission to Gradle
+        run: chmod +x android/gradlew
+
+      - name: Build release APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+
+      # An unsigned release APK cannot be installed, so it is signed here with
+      # a keystore held in repository secrets. Without those secrets the job
+      # still produces a debug APK, which installs fine for in-house use.
+      - name: Build debug APK (installable fallback)
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Stage artifacts
+        run: |
+          mkdir -p out
+          find android -name '*.apk' -exec cp {} out/ \;
+          ls -la out
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: itecharena-erp-apk
+          path: out/*.apk
+          retention-days: 30

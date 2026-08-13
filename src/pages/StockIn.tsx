@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import ScanButton from '../native/ScanButton';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 
@@ -222,6 +223,21 @@ export function StockIn(){
 
   const del=(i:number)=>{setRows(rs=>rs.length===1?[mk()]:rs.filter((_,x)=>x!==i));moveTo(Math.max(0,ar>=i?ar-1:ar),'ean');};
   const clear=()=>{if(!confirm('Clear all rows and draft?'))return;eCache.clear();setRows([mk()]);moveTo(0,'ean');localStorage.removeItem(DK);};
+
+
+  // Camera scans follow the same path as the barcode gun: fill the next empty
+  // EAN, otherwise supply the next missing IMEI or serial.
+  const scanFromCamera=useCallback(async(code:string)=>{
+    const emptyEan=rows.findIndex(r=>!r.ean.trim());
+    if(emptyEan!==-1){ await handleEan(emptyEan,code); return; }
+    const needsCode=rows.findIndex(r=>r.productId&&!r.imei&&!r.srno);
+    if(needsCode!==-1){
+      if(/^\d{15}$/.test(code)) await handleImei(needsCode,code);
+      else await handleSrno(needsCode,code);
+      return;
+    }
+    await handleEan(rows.length-1,code);
+  },[rows,handleEan,handleImei,handleSrno]);
 
   const commit=useCallback(async()=>{
     // Background lookups may have flagged rows after they were scanned.
@@ -649,6 +665,9 @@ export function StockIn(){
         </div>
       )}
       {sModal&&<SM name={sModal} onSave={async s=>{await resolveSupp(sModal,s);setSModal(null);}} onSkip={()=>setSModal(null)}/>}
+
+      {/* Camera scanning — renders only inside the Android app. */}
+      <ScanButton onScan={scanFromCamera}/>
     </div>
   );
 }

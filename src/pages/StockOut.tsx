@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import ScanButton from '../native/ScanButton';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 
@@ -184,6 +185,16 @@ export function StockOut(){
   const clear=()=>{if(!confirm('Clear all rows?'))return;pCache.clear();setRows([mk()]);moveTo(0,'ean');};
 
   // ── Commit — dispatch IMEIs and non-IMEI stock out ─────────────────────────
+
+  // Dispatch is IMEI-driven: a scanned code goes to the next row awaiting one,
+  // falling back to the EAN column when no row is waiting.
+  const scanFromCamera=useCallback(async(code:string)=>{
+    const needsImei=rows.findIndex(r=>r.productId&&!r.imei);
+    if(needsImei!==-1){ await handleImei(needsImei,code); return; }
+    const emptyEan=rows.findIndex(r=>!r.ean.trim());
+    await handleEan(emptyEan!==-1?emptyEan:rows.length-1,code);
+  },[rows,handleEan,handleImei]);
+
   const commit=useCallback(async()=>{
     // Background lookups may have flagged rows after they were scanned.
     const unknown=rows.findIndex(r=>r.status==='not_found');
@@ -448,6 +459,9 @@ export function StockOut(){
           {tot>0&&<div style={{padding:'10px 14px',borderTop:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',fontSize:13,fontWeight:800}}><span style={{color:'#0f172a'}}>Grand Total</span><span style={{color:'#dc2626'}}>{tot}</span></div>}
         </div>
       </div>
+
+      {/* Camera scanning — renders only inside the Android app. */}
+      <ScanButton onScan={scanFromCamera}/>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import ScanButton from '../native/ScanButton';
 import { api } from '../api/client';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -203,6 +204,21 @@ export function OpeningStock() {
     if (nextIdx < rows.length) moveTo(nextIdx, 'srno');
     void verifyCode(i, srno, 'srno');
   }, [rows, upd, moveTo, verifyCode]);
+
+
+  // Camera scans are routed to whichever row is next in line, so scanning from
+  // the phone follows the same EANs-then-codes flow as the barcode gun.
+  const scanFromCamera = useCallback(async (code: string) => {
+    const emptyEan = rows.findIndex(r => !r.ean.trim());
+    if (emptyEan !== -1) { await handleEan(emptyEan, code); return; }
+    const needsCode = rows.findIndex(r => r.productId && !r.imei && !r.srno);
+    if (needsCode !== -1) {
+      if (/^\d{15}$/.test(code)) await handleImei(needsCode, code);
+      else await handleSrno(needsCode, code);
+      return;
+    }
+    await handleEan(rows.length - 1, code);
+  }, [rows, handleEan, handleImei, handleSrno]);
 
   // Save all
   const commit = useCallback(async () => {
@@ -628,6 +644,9 @@ export function OpeningStock() {
           )}
         </div>
       )}
+
+      {/* Camera scanning — renders only inside the Android app. */}
+      {tab === 'scan' && <ScanButton onScan={scanFromCamera} />}
     </div>
   );
 }

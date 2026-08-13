@@ -2,3 +2,6 @@ node_modules
 dist
 .env
 *.log
+
+# Capacitor native project — generated in CI by `npx cap add android`
+/android
