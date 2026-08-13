@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useIsPhone } from '../mobile/ui';
 import { api } from '../api/client';
 
 interface Category  { id: string; name: string; }
@@ -169,6 +170,7 @@ function MultiSelect({
 export function StockReport() {
   const [data,        setData]        = useState<ReportData|null>(null);
   const [exCats,      setExCats]      = useState<Set<string>>(new Set()); // excluded categories
+  const isPhone = useIsPhone();
   const [exBrands,    setExBrands]    = useState<Set<string>>(new Set()); // excluded brands
   const [loading,     setLoading]     = useState(false);
   const [lastFetch,   setLastFetch]   = useState<Date|null>(null);
@@ -554,9 +556,9 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
         </div>
       ) : (
         <div ref={reportRef} style={{ flex:1, overflowY:'auto', padding:'14px 16px' }}>
-          <div style={{ display:'flex', gap:14, alignItems:'flex-start' }}>
-            {buildBalancedColumns(3).map((col, ci) => (
-              <div key={ci} style={{ flex:'1 1 0', minWidth:0 }}>
+          <div style={{ display:'flex', flexDirection: isPhone ? 'column' : 'row', gap:14, alignItems:'flex-start' }}>
+            {buildBalancedColumns(isPhone ? 1 : 3).map((col, ci) => (
+              <div key={ci} style={{ flex:'1 1 0', minWidth:0, width: isPhone ? '100%' : undefined }}>
                 {col.brands.map(brand => {
                   const bRows  = byBrand[brand];
                   const bTotal = bRows.reduce((s,r)=>s+r.totalQty,0);

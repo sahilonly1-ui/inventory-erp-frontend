@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { useIsPhone } from '../mobile/ui';
 import { api, getAccessToken } from '../api/client';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -44,6 +45,7 @@ export function Dashboard() {
   const [tab,setTab]=useState<'in'|'out'|'all'>('in');
   const [deleting,setDeleting]=useState<string|null>(null);
   const [downloading,setDownloading]=useState<string|null>(null);
+  const isPhone = useIsPhone();
   const [suppliers,setSuppliers]=useState<Supplier[]>([]);
 
   // ── Full Edit Panel state ────────────────────────────────────────────────
@@ -446,7 +448,7 @@ export function Dashboard() {
       ):(
         <div style={{flex:1,overflow:'auto',padding:'14px 24px'}}>
           {/* KPI strip */}
-          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:8,marginBottom:16}}>
+          <div style={{display:'grid',gridTemplateColumns:isPhone?'repeat(2,1fr)':'repeat(7,1fr)',gap:8,marginBottom:16}}>
             {kpis.map(k=>(
               <div key={k.l} style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:10,padding:'12px 14px',boxShadow:'0 1px 3px rgba(0,0,0,.04)'}}>
                 <div style={{fontSize:22,fontWeight:800,color:k.c,lineHeight:1.2}}>{k.v.toLocaleString('en-IN')}</div>
@@ -468,7 +470,7 @@ export function Dashboard() {
 
           {/* Stock In */}
           {tab==='in'&&(
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
+            <div style={{display:'grid',gridTemplateColumns:isPhone?'1fr':'1fr 1fr',gap:16}}>
               <div>
                 <div style={{fontSize:10,fontWeight:800,color:'#16a34a',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>RECEIVED — BY SUPPLIER</div>
                 {Object.keys(inGroups).length===0
@@ -500,7 +502,7 @@ export function Dashboard() {
 
           {/* Stock Out */}
           {tab==='out'&&(
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
+            <div style={{display:'grid',gridTemplateColumns:isPhone?'1fr':'1fr 1fr',gap:16}}>
               <div>
                 <div style={{fontSize:10,fontWeight:800,color:'#dc2626',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>DISPATCHED — BY CUSTOMER</div>
                 {Object.keys(outGroups).length===0

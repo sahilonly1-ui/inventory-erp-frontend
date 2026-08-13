@@ -423,3 +423,20 @@ html, body {
     -webkit-tap-highlight-color: transparent;
   }
 }
+
+/* ── Phone spacing ────────────────────────────────────────────────────────
+   Pages were laid out for a 1400px canvas; on a phone the generous padding
+   costs a quarter of the usable width. */
+@media (max-width: 899px) {
+  main > div,
+  main > div > div:first-child {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  /* Modal dialogs are sized for a desktop canvas; let them use the screen. */
+  div[role="dialog"], .m-modal {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
