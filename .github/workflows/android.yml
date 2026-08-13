@@ -42,6 +42,10 @@ jobs:
             npx cap add android
           fi
 
+      - name: Generate launcher icon and splash screen
+        run: npx @capacitor/assets generate --android --iconBackgroundColor '#2563eb' --splashBackgroundColor '#1e293b'
+        continue-on-error: true    # cosmetic; never block the build
+
       - name: Sync web build into the native project
         run: npx cap sync android
 
