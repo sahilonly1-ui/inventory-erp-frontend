@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useIsPhone, M, MCard, MPill, MEmpty } from '../mobile/ui';
 import { api, getAccessToken } from '../api/client';
 import { ImeiBulkUpload } from './ImeiBulkUpload';
 
@@ -105,6 +106,41 @@ function FilterPill({
   );
 }
 
+
+/**
+ * One swipe/activation control as a full-width row.
+ *
+ * On desktop these are a toggle in one column and a date in another; on a
+ * phone that split is unusable, so the state, the date and the edit affordance
+ * sit together on a single tappable line.
+ */
+function ToggleRow({ label, colour, on, at, busy, onToggle, onEditDate }:{
+  label:string; colour:string; on:boolean; at?:string; busy:boolean;
+  onToggle:()=>void; onEditDate:()=>void;
+}){
+  const fmtDay=(s?:string)=>s?new Date(s).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric',timeZone:'UTC'}):'';
+  return (
+    <div style={{display:'flex',alignItems:'center',gap:10}}>
+      <button onClick={onToggle} disabled={busy} aria-label={label}
+        style={{width:46,height:26,borderRadius:13,border:'none',flexShrink:0,
+                background:on?colour:'#e2e8f0',position:'relative',cursor:busy?'wait':'pointer'}}>
+        <span style={{position:'absolute',top:3,left:on?23:3,width:20,height:20,borderRadius:'50%',
+                      background:'#fff',transition:'left .18s',display:'block'}}/>
+      </button>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:13,fontWeight:700,color:on?colour:'#64748b'}}>{label}</div>
+        {on&&at&&(
+          <button onClick={onEditDate}
+            style={{border:'none',background:'none',padding:0,fontSize:12,color:'#64748b',
+                    textDecoration:'underline dotted',cursor:'pointer'}}>
+            {fmtDay(at)} · tap to change
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function Imei() {
   const [data,setData]         = useState<Page|null>(null);
   const [loading,setLoading]   = useState(true);
@@ -117,6 +153,7 @@ export function Imei() {
   const [page,setPage]         = useState(1);
   const [exporting,setExporting] = useState(false);
   const [restoring,setRestoring] = useState(false);
+  const isPhone = useIsPhone();
   const [allBrands,setAllBrands] = useState<string[]>([]);
   const [showBulk,setShowBulk]   = useState(false);
   const [updatingId,setUpdatingId] = useState<string|null>(null);
@@ -474,6 +511,53 @@ export function Imei() {
             </svg>
             <div style={{fontSize:14,fontWeight:600}}>No records found</div>
             {hasFilters && <button onClick={clearAll} style={{fontSize:12,color:'#2563eb',background:'none',border:'none',cursor:'pointer',textDecoration:'underline'}}>Clear filters</button>}
+          </div>
+        ) : isPhone ? (
+          /* Eleven columns cannot be read on a phone. Each unit becomes a card
+             with the identifier first and the two toggles as full-width rows. */
+          <div style={{display:'grid',gap:M.gap,padding:M.pad}}>
+            {items.map(item=>(
+              <MCard key={item.id} tone={item.activated?'brand':'plain'}>
+                <div style={{display:'flex',alignItems:'flex-start',gap:9}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:15,fontWeight:800,color:M.color.ink,fontFamily:'monospace',letterSpacing:'-.2px'}}>
+                      {item.imei1}
+                    </div>
+                    <div style={{fontSize:M.text.body,color:M.color.ink,marginTop:4,lineHeight:1.35}}>
+                      {item.product?.model ?? '—'}
+                    </div>
+                    <div style={{fontSize:M.text.micro,color:M.color.faint,marginTop:2}}>
+                      {item.product?.brand}{item.product?.ean?` · ${item.product.ean}`:''}
+                    </div>
+                  </div>
+                  <MPill tone={item.status==='IN_STOCK'?'good':item.status==='SOLD'?'bad':'muted'}>
+                    {item.status.replace('_',' ')}
+                  </MPill>
+                </div>
+
+                <div style={{display:'grid',gap:8,marginTop:12,paddingTop:12,borderTop:`1px solid ${M.color.line}`}}>
+                  <ToggleRow
+                    label="Swiped" colour="#2563eb"
+                    on={item.swiped} at={item.swipedAt}
+                    busy={updatingId===item.id}
+                    onToggle={()=>handleSwipedClick(item.id,item.swiped)}
+                    onEditDate={()=>item.swipedAt&&setDatePicker({id:item.id,field:'swiped',date:item.swipedAt.slice(0,10)})}
+                  />
+                  <ToggleRow
+                    label="Activated" colour="#7c3aed"
+                    on={item.activated} at={item.activatedAt}
+                    busy={updatingId===item.id}
+                    onToggle={()=>handleActivatedClick(item.id,item.activated)}
+                    onEditDate={()=>item.activatedAt&&setDatePicker({id:item.id,field:'activated',date:item.activatedAt.slice(0,10)})}
+                  />
+                </div>
+
+                <div style={{display:'flex',alignItems:'center',gap:8,marginTop:10,fontSize:M.text.micro,color:M.color.faint}}>
+                  <span>In {fmt(item.createdAt)}</span>
+                  {item.supplier?.name && <span>· {item.supplier.name}</span>}
+                </div>
+              </MCard>
+            ))}
           </div>
         ) : (
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,minWidth:1100}}>
