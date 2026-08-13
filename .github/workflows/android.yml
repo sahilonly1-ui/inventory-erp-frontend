@@ -45,6 +45,40 @@ jobs:
             npx cap add android
           fi
 
+      # The camera permission must be declared in the manifest or Android shows
+      # the app as having no permissions at all and the scanner can never be
+      # granted access. Injected here because android/ is generated fresh each
+      # run rather than committed.
+      - name: Declare camera permissions in the manifest
+        run: |
+          MANIFEST=android/app/src/main/AndroidManifest.xml
+          python3 - "$MANIFEST" <<'PY'
+          import sys, re
+          path = sys.argv[1]
+          xml = open(path).read()
+
+          perms = [
+            '<uses-permission android:name="android.permission.CAMERA" />',
+            '<uses-permission android:name="android.permission.INTERNET" />',
+            '<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />',
+            '<uses-permission android:name="android.permission.VIBRATE" />',
+          ]
+          features = [
+            '<uses-feature android:name="android.hardware.camera" android:required="false" />',
+            '<uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />',
+          ]
+
+          missing = [p for p in perms + features if p.split('android:name="')[1].split('"')[0] not in xml]
+          if missing:
+              block = "\n    " + "\n    ".join(missing)
+              xml = xml.replace('</manifest>', block + '\n</manifest>')
+              open(path, 'w').write(xml)
+              print("Added:", len(missing), "entries")
+          else:
+              print("Manifest already declares camera permissions")
+          PY
+          grep -c 'uses-permission' android/app/src/main/AndroidManifest.xml
+
       - name: Generate launcher icon and splash screen
         run: npx @capacitor/assets generate --android --iconBackgroundColor '#2563eb' --splashBackgroundColor '#1e293b'
         continue-on-error: true    # cosmetic; never block the build

@@ -59,17 +59,52 @@ function rawFetch(path: string, init: RequestInit, withAuth: boolean, timeoutMs 
     .finally(() => clearTimeout(timer));
 }
 
+// Several requests can hit a 401 at once mid-scan; without this they would
+// each fire their own refresh and the later ones would present a token the
+// server has already rotated away, ending the session.
+let refreshInFlight: Promise<boolean> | null = null;
+
 async function tryRefresh(): Promise<boolean> {
-  const rt = getRefreshToken();
-  if (!rt) return false;
-  try {
-    const res = await rawFetch('/auth/refresh', { method: 'POST', body: JSON.stringify({ refreshToken: rt }) }, false);
-    if (!res.ok) { setAccessToken(null); setRefreshToken(null); return false; }
-    const json = await res.json();
-    setAccessToken(json.data.accessToken);
-    setRefreshToken(json.data.refreshToken);
-    return true;
-  } catch { return false; }
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async (): Promise<boolean> => {
+    const rt = getRefreshToken();
+    if (!rt) return false;
+
+    // Render's free tier sleeps, so the first call after an idle spell can come
+    // back 502/503 while the service wakes. Give it a couple of tries before
+    // concluding anything about the session.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const res = await rawFetch('/auth/refresh', { method: 'POST', body: JSON.stringify({ refreshToken: rt }) }, false);
+
+        if (res.ok) {
+          const json = await res.json();
+          setAccessToken(json.data.accessToken);
+          setRefreshToken(json.data.refreshToken);
+          return true;
+        }
+
+        // Only an explicit rejection means the session is genuinely over.
+        // Treating any failure as "logged out" was ending scan sessions
+        // whenever the backend hiccuped.
+        if (res.status === 401 || res.status === 403) {
+          setAccessToken(null);
+          setRefreshToken(null);
+          return false;
+        }
+
+        // 5xx or anything else: server-side trouble, not an auth decision.
+        await new Promise(r => setTimeout(r, 800 * (attempt + 1)));
+      } catch {
+        // Network failure — keep the tokens; the user is offline, not signed out.
+        await new Promise(r => setTimeout(r, 800 * (attempt + 1)));
+      }
+    }
+    return false;
+  })();
+
+  try { return await refreshInFlight; }
+  finally { refreshInFlight = null; }
 }
 
 export async function api<T = unknown>(path: string, init: RequestInit = {}, withAuth = true, timeoutMs?: number): Promise<T> {

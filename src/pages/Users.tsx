@@ -287,7 +287,13 @@ export default function Users() {
                     {r.isAdmin && <span style={{ fontSize:11, background:'#fef3c7', color:'#92400e', padding:'2px 10px', borderRadius:20, fontWeight:700 }}>👑 Full Access</span>}
                     <span style={{ fontSize:11, background:'#f1f5f9', color:'#64748b', padding:'2px 10px', borderRadius:20 }}>{r.userCount} user{r.userCount !== 1 ? 's' : ''}</span>
                   </div>
-                  <div style={{ fontSize:12, color:'#64748b' }}>{totalPerms(r)}</div>
+                  <div style={{ fontSize:12, color:'#64748b' }}>
+                    {r.description ? <span>{r.description} · </span> : null}
+                    {totalPerms(r)}
+                    {!r.isAdmin && r.permissions.length === 0 && (
+                      <span style={{ color:'#dc2626', fontWeight:600 }}> — anyone with this role cannot use the app</span>
+                    )}
+                  </div>
                 </div>
                 {canManage && !r.isAdmin && (
                   <button onClick={() => { setEditRole(r); setDraftPerms(new Set(r.permissions)); }}
