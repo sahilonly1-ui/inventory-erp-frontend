@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import ScanButton from '../native/ScanButton';
+import { useIsPhone, M, mInput, MEmpty } from '../mobile/ui';
+import { MScanCard, MScanFooter } from '../mobile/MScanCard';
 import { api, NetworkError, ApiError } from '../api/client';
 import { rememberProduct, lookupCachedProduct, enqueue, isOnline } from '../native/offline';
 
@@ -37,6 +39,7 @@ export function OpeningStock() {
   const [whId,   setWhId]   = useState('');
   const [rows,   setRows]   = useState<Row[]>([mk()]);
   const [busy,   setBusy]   = useState(false);
+  const isPhone = useIsPhone();
   const [date,   setDate]   = useState(new Date().toISOString().slice(0, 10));
   const [ar,     setAr]     = useState(0);
 
@@ -398,7 +401,7 @@ export function OpeningStock() {
           <span style={{ fontSize: 11, background: '#fffbeb', color: '#92400e', border: '1px solid #fcd34d', padding: '2px 8px', borderRadius: 20, fontWeight: 700, flexShrink: 0 }}>OPENING STOCK</span>
           <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', flexShrink: 0 }}>Opening Stock Entry</span>
           <div style={{ flex: 1 }} />
-          {tab === 'scan' && <>
+          {tab === 'scan' && !isPhone && <>
             <span style={{ fontSize: 11, color: '#94a3b8', flexShrink: 0 }}>
               {sv.length} items · {sv.reduce((s, r) => s + (r.imei ? 1 : r.qty), 0)} units
             </span>
@@ -432,8 +435,8 @@ export function OpeningStock() {
         )}
       </div>
 
-      {/* Info banner */}
-      <div style={{ background: '#fffbeb', borderBottom: '1px solid #fcd34d', padding: '6px 16px', fontSize: 12, color: '#92400e', display: 'flex', alignItems: 'center', gap: 8 }}>
+      {/* Info banner — desktop only; it costs too much of a phone screen */}
+      <div style={{ background: '#fffbeb', borderBottom: '1px solid #fcd34d', padding: '6px 16px', fontSize: 12, color: '#92400e', display: isPhone ? 'none' : 'flex', alignItems: 'center', gap: 8 }}>
         <span>📦</span>
         <span><strong>Opening Stock</strong> — Enter your existing showroom inventory. No supplier needed. Scan all EANs first, then scan IMEIs for phones.</span>
       </div>
@@ -448,8 +451,67 @@ export function OpeningStock() {
         ))}
       </div>
 
-      {/* ── SCAN TAB ── */}
-      {tab === 'scan' && (
+      {/* ── SCAN TAB — phone ── */}
+      {tab === 'scan' && isPhone && (
+        <div style={{ flex: 1, overflowY: 'auto', padding: M.pad, paddingBottom: 150, background: M.color.bg }}>
+          {rows.filter(r => r.ean || r.productId).length === 0 && (
+            <MEmpty icon="📷" title="Nothing scanned yet"
+              hint="Tap Scan to use the camera, or type a barcode into the first row below." />
+          )}
+
+          <div style={{ display: 'grid', gap: M.gap }}>
+            {rows.map((row, i) => (
+              <MScanCard
+                key={row.id}
+                row={{ id: row.id, index: i + 1, ean: row.ean, model: row.model, brand: row.brand,
+                       qty: row.qty, imei: row.imei, srno: row.srno,
+                       status: row.status, errMsg: row.errMsg, errField: row.errField }}
+                onRemove={() => setRows(rs => { const n = [...rs]; n.splice(i, 1); return n.length ? n : [mk()]; })}
+                eanInput={
+                  <input ref={R(i, 'ean')} value={row.ean} inputMode="numeric"
+                    onChange={e => upd(i, { ean: e.target.value, errMsg: '', errField: '' })}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); handleEan(i, (e.target as HTMLInputElement).value); } }}
+                    onFocus={() => setAr(i)}
+                    placeholder="Scan or type barcode"
+                    style={{ ...mInput, fontFamily: 'monospace' }} />
+                }
+                imeiInput={
+                  <input ref={R(i, 'imei')} value={row.imei} inputMode="numeric"
+                    onChange={e => { const v = e.target.value; upd(i, { imei: v, errMsg: '', errField: '' }); if (/^\d{15}$/.test(v.trim())) setTimeout(() => handleImei(i, v.trim()), 60); }}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); handleImei(i, (e.target as HTMLInputElement).value); } }}
+                    onFocus={() => setAr(i)}
+                    placeholder="15 digits"
+                    style={{ ...mInput, fontFamily: 'monospace',
+                             borderColor: row.errField === 'imei' ? '#fca5a5' : '#d0d5dd' }} />
+                }
+                srnoInput={
+                  <input ref={R(i, 'srno')} value={row.srno}
+                    onChange={e => upd(i, { srno: e.target.value, errMsg: '', errField: '' })}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); handleSrno(i, (e.target as HTMLInputElement).value); } }}
+                    onFocus={() => setAr(i)}
+                    placeholder="Serial"
+                    style={{ ...mInput, borderColor: row.errField === 'srno' ? '#fca5a5' : '#d0d5dd' }} />
+                }
+                qtyInput={
+                  <input ref={R(i, 'qty')} type="number" min={1} value={row.qty}
+                    onChange={e => upd(i, { qty: Math.max(1, parseInt(e.target.value) || 1) })}
+                    onFocus={() => setAr(i)}
+                    style={{ ...mInput, textAlign: 'center', fontWeight: 700, color: M.color.good }} />
+                }
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tab === 'scan' && isPhone && (
+        <MScanFooter items={sv.length}
+          units={sv.reduce((t, r) => t + (r.imei || r.srno ? 1 : r.qty), 0)}
+          onSave={commit} saving={busy} />
+      )}
+
+      {/* ── SCAN TAB — desktop ── */}
+      {tab === 'scan' && !isPhone && (
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
           <div style={{ flex: 1, overflowY: 'auto', overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, tableLayout: 'fixed', minWidth: 860 }}>
