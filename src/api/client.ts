@@ -9,6 +9,22 @@ const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? 'https://in
  * a network failure is worth queueing and retrying, whereas a rejection the
  * server issued (duplicate IMEI, validation) will fail identically forever.
  */
+/**
+ * The server answered and refused.
+ *
+ * Carries the status so callers can tell apart cases that look identical in
+ * the message alone — a missing product (404) and a missing permission (403)
+ * both surfaced as "not found" before this existed.
+ */
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
 export class NetworkError extends Error {
   constructor(message: string) {
     super(message);
@@ -76,7 +92,7 @@ export async function api<T = unknown>(path: string, init: RequestInit = {}, wit
   }
   const json = await res.json().catch(() => ({}));
   if (!res.ok || json.success === false) {
-    throw new Error(json?.error?.message || res.statusText || 'Request failed');
+    throw new ApiError(json?.error?.message || res.statusText || 'Request failed', res.status);
   }
   return json.data as T;
 }

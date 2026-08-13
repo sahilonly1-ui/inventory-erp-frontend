@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import ScanButton from '../native/ScanButton';
-import { api, NetworkError } from '../api/client';
+import { api, NetworkError, ApiError } from '../api/client';
 import { rememberProduct, lookupCachedProduct, enqueue, isOnline } from '../native/offline';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -145,6 +145,15 @@ export function OpeningStock() {
           if (err instanceof NetworkError) {
             setRows(rs => rs[i]?.ean === v
               ? rs.map((r, x) => x === i ? { ...r, status: 'not_found' as const, errMsg: 'Offline — this EAN has not been scanned on this device before' } : r)
+              : rs);
+            return;
+          }
+          // A 403 is a missing permission, not a missing product. Reporting it
+          // as "not found in Product Master" sends the operator hunting for a
+          // catalogue problem that does not exist.
+          if (err instanceof ApiError && (err.status === 403 || err.status === 401)) {
+            setRows(rs => rs[i]?.ean === v
+              ? rs.map((r, x) => x === i ? { ...r, status: 'err' as const, errField: 'ean' as const, errMsg: 'No permission to look up products — ask the admin to grant "View Stock" access' } : r)
               : rs);
             return;
           }

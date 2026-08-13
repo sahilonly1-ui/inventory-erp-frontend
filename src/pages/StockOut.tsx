@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import ScanButton from '../native/ScanButton';
 import { useSearchParams } from 'react-router-dom';
-import { api } from '../api/client';
+import { api, ApiError } from '../api/client';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Warehouse { id:string; name:string; }
@@ -103,9 +103,15 @@ export function StockOut(){
         const r=await api<{product:{id:string;model:string;brand:string;imeiRequired:boolean;srnoRequired:boolean}}>(`/inventory/lookup?ean=${encodeURIComponent(v)}`);
         p={id:r.product.id,model:r.product.model,brand:r.product.brand,imeiRequired:r.product.imeiRequired,srnoRequired:r.product.srnoRequired||false};
         pCache.set(v,p);
-      }catch{
+      }catch(err){
         // Don't permanently cache a miss — the next scan should retry.
         p=pCache.get(v)??null;
+        if(!p&&err instanceof ApiError&&(err.status===403||err.status===401)){
+          setRows(rs=>rs[i]?.ean===v
+            ?rs.map((r,x)=>x===i?{...r,status:'not_found' as const,errMsg:'No permission to look up products — ask the admin to grant "View Stock" access'}:r)
+            :rs);
+          return;
+        }
       }
     }
 

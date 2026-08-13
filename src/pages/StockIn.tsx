@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import ScanButton from '../native/ScanButton';
 import { useSearchParams } from 'react-router-dom';
-import { api } from '../api/client';
+import { api, ApiError } from '../api/client';
 
 interface Warehouse { id: string; name: string; }
 type FC = 'ean'|'imei'|'srno';
@@ -136,9 +136,17 @@ export function StockIn(){
         const r=await api<{product:{id:string;model:string;brand:string;imeiRequired:boolean;srnoRequired:boolean;brandImeiRequired:boolean;brandSrnoRequired:boolean}}>(`/inventory/lookup?ean=${encodeURIComponent(v)}`);
         p={productId:r.product.id,model:r.product.model,brand:r.product.brand,imeiRequired:r.product.imeiRequired,srnoRequired:r.product.srnoRequired||false};
         eCache.set(v,p);
-      }catch{
+      }catch(err){
         // Don't permanently cache as null — next scan should retry
         p=eCache.get(v)??null;
+        // A 403 means this user cannot look products up at all; saying the EAN
+        // is missing would send them chasing a catalogue problem that isn't real.
+        if(!p&&err instanceof ApiError&&(err.status===403||err.status===401)){
+          setRows(rs=>rs[i]?.ean===v
+            ?rs.map((r,x)=>x===i?{...r,status:'not_found' as const,errMsg:'No permission to look up products — ask the admin to grant "View Stock" access'}:r)
+            :rs);
+          return;
+        }
       }
     }
 
