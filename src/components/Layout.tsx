@@ -155,7 +155,7 @@ export function Layout({ children }: { children: ReactNode }) {
                   </div>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: '#101828', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.fullName || 'Administrator'}</div>
-                    <div style={{ fontSize: 10, color: '#98a2b3', textTransform: 'uppercase' }}>{user?.roles?.[0] || 'ADMIN'}</div>
+                    <div style={{ fontSize: 10, color: user?.roles?.length ? '#98a2b3' : '#dc2626', textTransform: 'uppercase' }}>{user?.roles?.[0] || 'No role assigned'}</div>
                   </div>
                 </div>
                 <button onClick={() => { logout(); navigate('/login'); }}
@@ -229,7 +229,7 @@ export function Layout({ children }: { children: ReactNode }) {
             }}>{user?.fullName?.charAt(0)?.toUpperCase() || 'A'}</div>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: '#101828', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.fullName || 'Administrator'}</div>
-              <div style={{ fontSize: 10, color: '#98a2b3', textTransform: 'uppercase', letterSpacing: '.04em' }}>{user?.roles?.[0] || 'ADMIN'}</div>
+              <div style={{ fontSize: 10, color: user?.roles?.length ? '#98a2b3' : '#dc2626', textTransform: 'uppercase', letterSpacing: '.04em' }}>{user?.roles?.[0] || 'No role assigned'}</div>
             </div>
           </div>
           <button onClick={() => { logout(); navigate('/login'); }}

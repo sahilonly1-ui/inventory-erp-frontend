@@ -228,7 +228,7 @@ export default function Users() {
                     <td style={{ padding:'12px 16px', color:'#475569' }}>{u.email}</td>
                     <td style={{ padding:'12px 16px' }}>
                       {rn.length === 0
-                        ? <span style={{ color:'#cbd5e1', fontSize:12 }}>No role assigned</span>
+                        ? <span style={{ color:'#dc2626', fontSize:12, fontWeight:600, background:'#fef2f2', padding:'3px 9px', borderRadius:20, border:'1px solid #fecaca' }}>⚠ No role — cannot use the app</span>
                         : rn.map(n => (
                             <span key={n} style={{ display:'inline-flex', alignItems:'center', gap:4, marginRight:6, fontSize:11, fontWeight:700, padding:'3px 9px', borderRadius:20, background: n==='ADMIN'?'#fef3c7':'#e0f2fe', color: n==='ADMIN'?'#92400e':'#0369a1' }}>
                               {n==='ADMIN' && '👑 '}{n}
