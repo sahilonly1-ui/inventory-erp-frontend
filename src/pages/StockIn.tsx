@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import ScanButton from '../native/ScanButton';
+import { useIsPhone, M } from '../mobile/ui';
+import { MScanFooter } from '../mobile/MScanCard';
 import { useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 
@@ -52,12 +54,7 @@ interface EditMode {
 export function StockIn(){
   const[searchParams]=useSearchParams();
   const[whs,setWhs]=useState<Warehouse[]>([]);
-  const[isMobile,setIsMobile]=useState(()=>window.innerWidth<768);
-  useEffect(()=>{
-    const fn=()=>setIsMobile(window.innerWidth<768);
-    window.addEventListener('resize',fn);
-    return()=>window.removeEventListener('resize',fn);
-  },[]);
+  const isMobile = useIsPhone();
   const[whId,setWhId]=useState('');
   const[supp,setSupp]=useState('');
   const[suppId,setSuppId]=useState('');
@@ -675,6 +672,12 @@ export function StockIn(){
       {sModal&&<SM name={sModal} onSave={async s=>{await resolveSupp(sModal,s);setSModal(null);}} onSkip={()=>setSModal(null)}/>}
 
       {/* Camera scanning — renders only inside the Android app. */}
+      {/* Totals and Save stay reachable without scrolling a long scan list. */}
+      {isMobile && (
+        <MScanFooter items={sv.length} units={sv.reduce((t,r)=>t+r.qty,0)}
+          onSave={commit} saving={busy} saveLabel={editMode?'Update':'Save'} />
+      )}
+
       <ScanButton onScan={scanFromCamera}/>
     </div>
   );

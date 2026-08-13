@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import ScanButton from '../native/ScanButton';
+import { useIsPhone, M, mInput, MEmpty } from '../mobile/ui';
+import { MScanCard, MScanFooter } from '../mobile/MScanCard';
 import { useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 
@@ -44,6 +46,7 @@ export function StockOut(){
   const[ar,setAr]=useState(0);
   const[fc,setFc]=useState<FC>('ean');
   const[busy,setBusy]=useState(false);
+  const isMobile = useIsPhone();
   const[editMode,setEditMode]=useState<EditMode|null>(null);
   const refs=useRef<Record<string,HTMLInputElement|null>>({});
   const R=(i:number,c:FC)=>(el:HTMLInputElement|null)=>{refs.current[`${i}-${c}`]=el;};
@@ -352,8 +355,57 @@ export function StockOut(){
         </div>
       </div>
 
-      {/* ── Grid + Summary ───────────────────────────────────────────────── */}
-      <div style={{flex:1,display:'flex',overflow:'hidden'}}>
+      {/* ── Phone: stacked cards ─────────────────────────────────────────── */}
+      {isMobile && (
+        <div style={{flex:1,overflowY:'auto',padding:M.pad,paddingBottom:150,background:M.color.bg}}>
+          {rows.filter(r=>r.ean||r.productId).length===0 && (
+            <MEmpty icon="📤" title="Nothing to dispatch yet"
+              hint="Tap Scan to use the camera, or type an IMEI into the first row below." />
+          )}
+          <div style={{display:'grid',gap:M.gap}}>
+            {rows.map((row,i)=>(
+              <MScanCard
+                key={row.id}
+                row={{id:row.id,index:i+1,ean:row.ean,model:row.model,brand:row.brand,
+                      qty:row.qty,imei:row.imei,srno:row.srno,
+                      status:row.status,errMsg:row.errMsg,errField:row.errField}}
+                onRemove={()=>setRows(rs=>{const n=[...rs];n.splice(i,1);return n.length?n:[mk()];})}
+                eanInput={
+                  <input ref={R(i,'ean')} value={row.ean} inputMode="numeric" autoComplete="off"
+                    onChange={e=>upd(i,{ean:e.target.value,errMsg:'',errField:''})}
+                    onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();handleEan(i,(e.target as HTMLInputElement).value);}}}
+                    onFocus={()=>setAr(i)}
+                    placeholder="Scan or type barcode"
+                    style={{...mInput,fontFamily:'monospace'}}/>
+                }
+                imeiInput={
+                  <input ref={R(i,'imei')} value={row.imei} inputMode="numeric" autoComplete="off"
+                    onChange={e=>{const v=e.target.value;upd(i,{imei:v,errMsg:'',errField:''});if(/^\d{15}$/.test(v.trim()))setTimeout(()=>handleImei(i,v.trim()),60);}}
+                    onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();handleImei(i,(e.target as HTMLInputElement).value);}}}
+                    onFocus={()=>setAr(i)}
+                    placeholder="15 digits"
+                    style={{...mInput,fontFamily:'monospace',borderColor:row.errField==='imei'?'#fca5a5':'#d0d5dd'}}/>
+                }
+                srnoInput={
+                  <input ref={R(i,'srno')} value={row.srno} autoComplete="off"
+                    onChange={e=>upd(i,{srno:e.target.value,errMsg:'',errField:''})}
+                    onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();handleSrno(i,(e.target as HTMLInputElement).value);}}}
+                    onFocus={()=>setAr(i)}
+                    placeholder="Serial"
+                    style={{...mInput,borderColor:row.errField==='srno'?'#fca5a5':'#d0d5dd'}}/>
+                }
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {isMobile && (
+        <MScanFooter items={sv.length} units={tot} onSave={commit} saving={busy} saveLabel="Dispatch"/>
+      )}
+
+      {/* ── Desktop: grid + summary ──────────────────────────────────────── */}
+      <div style={{flex:1,display:isMobile?'none':'flex',overflow:'hidden'}}>
         <div style={{flex:1,overflowY:'auto',overflowX:'auto'}}>
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:13,tableLayout:'fixed',minWidth:1020}}>
             <colgroup><col style={{width:36}}/><col style={{width:140}}/><col/><col style={{width:50}}/><col style={{width:162}}/><col style={{width:148}}/><col style={{width:80}}/><col style={{width:42}}/></colgroup>
