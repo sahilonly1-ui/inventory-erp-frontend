@@ -321,6 +321,7 @@ export function StockIn(){
           vendorId:resolvedSuppId||undefined,
           force:true,
           remarks:rmk,
+          txnDate:date,
         })});
       }
 
@@ -336,6 +337,7 @@ export function StockIn(){
           quantity:data.qty,
           vendorId:resolvedSuppId||undefined,
           remarks:`${rmk}${data.srNos.length?' | S/N:'+data.srNos.join(','):''}`,
+          txnDate:date,
         })});
       }
 

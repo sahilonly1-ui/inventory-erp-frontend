@@ -37,6 +37,7 @@ export function StockOut(){
   const[whs,setWhs]=useState<Warehouse[]>([]);
   const[whId,setWhId]=useState('');
   const[cust,setCust]=useState('');
+  const[custId,setCustId]=useState('');
   const[inv,setInv]=useState('');
   const[date,setDate]=useState(new Date().toISOString().slice(0,10));
   const[cs,setCs]=useState('');
@@ -249,12 +250,17 @@ export function StockOut(){
 
       // ── Batch dispatch all IMEIs in one call ──────────────────────────────────────
       // Skip IMEI duplicate check in edit mode (these IMEIs were already in the system)
+      // Resolve the customer once for the whole entry.
+      const vendorId=custId||(cust?await resolveCustomer(cust):'');
+
       const imeiRows=sv.filter(r=>r.imei);
       if(imeiRows.length){
         await api('/imei/dispatch',{method:'POST',body:JSON.stringify({
           imeis:imeiRows.map(r=>r.imei),
           channel:'STOCK_OUT',
           remarks:rmk,
+          ...(vendorId?{vendorId}:{}),
+          txnDate:date,
         })});
       }
 
@@ -269,6 +275,8 @@ export function StockOut(){
           productId,warehouseId:whId,
           quantity:data.qty,
           remarks:`${rmk}${data.srNos.length?' | S/N:'+data.srNos.join(','):''}`,
+          ...(vendorId?{vendorId}:{}),
+          txnDate:date,
         })});
       }
 
@@ -286,6 +294,18 @@ export function StockOut(){
   },[rows,whId,cust,inv,doc,moveTo,editMode]);
 
   // ── Derived ────────────────────────────────────────────────────────────────
+  // The customer is stored as a counterparty record, the same way Stock In
+  // stores a supplier — that is what the dashboard groups movements by.
+  const resolveCustomer=useCallback(async(name:string):Promise<string>=>{
+    const t=name.trim();
+    if(!t)return '';
+    try{
+      const r=await api<any>('/vendors/find-or-create',{method:'POST',body:JSON.stringify({name:t})});
+      if(r?.vendor?.id){setCustId(r.vendor.id);return r.vendor.id;}
+    }catch{ /* fall back to an unattributed movement rather than blocking the dispatch */ }
+    return '';
+  },[]);
+
   const sv=rows.filter(r=>r.status==='saved'&&r.qty>0);
   const tot=sv.reduce((s,r)=>s+r.qty,0);
   const cSug=[...new Set([...DEF,...getC()])].filter(x=>x.toLowerCase().includes(cs.toLowerCase())).slice(0,8);
@@ -329,12 +349,12 @@ export function StockOut(){
             <input value={cs||(cust?cust:'')} placeholder="Walk In Customer, Amazon, Flipkart…"
               onChange={e=>{setCs(e.target.value);setCust('');setCDrop(true);}}
               onFocus={()=>{setCs(cust);setCDrop(true);}}
-              onBlur={()=>setTimeout(()=>{setCDrop(false);if(cs&&!cust){setCust(cs);setCs('');}},200)}
-              onKeyDown={e=>{if(e.key==='Enter'&&cs){setCust(cs);setCs('');setCDrop(false);}}}
+              onBlur={()=>setTimeout(()=>{setCDrop(false);if(cs&&!cust){setCust(cs);setCs('');void resolveCustomer(cs);}},200)}
+              onKeyDown={e=>{if(e.key==='Enter'&&cs){setCust(cs);setCs('');setCDrop(false);void resolveCustomer(cs);}}}
               style={{width:'100%',height:34,padding:'0 10px',border:`1.5px solid ${cust?'#dc2626':'#d0d5dd'}`,borderRadius:7,fontSize:13,outline:'none',boxSizing:'border-box'}}/>
             {cDrop&&(cSug.length>0||cs)&&(
               <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:'1px solid #e2e8f0',borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:200,marginTop:2,overflow:'hidden'}}>
-                {cSug.map(c=><div key={c} onMouseDown={()=>{setCust(c);setCs('');setCDrop(false);}} style={{padding:'8px 12px',fontSize:13,cursor:'pointer'}} onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background='#f8fafc'} onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background='transparent'}>{c}</div>)}
+                {cSug.map(c=><div key={c} onMouseDown={()=>{setCust(c);setCs('');setCDrop(false);void resolveCustomer(c);}} style={{padding:'8px 12px',fontSize:13,cursor:'pointer'}} onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background='#f8fafc'} onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background='transparent'}>{c}</div>)}
               </div>
             )}
           </div>
