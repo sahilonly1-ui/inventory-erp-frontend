@@ -290,8 +290,24 @@ export function Imei() {
       const preview=await api<{candidates:number;liveMatched:number;restored:number;sample:any[]}>(
         '/imei/restore-activations',{method:'POST',body:JSON.stringify({dryRun:true})});
 
-      if(!preview.restored){
-        alert(`No activation history to restore.\n\nFound ${preview.candidates} archived record(s), but nothing is missing on the current units.`);
+      let deletedCount=0;
+      try{
+        const dp=await api<{restorable:number}>('/imei/restore-deleted',
+          {method:'POST',body:JSON.stringify({dryRun:true})});
+        deletedCount=dp.restorable||0;
+      }catch{ /* preview only */ }
+
+      if(!preview.restored&&!deletedCount){
+        alert(`Nothing to restore.\n\nFound ${preview.candidates} archived record(s), but nothing is missing on the current units.`);
+        return;
+      }
+
+      if(!preview.restored&&deletedCount){
+        if(!confirm(`Bring back ${deletedCount} unit(s) that a deleted Stock Out removed from the tracker?\n\nThey will return as IN STOCK.`))return;
+        const back=await api<{restored:number}>('/imei/restore-deleted',
+          {method:'POST',body:JSON.stringify({dryRun:false})});
+        alert(`✓ Brought back ${back.restored} unit(s).`);
+        load(search,status,imeiType,swiped,activated,page,brand);
         return;
       }
 
@@ -310,7 +326,18 @@ export function Imei() {
 
       const done=await api<{restored:number}>('/imei/restore-activations',
         {method:'POST',body:JSON.stringify({dryRun:false})});
-      alert(`✓ Restored ${done.restored} unit(s).`);
+
+      // Units erased by a deleted Stock Out are a separate kind of loss; sweep
+      // them up in the same action rather than making it a second button.
+      let broughtBack=0;
+      try{
+        const back=await api<{restored:number}>('/imei/restore-deleted',
+          {method:'POST',body:JSON.stringify({dryRun:false})});
+        broughtBack=back.restored||0;
+      }catch{ /* activations were still restored; don't fail the whole action */ }
+
+      alert(`✓ Restored ${done.restored} activation(s)`+
+        (broughtBack?`\n✓ Brought back ${broughtBack} unit(s) removed by a deleted Stock Out`:''));
       load(search,status,imeiType,swiped,activated,page,brand);
     }catch(e:any){
       alert(`Could not restore\n\n${e.message}`);
