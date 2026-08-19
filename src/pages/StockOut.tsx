@@ -60,7 +60,12 @@ export function StockOut(){
       api<{draft:{r:Row[];s:string;iv:string;dt:string};editMeta:EditMode}>(`/inventory/edit-sessions/${sessionId}`)
         .then(({draft,editMeta})=>{
           setEditMode(editMeta);
-          if(editMeta.supplierName)setCust(editMeta.supplierName);
+          if(editMeta.supplierName){
+            setCust(editMeta.supplierName);
+            // Pre-resolve to vendorId immediately so Save doesn't need to wait
+            // for a blur event that never comes in edit mode.
+            resolveCustomer(editMeta.supplierName).then(id=>{if(id)setCustId(id);}).catch(()=>{});
+          }
           if(editMeta.originalDate)setDate(editMeta.originalDate);
           if(draft.r?.some((x:Row)=>x.status!=='empty'))setRows(draft.r);
           if(draft.iv)setInv(draft.iv);
@@ -347,7 +352,7 @@ export function StockOut(){
           <div style={{position:'relative'}}>
             <label style={{fontSize:9,fontWeight:800,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'.08em',display:'block',marginBottom:3}}>ISSUED TO / CUSTOMER</label>
             <input value={cs||(cust?cust:'')} placeholder="Walk In Customer, Amazon, Flipkart…"
-              onChange={e=>{setCs(e.target.value);setCust('');setCDrop(true);}}
+              onChange={e=>{setCs(e.target.value);setCust('');setCustId('');setCDrop(true);}}
               onFocus={()=>{setCs(cust);setCDrop(true);}}
               onBlur={()=>setTimeout(()=>{setCDrop(false);if(cs&&!cust){setCust(cs);setCs('');void resolveCustomer(cs);}},200)}
               onKeyDown={e=>{if(e.key==='Enter'&&cs){setCust(cs);setCs('');setCDrop(false);void resolveCustomer(cs);}}}
