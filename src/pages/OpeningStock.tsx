@@ -115,13 +115,22 @@ export function OpeningStock() {
     upd(i, { ean: v, status: 'loading', errMsg: '', errField: '' });
 
     // Open the next row and move on immediately, before the lookup resolves.
-    // An unknown EAN is flagged in place a moment later, which is far cheaper
-    // than stalling every single scan on a network round-trip.
+    // Insert a new blank row only when needed — if one already exists right
+    // after this row, reuse it. This was causing a duplicate row on every scan
+    // because barcode guns send Enter after the code, triggering handleEan
+    // twice: once from onChange and once from the Enter keydown.
     setRows(rs => {
       const nextRow = rs[i + 1];
+      // Already a blank row after this one — nothing to do.
       if (nextRow && !nextRow.ean.trim() && nextRow.status === 'empty') return rs;
+      // No row after this one at all — append a blank.
       const next = [...rs];
-      if (i >= rs.length - 1) next.push(mk()); else next.splice(i + 1, 0, mk());
+      if (i >= rs.length - 1) {
+        next.push(mk());
+      } else {
+        // There IS a row after but it has content — insert a blank between.
+        next.splice(i + 1, 0, mk());
+      }
       return next;
     });
     setTimeout(() => moveTo(i + 1, 'ean'), 0);
@@ -469,8 +478,19 @@ export function OpeningStock() {
                 onRemove={() => setRows(rs => { const n = [...rs]; n.splice(i, 1); return n.length ? n : [mk()]; })}
                 eanInput={
                   <input ref={R(i, 'ean')} value={row.ean} inputMode="numeric"
-                    onChange={e => upd(i, { ean: e.target.value, errMsg: '', errField: '' })}
-                    onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); handleEan(i, (e.target as HTMLInputElement).value); } }}
+                    onChange={e => {
+                      const v=e.target.value;
+                      upd(i, { ean: v, errMsg: '', errField: '' });
+                      if (v.length===8||v.length===12||v.length===13) {
+                        scanning.current[i]=true;
+                        setTimeout(()=>{handleEan(i,v.trim());scanning.current[i]=false;},80);
+                      }
+                    }}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Tab') {
+                      e.preventDefault();
+                      if(scanning.current[i]){scanning.current[i]=false;return;}
+                      handleEan(i, (e.target as HTMLInputElement).value);
+                    } }}
                     onFocus={() => setAr(i)}
                     placeholder="Scan or type barcode"
                     style={{ ...mInput, fontFamily: 'monospace' }} />
