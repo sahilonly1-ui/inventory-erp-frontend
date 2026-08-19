@@ -73,6 +73,7 @@ export function StockIn(){
   const[df,setDf]=useState({ean:'',model:'',brand:'',cat:'',cost:'',sell:'',mrp:'',gst:'18',imei:false});
   const[editMode,setEditMode]=useState<EditMode|null>(null); // set when redirected from Dashboard Edit
   const lastEan=useRef<Record<number,{v:string;t:number}>>({});
+  const lastSrno=useRef<Record<number,{v:string;t:number}>>({});
   const refs=useRef<Record<string,HTMLInputElement|null>>({});
   const R=(i:number,c:FC)=>(el:HTMLInputElement|null)=>{refs.current[`${i}-${c}`]=el;};
   const ERef=useRef<(i:number,e:string)=>void>(()=>{});
@@ -212,6 +213,12 @@ export function StockIn(){
   // Sr. No. column — no length restriction but duplicate detection
   const handleSrno=useCallback((i:number,val:string)=>{
     const v=val.trim();
+    // Drop the gun's Enter echo: same serial at same row within 300ms.
+    if(v){
+      const _n=Date.now(); const _p=lastSrno.current[i];
+      if(_p&&_p.v===v&&_n-_p.t<300)return;
+      lastSrno.current[i]={v,t:_n};
+    }
     const row=rows[i];
     if(!row.productId){const ni=i+1;if(ni<rows.length)moveTo(ni,'srno');return;}
     // Empty Sr.No.: fine if not required; block if required
@@ -227,9 +234,12 @@ export function StockIn(){
       upd(i,{errMsg:`Duplicate! Sr.No. "${v}" already in row ${sessDup+1} of this entry.`,status:'err',errField:'srno'});
       moveTo(i,'srno');return;
     }
-    // If srnoRequired and no IMEI needed, scanning SrNo completes the row
+    // Scanning a serial completes the row. Move to the next row's serial field
+    // rather than inserting a row and jumping to EAN — that jump was letting
+    // the tail of a fast gun scan land in the EAN box and spawn extra rows.
     upd(i,{srno:v,qty:row.imei?row.qty:1,status:'saved',errMsg:'',errField:''});
-    const ni=ins(i);moveTo(ni,'ean');
+    if(i+1<rows.length) moveTo(i+1,'srno');
+    else { const ni=ins(i); moveTo(ni,'srno'); }
   },[rows,upd,ins,moveTo]);
 
   const del=(i:number)=>{setRows(rs=>rs.length===1?[mk()]:rs.filter((_,x)=>x!==i));moveTo(Math.max(0,ar>=i?ar-1:ar),'ean');};
