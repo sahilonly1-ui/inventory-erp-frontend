@@ -54,6 +54,9 @@ export function OpeningStock() {
   const R     = (i: number, c: FC) => (el: HTMLInputElement|null) => { refs.current[`${i}-${c}`] = el; };
   const ERef    = useRef<(i: number, ean: string) => void>(() => {});
   const scanning = useRef<Record<number, boolean>>({}); // guard against double-scan
+  // Per-row last-scanned EAN + timestamp: drops the gun's own Enter echo
+  // (which arrives ~20ms after the onChange) without needing any timer state.
+  const lastEan = useRef<Record<number,{v:string;t:number}>>({});
   const eCache = useRef(new Map<string, {productId:string;model:string;brand:string;imeiRequired:boolean;srnoRequired:boolean}|null>());
   // Caches IMEI existence checks: '' = free to use, otherwise the product it's already registered to
   const iCache = useRef(new Map<string, string>());
@@ -112,6 +115,11 @@ export function OpeningStock() {
   // the background and the row is filled in (or flagged) when it arrives.
   const handleEan = useCallback(async (i: number, ean: string) => {
     const v = ean.trim(); if (!v) return;
+    // Drop the gun's Enter echo: same EAN at same row within 300ms = duplicate.
+    const now = Date.now();
+    const prev = lastEan.current[i];
+    if (prev && prev.v === v && now - prev.t < 300) return;
+    lastEan.current[i] = { v, t: now };
     upd(i, { ean: v, status: 'loading', errMsg: '', errField: '' });
 
     // Open the next row and move on immediately, before the lookup resolves.

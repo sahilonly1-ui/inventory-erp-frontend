@@ -49,6 +49,7 @@ export function StockOut(){
   const[busy,setBusy]=useState(false);
   const isMobile = useIsPhone();
   const[editMode,setEditMode]=useState<EditMode|null>(null);
+  const lastEan2=useRef<Record<number,{v:string;t:number}>>({});
   const refs=useRef<Record<string,HTMLInputElement|null>>({});
   const R=(i:number,c:FC)=>(el:HTMLInputElement|null)=>{refs.current[`${i}-${c}`]=el;};
   const ERef=useRef<(i:number,e:string)=>void>(()=>{});
@@ -98,7 +99,11 @@ export function StockOut(){
 
   // ── EAN scan — non-blocking: advance immediately, resolve in background ───
   const handleEan=useCallback(async(i:number,ean:string)=>{
-    const v=ean.trim();if(!v||!whId)return;
+    const v=ean.trim();
+    const _now2=Date.now();
+    const _prev2=lastEan2.current[i];
+    if(_prev2&&_prev2.v===v&&_now2-_prev2.t<300)return;
+    lastEan2.current[i]={v,t:_now2};if(!v||!whId)return;
     upd(i,{ean:v,status:'loading',errMsg:'',errField:''});
 
     // Open the next row and move on before the lookup resolves, so scanning

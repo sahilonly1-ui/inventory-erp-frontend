@@ -72,6 +72,7 @@ export function StockIn(){
   const[drawer,setDrawer]=useState<string|null>(null);
   const[df,setDf]=useState({ean:'',model:'',brand:'',cat:'',cost:'',sell:'',mrp:'',gst:'18',imei:false});
   const[editMode,setEditMode]=useState<EditMode|null>(null); // set when redirected from Dashboard Edit
+  const lastEan=useRef<Record<number,{v:string;t:number}>>({});
   const refs=useRef<Record<string,HTMLInputElement|null>>({});
   const R=(i:number,c:FC)=>(el:HTMLInputElement|null)=>{refs.current[`${i}-${c}`]=el;};
   const ERef=useRef<(i:number,e:string)=>void>(()=>{});
@@ -114,6 +115,11 @@ export function StockIn(){
   // background and the row is filled in — or flagged — when it arrives.
   const handleEan=useCallback(async(i:number,ean:string)=>{
     const v=ean.trim();if(!v)return;
+    // Drop the gun's Enter echo: same EAN at same row within 300ms = duplicate.
+    const _now=Date.now();
+    const _prev=lastEan.current[i];
+    if(_prev&&_prev.v===v&&_now-_prev.t<300)return;
+    lastEan.current[i]={v,t:_now};
     upd(i,{ean:v,status:'loading',errMsg:'',errField:''});
 
     // Open the next row and advance right away.
