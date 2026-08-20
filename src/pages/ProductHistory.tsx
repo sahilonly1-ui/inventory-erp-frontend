@@ -14,6 +14,10 @@ interface Movement {
   remarks: string | null;
   codes: string[];
   untracked: boolean;
+  // How the codes were found: linked to the transaction, matched by time for
+  // older entries, or read out of the remarks text where they were the only
+  // record. Worth showing, because confidence differs.
+  codeSource: 'linked' | 'matched' | 'remarks' | 'none';
 }
 
 interface History {
@@ -143,37 +147,104 @@ export default function ProductHistory() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.movements.map(m => {
-                    const inbound = m.quantity > 0;
-                    return (
-                      <tr key={m.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                        <td style={{ padding: '11px 14px', whiteSpace: 'nowrap' }}>
-                          <div style={{ fontWeight: 600, color: '#0f172a' }}>{fmtDate(m.date)}</div>
-                          <div style={{ fontSize: 11, color: '#94a3b8' }}>{fmtTime(m.date)}</div>
-                        </td>
-                        <td style={{ padding: '11px 14px' }}>
-                          <MPill tone={inbound ? 'good' : 'bad'}>{m.type.replace(/_/g, ' ')}</MPill>
-                        </td>
-                        <td style={{ padding: '11px 14px', fontWeight: 800, color: inbound ? '#16a34a' : '#dc2626', whiteSpace: 'nowrap' }}>
-                          {inbound ? '+' : ''}{m.quantity}
-                        </td>
-                        <td style={{ padding: '11px 14px', fontWeight: 700, color: '#0f172a' }}>{m.balanceAfter}</td>
-                        <td style={{ padding: '11px 14px', color: '#475569' }}>{m.counterparty ?? '—'}</td>
-                        <td style={{ padding: '11px 14px', color: '#64748b', fontSize: 12 }}>{m.user ?? '—'}</td>
-                        <td style={{ padding: '11px 14px' }}>
-                          {m.untracked
-                            ? <span style={{ fontSize: 11, color: '#b45309', background: '#fffbeb', padding: '3px 9px', borderRadius: 20, whiteSpace: 'nowrap' }}>no unit codes</span>
-                            : <CodeList codes={m.codes} />}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {data.movements.map(m => (
+                    <MovementRow key={m.id} m={m} />
+                  ))}
                 </tbody>
               </table>
             </div>
           )}
         </>
       )}
+    </div>
+  );
+}
+
+/** One movement, expandable to reveal the units scanned in it. */
+function MovementRow({ m }: { m: Movement }) {
+  const [open, setOpen] = useState(false);
+  const inbound = m.quantity > 0;
+  const hasCodes = m.codes.length > 0;
+
+  const td: React.CSSProperties = { padding: '11px 14px' };
+
+  return (
+    <>
+      <tr
+        onClick={() => hasCodes && setOpen(o => !o)}
+        style={{
+          borderBottom: open ? 'none' : '1px solid #f1f5f9',
+          cursor: hasCodes ? 'pointer' : 'default',
+          background: open ? '#f8fafc' : undefined,
+        }}
+      >
+        <td style={{ ...td, whiteSpace: 'nowrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+            {hasCodes && (
+              <span style={{ color: '#94a3b8', fontSize: 11, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .12s' }}>▶</span>
+            )}
+            <div>
+              <div style={{ fontWeight: 600, color: '#0f172a' }}>{fmtDate(m.date)}</div>
+              <div style={{ fontSize: 11, color: '#94a3b8' }}>{fmtTime(m.date)}</div>
+            </div>
+          </div>
+        </td>
+        <td style={td}><MPill tone={inbound ? 'good' : 'bad'}>{m.type.replace(/_/g, ' ')}</MPill></td>
+        <td style={{ ...td, fontWeight: 800, color: inbound ? '#16a34a' : '#dc2626', whiteSpace: 'nowrap' }}>
+          {inbound ? '+' : ''}{m.quantity}
+        </td>
+        <td style={{ ...td, fontWeight: 700, color: '#0f172a' }}>{m.balanceAfter}</td>
+        <td style={{ ...td, color: '#475569' }}>{m.counterparty ?? '—'}</td>
+        <td style={{ ...td, color: '#64748b', fontSize: 12 }}>{m.user ?? '—'}</td>
+        <td style={td}>
+          {hasCodes
+            ? <span style={{ fontSize: 12, color: '#2563eb', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                {m.codes.length} unit{m.codes.length !== 1 ? 's' : ''} · {open ? 'hide' : 'view'}
+              </span>
+            : <span style={{ fontSize: 11, color: '#b45309', background: '#fffbeb', padding: '3px 9px', borderRadius: 20, whiteSpace: 'nowrap' }}>no unit codes</span>}
+        </td>
+      </tr>
+
+      {open && (
+        <tr style={{ borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}>
+          <td colSpan={7} style={{ padding: '4px 14px 14px 34px' }}>
+            <SourceNote source={m.codeSource} />
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))',
+              gap: 6, marginTop: 8,
+            }}>
+              {m.codes.map((c, i) => (
+                <div key={c} style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  background: '#fff', border: '1px solid #e2e8f0',
+                  borderRadius: 8, padding: '7px 10px',
+                }}>
+                  <span style={{ fontSize: 11, color: '#cbd5e1', minWidth: 16 }}>{i + 1}</span>
+                  <span style={{ fontSize: 12.5, fontFamily: 'monospace', color: '#0f172a' }}>{c}</span>
+                </div>
+              ))}
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+/**
+ * Says where the codes came from. A linked unit is certain; a time match or a
+ * remarks string is a best effort on older data, and the operator should know
+ * the difference before acting on it.
+ */
+function SourceNote({ source }: { source: Movement['codeSource'] }) {
+  if (source === 'linked') return null;
+  const text = source === 'matched'
+    ? 'Matched by time — this entry predates per-unit linking, so these are the units received around then.'
+    : 'Read from the entry notes — these serials were never stored as individual units.';
+  return (
+    <div style={{ fontSize: 11.5, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '7px 10px' }}>
+      {text}
     </div>
   );
 }
@@ -204,9 +275,11 @@ function CodeList({ codes }: { codes: string[] }) {
 }
 
 function MovementCard({ m }: { m: Movement }) {
+  const [open, setOpen] = useState(false);
   const inbound = m.quantity > 0;
+  const hasCodes = m.codes.length > 0;
   return (
-    <MCard tone={inbound ? 'good' : 'bad'}>
+    <MCard tone={inbound ? 'good' : 'bad'} onClick={hasCodes ? () => setOpen(o => !o) : undefined}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>{fmtDate(m.date)}</div>
@@ -222,9 +295,23 @@ function MovementCard({ m }: { m: Movement }) {
       <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #e6e9ef', fontSize: 12, color: '#475569', display: 'grid', gap: 4 }}>
         {m.counterparty && <div>Party: {m.counterparty}</div>}
         {m.user && <div>By: {m.user}</div>}
-        {m.untracked
-          ? <div style={{ color: '#b45309' }}>No unit codes recorded</div>
-          : <div style={{ fontFamily: 'monospace', fontSize: 11 }}>{m.codes.join(', ')}</div>}
+        {!hasCodes && <div style={{ color: '#b45309' }}>No unit codes recorded</div>}
+        {hasCodes && !open && (
+          <div style={{ color: '#2563eb', fontWeight: 600 }}>
+            {m.codes.length} unit{m.codes.length !== 1 ? 's' : ''} · tap to view
+          </div>
+        )}
+        {hasCodes && open && (
+          <div style={{ display: 'grid', gap: 5, marginTop: 2 }}>
+            <SourceNote source={m.codeSource} />
+            {m.codes.map((c, i) => (
+              <div key={c} style={{ display: 'flex', gap: 8, background: '#fff', border: '1px solid #e6e9ef', borderRadius: 8, padding: '7px 10px' }}>
+                <span style={{ fontSize: 11, color: '#cbd5e1' }}>{i + 1}</span>
+                <span style={{ fontSize: 12.5, fontFamily: 'monospace', color: '#0f172a' }}>{c}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </MCard>
   );
