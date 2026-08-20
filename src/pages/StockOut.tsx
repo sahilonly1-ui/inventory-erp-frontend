@@ -266,10 +266,12 @@ export function StockOut(){
         if(!confirm(`"${cust.trim()}" could not be saved as a customer.\n\nDispatch anyway? It will show as "No Vendor".`))return;
       }
 
-      const imeiRows=sv.filter(r=>r.imei);
+      // Dispatching a serial-tracked unit must mark that unit SOLD, so serials
+      // go through the same path as IMEIs rather than the quantity-only route.
+      const imeiRows=sv.filter(r=>r.imei||r.srno);
       if(imeiRows.length){
         await api('/imei/dispatch',{method:'POST',body:JSON.stringify({
-          imeis:imeiRows.map(r=>r.imei),
+          imeis:imeiRows.map(r=>r.imei||r.srno),
           channel:'STOCK_OUT',
           remarks:rmk,
           ...(vendorId?{vendorId}:{}),
@@ -277,17 +279,17 @@ export function StockOut(){
         })});
       }
 
-      const nonImeiByProduct=sv.filter(r=>!r.imei).reduce((a:any,r)=>{
-        if(!a[r.productId])a[r.productId]={productId:r.productId,qty:0,srNos:[] as string[]};
+      // Only rows with no unit code at all — accessories counted by quantity.
+      const nonImeiByProduct=sv.filter(r=>!r.imei&&!r.srno).reduce((a:any,r)=>{
+        if(!a[r.productId])a[r.productId]={productId:r.productId,qty:0};
         a[r.productId].qty+=(r.qty||1);
-        if(r.srno)a[r.productId].srNos.push(r.srno);
         return a;
       },{});
       for(const[productId,data] of Object.entries(nonImeiByProduct) as any[]){
         await api('/inventory/stock-out',{method:'POST',body:JSON.stringify({
           productId,warehouseId:whId,
           quantity:data.qty,
-          remarks:`${rmk}${data.srNos.length?' | S/N:'+data.srNos.join(','):''}`,
+          remarks:rmk,
           ...(vendorId?{vendorId}:{}),
           txnDate:date,
         })});

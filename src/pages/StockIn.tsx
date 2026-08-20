@@ -336,10 +336,15 @@ export function StockIn(){
       }
 
       // ── Save all rows (same as normal stock-in) ───────────────────────────────────────────────────
-      const imeiRows=sv.filter(r=>r.imei);
+      // Serials are unit identifiers exactly like IMEIs and live in the same
+      // table, so they must go through /imei/receive too. Filtering on r.imei
+      // alone sent serial-only rows down the plain-quantity path, where the
+      // serial was appended to the remarks string and no tracker record was
+      // ever created — which is why they vanished on reopening the entry.
+      const imeiRows=sv.filter(r=>r.imei||r.srno);
       const imeiByProduct=imeiRows.reduce((a:any,r)=>{
         if(!a[r.productId])a[r.productId]=[];
-        a[r.productId].push({imei1:r.imei,imeiType:r.imeiType||'NIL'});
+        a[r.productId].push({imei1:r.imei||r.srno,imeiType:r.imeiType||'NIL'});
         return a;
       },{});
       for(const[productId,imeis] of Object.entries(imeiByProduct) as any[]){
@@ -353,10 +358,10 @@ export function StockIn(){
         })});
       }
 
-      const nonImeiByProduct=sv.filter(r=>!r.imei).reduce((a:any,r)=>{
-        if(!a[r.productId])a[r.productId]={productId:r.productId,qty:0,srNos:[] as string[]};
+      // Only rows with no unit code at all — accessories counted by quantity.
+      const nonImeiByProduct=sv.filter(r=>!r.imei&&!r.srno).reduce((a:any,r)=>{
+        if(!a[r.productId])a[r.productId]={productId:r.productId,qty:0};
         a[r.productId].qty+=(r.qty||1);
-        if(r.srno)a[r.productId].srNos.push(r.srno);
         return a;
       },{});
       for(const[productId,data] of Object.entries(nonImeiByProduct) as any[]){
@@ -364,7 +369,7 @@ export function StockIn(){
           productId,warehouseId:whId,
           quantity:data.qty,
           vendorId:resolvedSuppId||undefined,
-          remarks:`${rmk}${data.srNos.length?' | S/N:'+data.srNos.join(','):''}`,
+          remarks:rmk,
           txnDate:date,
         })});
       }
