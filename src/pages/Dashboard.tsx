@@ -114,12 +114,22 @@ export function Dashboard() {
       const uid=()=>Math.random().toString(36).slice(2,9);
       const rows:any[]=[];
       for(const t of txns){
-        if(t.imeiRequired&&t.imeis.length){
-          // One row per IMEI
+        // Gate on what actually came back, never on imeiRequired — that flag is
+        // unreliable in Product Master, and trusting it here meant a TV entered
+        // with serial numbers reopened as a bare quantity row with the serials
+        // silently dropped on the next save.
+        if(t.imeis.length){
+          // One row per unit
           for(const im of t.imeis){
+            // Serials live in the same column as IMEIs; 15 digits means IMEI,
+            // anything else is a serial and belongs in the Sr. No. field.
+            const isImei=/^\d{15}$/.test(im.imei1||'');
             rows.push({
               id:uid(),ean:t.ean,productId:t.productId,model:t.model,brand:t.brand,
-              imeiRequired:true,qty:1,imei:im.imei1,srno:'',imeiType:im.imeiType||'NIL',
+              imeiRequired:true,qty:1,
+              imei:isImei?im.imei1:'',
+              srno:isImei?'':im.imei1,
+              imeiType:im.imeiType||'NIL',
               status:'saved',errMsg:'',errField:'',
               _origTxnId:t.id,_origImeiId:im.id, // track for cleanup
             });
