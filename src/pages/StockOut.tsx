@@ -262,6 +262,9 @@ export function StockOut(){
       // Skip IMEI duplicate check in edit mode (these IMEIs were already in the system)
       // Resolve the customer once for the whole entry.
       const vendorId=custId||(cust?await resolveCustomer(cust):'');
+      if(cust.trim()&&!vendorId){
+        if(!confirm(`"${cust.trim()}" could not be saved as a customer.\n\nDispatch anyway? It will show as "No Vendor".`))return;
+      }
 
       const imeiRows=sv.filter(r=>r.imei);
       if(imeiRows.length){
@@ -310,9 +313,20 @@ export function StockOut(){
     const t=name.trim();
     if(!t)return '';
     try{
-      const r=await api<any>('/vendors/find-or-create',{method:'POST',body:JSON.stringify({name:t})});
+      // allowWithoutState: a customer has no GST state to ask for. Without this
+      // the API refused to create the record and returned null, which is why
+      // every named customer was still being saved as "No Vendor".
+      const r=await api<any>('/vendors/find-or-create',{
+        method:'POST',
+        body:JSON.stringify({name:t,allowWithoutState:true}),
+      });
       if(r?.vendor?.id){setCustId(r.vendor.id);return r.vendor.id;}
-    }catch{ /* fall back to an unattributed movement rather than blocking the dispatch */ }
+      console.warn('Customer could not be resolved:',t,r);
+    }catch(e){
+      // Don't block the dispatch, but make the failure visible rather than
+      // silently recording it against nobody.
+      console.warn('Customer resolve failed:',t,e);
+    }
     return '';
   },[]);
 

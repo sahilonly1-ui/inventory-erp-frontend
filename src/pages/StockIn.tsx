@@ -282,8 +282,20 @@ export function StockIn(){
     // Ensure supplier is resolved before committing (handles race condition)
     let resolvedSuppId=suppId;
     if(supp&&!suppId){
-      try{const r=await api<any>('/vendors/find-or-create',{method:'POST',body:JSON.stringify({name:toT(supp)})});
-        if(r.vendor){resolvedSuppId=r.vendor.id;setSuppId(r.vendor.id);}}catch{}
+      try{
+        const r=await api<any>('/vendors/find-or-create',{method:'POST',body:JSON.stringify({name:toT(supp)})});
+        if(r.vendor){resolvedSuppId=r.vendor.id;setSuppId(r.vendor.id);}
+        else if(r.needsState){
+          // A brand-new supplier needs its state for GST. Ask now rather than
+          // quietly filing the receipt against no supplier at all.
+          setSModal(toT(supp));
+          setBusy(false);
+          return;
+        }
+      }catch(e){console.warn('Supplier resolve failed:',supp,e);}
+    }
+    if(supp.trim()&&!resolvedSuppId){
+      if(!confirm(`"${toT(supp)}" could not be saved as a supplier.\n\nSave anyway? It will show as "No Vendor".`))  {setBusy(false);return;}
     }
     // Block rows that still need IMEI
     // Only rows still awaiting their product lookup block the save. Missing
