@@ -10,6 +10,7 @@ import Products from './pages/Products';
 import { Imei } from './pages/Imei';
 import { Versions } from './pages/Versions';
 import Users from './pages/Users';
+import ProductHistory from './pages/ProductHistory';
 import { Suppliers } from './pages/Suppliers';
 import { StockIn } from './pages/StockIn';
 import { OpeningStock } from './pages/OpeningStock';
@@ -38,6 +39,7 @@ export default function App() {
         <Route path="/reports"    element={<Shell><Reports /></Shell>} />
         <Route path="/versions"   element={<Shell><Versions /></Shell>} />
         <Route path="/users"      element={<Shell><Users /></Shell>} />
+        <Route path="/product-history" element={<Shell><ProductHistory /></Shell>} />
       </Routes>
     </AuthProvider>
   );
