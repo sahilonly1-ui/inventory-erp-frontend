@@ -63,6 +63,7 @@ export function StockOut(){
           setEditMode(editMeta);
           if(editMeta.supplierName){
             setCust(editMeta.supplierName);
+            if((editMeta as any).invoiceNo)setInv((editMeta as any).invoiceNo);
             // Pre-resolve to vendorId immediately so Save doesn't need to wait
             // for a blur event that never comes in edit mode.
             resolveCustomer(editMeta.supplierName).then(id=>{if(id)setCustId(id);}).catch(()=>{});
