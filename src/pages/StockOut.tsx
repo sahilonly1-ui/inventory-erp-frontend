@@ -270,12 +270,33 @@ export function StockOut(){
         if(!confirm(`"${cust.trim()}" could not be saved as a customer.\n\nDispatch anyway? It will show as "No Vendor".`))return;
       }
 
-      // Dispatching a serial-tracked unit must mark that unit SOLD, so serials
-      // go through the same path as IMEIs rather than the quantity-only route.
-      const imeiRows=sv.filter(r=>r.imei||r.srno);
-      if(imeiRows.length){
+      // A code in the Sr.No. field does not automatically mean the unit is in
+      // the IMEI Tracker. Accessories and older entries that were recorded as a
+      // plain quantity appear with a serial in the edit session but no tracker
+      // record, so dispatching them through /imei/dispatch returns "Unknown IMEI".
+      //
+      // Strategy: try to verify which codes are actually in the tracker, then
+      // route tracked ones through dispatch and untracked ones through stock-out.
+      const codeRows=sv.filter(r=>r.imei||r.srno);
+      let trackedCodes:string[]=[];
+      if(codeRows.length){
+        try{
+          const codes=codeRows.map(r=>r.imei||r.srno).filter(Boolean) as string[];
+          // Quick lookup: the tracker returns the units that exist for these codes.
+          const res=await api<{items:{imei1:string}[];total:number}>(
+            `/imei?limit=${codes.length}&page=1`,{method:'GET'});
+          const inTracker=new Set((res.items||[]).map((u:any)=>u.imei1));
+          trackedCodes=codes.filter(c=>inTracker.has(c));
+        }catch{
+          // If lookup fails, fall back: 15-digit numerics are IMEIs and are
+          // assumed to be tracked; everything else is treated as untracked.
+          trackedCodes=codeRows.map(r=>r.imei||r.srno).filter(c=>c&&/^\d{15}$/.test(c)) as string[];
+        }
+      }
+
+      if(trackedCodes.length){
         await api('/imei/dispatch',{method:'POST',body:JSON.stringify({
-          imeis:imeiRows.map(r=>r.imei||r.srno),
+          imeis:trackedCodes,
           channel:'STOCK_OUT',
           remarks:rmk,
           ...(vendorId?{vendorId}:{}),
@@ -284,13 +305,17 @@ export function StockOut(){
         })});
       }
 
-      // Only rows with no unit code at all — accessories counted by quantity.
-      const nonImeiByProduct=sv.filter(r=>!r.imei&&!r.srno).reduce((a:any,r)=>{
+      // Untracked rows (accessories, or units with a serial but no tracker record)
+      // use the plain quantity path, which just moves stock without needing a unit record.
+      const untrackedCodes=new Set(codeRows.map(r=>r.imei||r.srno).filter(c=>!trackedCodes.includes(c!)));
+      const untracked=codeRows.filter(r=>untrackedCodes.has(r.imei||r.srno));
+      const untrackedByProduct=[...sv.filter(r=>!r.imei&&!r.srno),...untracked]
+        .reduce((a:any,r)=>{
         if(!a[r.productId])a[r.productId]={productId:r.productId,qty:0};
         a[r.productId].qty+=(r.qty||1);
         return a;
       },{});
-      for(const[productId,data] of Object.entries(nonImeiByProduct) as any[]){
+      for(const[productId,data] of Object.entries(untrackedByProduct) as any[]){
         await api('/inventory/stock-out',{method:'POST',body:JSON.stringify({
           productId,warehouseId:whId,
           quantity:data.qty,
