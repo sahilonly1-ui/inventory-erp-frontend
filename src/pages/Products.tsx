@@ -517,7 +517,7 @@ function AddProductModal({brands:initBrands,categories,onClose,onSaved}:{brands:
         costPrice:Number(form.costPrice),sellingPrice:Number(form.sellingPrice),
         status:form.status,
         imeiRequired:form.imeiRequired,
-        srnoRequired:form.srnoRequired,
+        serialRequired:form.srnoRequired,
       })});
       onSaved();onClose();
     }catch(e:any){setErr(e.message||'Failed to save');}
