@@ -276,6 +276,7 @@ export function StockOut(){
           remarks:rmk,
           ...(vendorId?{vendorId}:{}),
           txnDate:date,
+          invoiceNo:inv||undefined,
         })});
       }
 
@@ -292,6 +293,7 @@ export function StockOut(){
           remarks:rmk,
           ...(vendorId?{vendorId}:{}),
           txnDate:date,
+          invoiceNo:inv||undefined,
         })});
       }
 

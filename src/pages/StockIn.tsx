@@ -88,6 +88,7 @@ export function StockIn(){
         .then(({draft,editMeta})=>{
           setEditMode(editMeta);
           if(editMeta.supplierName)setSupp(editMeta.supplierName);
+          if((editMeta as any).invoiceNo)setInv((editMeta as any).invoiceNo);
           if(editMeta.supplierVendorId)setSuppId(editMeta.supplierVendorId);
           if(editMeta.originalDate)setDate(editMeta.originalDate);
           if(draft.r?.some((x:Row)=>x.status!=='empty'))setRows(draft.r);
@@ -355,6 +356,7 @@ export function StockIn(){
           force:true,
           remarks:rmk,
           txnDate:date,
+          invoiceNo:inv||undefined,
         })});
       }
 
