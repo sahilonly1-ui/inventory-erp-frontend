@@ -482,7 +482,7 @@ function BulkImportModal({categories,brands,onClose,onDone}:{categories:Category
 // ── Add Product Modal ─────────────────────────────────────────────────────
 function AddProductModal({brands:initBrands,categories,onClose,onSaved}:{brands:Brand[];categories:Category[];onClose:()=>void;onSaved:()=>void}){
   const [brands,setBrands]=useState<Brand[]>(initBrands);
-  const [form,setForm]=useState({ean:'',model:'',brand:'',brandId:'',categoryId:'',costPrice:'',sellingPrice:'',status:'ACTIVE' as Status});
+  const [form,setForm]=useState({ean:'',model:'',brand:'',brandId:'',categoryId:'',costPrice:'',sellingPrice:'',status:'ACTIVE' as Status,imeiRequired:false,srnoRequired:false});
   const [busy,setBusy]=useState(false);
   const [err,setErr]=useState('');
   const [newBrand,setNewBrand]=useState('');
@@ -516,6 +516,8 @@ function AddProductModal({brands:initBrands,categories,onClose,onSaved}:{brands:
         categoryId:form.categoryId||undefined,
         costPrice:Number(form.costPrice),sellingPrice:Number(form.sellingPrice),
         status:form.status,
+        imeiRequired:form.imeiRequired,
+        srnoRequired:form.srnoRequired,
       })});
       onSaved();onClose();
     }catch(e:any){setErr(e.message||'Failed to save');}
@@ -584,6 +586,32 @@ function AddProductModal({brands:initBrands,categories,onClose,onSaved}:{brands:
               <select style={{...inp,appearance:'none',cursor:'pointer'}} value={form.status} onChange={e=>set('status',e.target.value as Status)}>
                 {(['ACTIVE','INACTIVE','DISCONTINUED','OPEN_BOX_ONLY','BLOCKED'] as Status[]).map(s=><option key={s} value={s}>{S_LBL[s]}</option>)}
               </select>
+            </div>
+            <div style={{gridColumn:'span 2'}}>
+              <label style={lbl}>Unit Tracking — What must be scanned on Stock In / Stock Out?</label>
+              <div style={{display:'flex',gap:20,marginTop:4}}>
+                <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,cursor:'pointer',userSelect:'none'}}>
+                  <input type="checkbox" checked={form.imeiRequired}
+                    onChange={e=>setForm(f=>({...f,imeiRequired:e.target.checked,srnoRequired:e.target.checked?false:f.srnoRequired}))}
+                    style={{width:16,height:16}}/>
+                  <div>
+                    <div style={{fontWeight:600,color:'#0f172a'}}>IMEI required</div>
+                    <div style={{fontSize:11,color:'#64748b'}}>Staff must scan a 15-digit IMEI before saving</div>
+                  </div>
+                </label>
+                <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,cursor:'pointer',userSelect:'none'}}>
+                  <input type="checkbox" checked={form.srnoRequired}
+                    onChange={e=>setForm(f=>({...f,srnoRequired:e.target.checked,imeiRequired:e.target.checked?false:f.imeiRequired}))}
+                    style={{width:16,height:16}}/>
+                  <div>
+                    <div style={{fontWeight:600,color:'#0f172a'}}>Serial No. required</div>
+                    <div style={{fontSize:11,color:'#64748b'}}>Staff must enter a serial number before saving</div>
+                  </div>
+                </label>
+                <div style={{fontSize:11,color:'#94a3b8',alignSelf:'center'}}>
+                  ☑ Neither = accessories (scan EAN only, save immediately)
+                </div>
+              </div>
             </div>
           </div>
         </div>

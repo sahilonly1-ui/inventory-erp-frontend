@@ -135,7 +135,10 @@ export function StockOut(){
       if(!p){return rs.map((r,x)=>x===i?{...r,status:'not_found' as const,errMsg:'EAN not found in product master'}:r);}
       const needsImei=(p as any).imeiRequired||false;
       const needsSrno=p!.srnoRequired||false;
-      return rs.map((r,x)=>x===i?{...r,productId:(p as any).id,model:(p as any).model,brand:(p as any).brand,imeiRequired:needsImei,srnoRequired:needsSrno,status:'found' as const,qty:1}:r);
+      // Accessories carry neither IMEI nor serial — no scanning needed, so
+      // the row is immediately ready to dispatch instead of waiting at 'found'.
+      const autoStatus=(!needsImei&&!needsSrno)?'saved' as const:'found' as const;
+      return rs.map((r,x)=>x===i?{...r,productId:(p as any).id,model:(p as any).model,brand:(p as any).brand,imeiRequired:needsImei,srnoRequired:needsSrno,status:autoStatus,qty:1}:r);
     });
   },[whId,upd,ins,moveTo]);
   useEffect(()=>{ERef.current=handleEan;},[handleEan]);
