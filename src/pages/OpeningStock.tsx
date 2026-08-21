@@ -349,11 +349,11 @@ export function OpeningStock() {
       const calls: { path: string; body: any }[] = [
         ...(Object.values(codeByProd) as any[]).map(d => ({
           path: '/imei/receive',
-          body: { productId: d.productId, warehouseId: whId, imeis: d.imeis, force: true, type: 'OPENING', remarks: rmk },
+          body: { productId: d.productId, warehouseId: whId, imeis: d.imeis, force: true, type: 'OPENING', remarks: rmk, txnDate: date },
         })),
         ...(Object.values(nonImeiByProd) as any[]).map(d => ({
           path: '/inventory/opening-stock',
-          body: { productId: d.productId, warehouseId: whId, quantity: d.qty, remarks: rmk },
+          body: { productId: d.productId, warehouseId: whId, quantity: d.qty, remarks: rmk, txnDate: date },
         })),
       ];
 
