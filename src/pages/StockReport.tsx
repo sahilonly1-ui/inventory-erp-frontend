@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { saveFile, canvasToBlob } from '../native/download';
 import { useIsPhone } from '../mobile/ui';
 import { api } from '../api/client';
 
@@ -445,7 +446,7 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
 
       document.body.removeChild(container);
 
-      const { saveFile, canvasToBlob } = await import('../native/download');
+      // saveFile, canvasToBlob already imported statically
       const blob = await canvasToBlob(canvas);
       await saveFile(`StockReport_${new Date().toISOString().slice(0,10)}.png`, blob, 'image/png');
     } catch (e: any) {

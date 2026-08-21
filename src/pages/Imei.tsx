@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { saveFile, canvasToBlob } from '../native/download';
 import { useIsPhone, M, MCard, MPill, MEmpty } from '../mobile/ui';
 import { api, getAccessToken } from '../api/client';
 import { ImeiBulkUpload } from './ImeiBulkUpload';
@@ -355,7 +356,7 @@ export function Imei() {
       });
       if(!resp.ok)throw new Error('Export failed');
       const blob=await resp.blob();
-      const {saveFile}=await import('../native/download');
+      // saveFile already imported statically
       await saveFile(`IMEI_Export_${new Date().toISOString().slice(0,10)}.xlsx`,blob,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     }catch(e:any){alert(e.message);}
     finally{setExporting(false);}

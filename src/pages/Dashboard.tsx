@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { saveFile, canvasToBlob } from '../native/download';
 import { useIsPhone } from '../mobile/ui';
 import { api, getAccessToken } from '../api/client';
 
@@ -345,7 +346,7 @@ export function Dashboard() {
       const cd=resp.headers.get('Content-Disposition')||'';
       const named=/filename="?([^"]+)"?/.exec(cd)?.[1];
       const blob=await resp.blob();
-      const {saveFile}=await import('../native/download');
+      // saveFile already imported statically
       await saveFile(named||`${label}.xlsx`,blob,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     }catch(e:any){alert(`Could not download\n\n${e.message}`);}
     finally{setDownloading(null);}
