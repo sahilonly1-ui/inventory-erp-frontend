@@ -158,11 +158,11 @@ export function Dashboard() {
       const session=await api<{sessionId:string}>('/inventory/edit-sessions',{
         method:'POST',
         body:JSON.stringify({
-          draft:{ r:rows, s:supplierName, iv:txns[0]?.referenceId??'', dt:dateStr },
+          draft:{ r:rows, s:supplierName, iv:(txns[0] as any)?.referenceId??'', dt:dateStr },
           editMeta:{
             txnIds:ids, supplierName,
             supplierVendorId:txns[0]?.vendorId??'',
-            invoiceNo:txns[0]?.referenceId??'',
+            invoiceNo:(txns[0] as any)?.referenceId??'',
             sign, originalDate:dateStr,
           },
         }),
