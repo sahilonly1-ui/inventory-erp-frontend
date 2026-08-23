@@ -444,7 +444,10 @@ export function OpeningStock() {
               height: 30, padding: '0 8px', border: '1px solid #d0d5dd', borderRadius: 7,
               fontSize: 12, outline: 'none', width: 130, flexShrink: 0,
             }} />
-            <button onClick={() => { if (!confirm('Clear all rows?')) return; eCache.current.clear(); iCache.current.clear(); setRows([mk()]); localStorage.removeItem(DK); }} style={{
+            <input value={inv} onChange={e=>setInv(e.target.value)} placeholder="Invoice No. (optional)"
+              style={{ height: 30, padding: '0 8px', border: '1px solid #d0d5dd', borderRadius: 7,
+                fontSize: 12, outline: 'none', width: 160, flexShrink: 0 }} />
+            <button onClick={() => { if (!confirm('Clear all rows?')) return; eCache.current.clear(); iCache.current.clear(); setRows([mk()]); setInv(''); localStorage.removeItem(DK); }} style={{
               height: 30, padding: '0 10px', border: '1px solid #fecdd3', borderRadius: 6,
               background: '#fff5f5', color: '#dc2626', fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
             }}>Clear All</button>
