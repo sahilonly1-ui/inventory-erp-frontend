@@ -40,6 +40,7 @@ export function OpeningStock() {
   const [rows,   setRows]   = useState<Row[]>([mk()]);
   const [busy,   setBusy]   = useState(false);
   const isPhone = useIsPhone();
+  const [inv, setInv] = useState('');
   const [date,   setDate]   = useState(new Date().toISOString().slice(0, 10));
   const [ar,     setAr]     = useState(0);
 
