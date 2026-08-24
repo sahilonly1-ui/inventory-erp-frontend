@@ -341,15 +341,18 @@ export function StockIn(){
     setBusy(true);
     const rmk=`${editMode?'EDIT:':''}${doc}${supp?' | '+supp:''}${inv?' | INV:'+inv:''}`;
     try{
-      // ── EDIT MODE: delete original transactions first ──────────────────────────────────────────────
+      // ── EDIT MODE: confirm up front, but do NOT delete yet ─────────────────────
+      //
+      // The original used to be deleted before the replacement was written. If
+      // writing the replacement then failed for any reason, the entry was gone
+      // from every date and its units were left orphaned in the tracker with no
+      // transaction behind them — exactly the "entry vanished" case.
+      //
+      // The delete now happens only after the replacement has been written
+      // successfully, so a failure leaves the original intact.
       if(editMode?.txnIds?.length){
-        if(!confirm(`This will replace the original entry from ${editMode.supplierName} (${editMode.txnIds.length} transaction${editMode.txnIds.length!==1?'s':''}).\n\nOriginal stock will be reversed and re-entered with your changes.\n\nProceed?`)){
+        if(!confirm(`This will replace the original entry from ${editMode.supplierName} (${editMode.txnIds.length} transaction${editMode.txnIds.length!==1?'s':''}).\n\nThe replacement is written first; the original is only removed once that succeeds.\n\nProceed?`)){
           setBusy(false);return;
-        }
-        if(editMode.txnIds.length>1){
-          await api('/inventory/transactions/bulk-delete',{method:'POST',body:JSON.stringify({ids:editMode.txnIds})});
-        }else{
-          await api(`/inventory/transactions/${editMode.txnIds[0]}`,{method:'DELETE'});
         }
       }
 
@@ -391,6 +394,21 @@ export function StockIn(){
           remarks:rmk,
           txnDate:date,
         })});
+      }
+
+      // Replacement written successfully — now it is safe to remove the original.
+      if(editMode?.txnIds?.length){
+        try{
+          if(editMode.txnIds.length>1){
+            await api('/inventory/transactions/bulk-delete',{method:'POST',body:JSON.stringify({ids:editMode.txnIds})});
+          }else{
+            await api(`/inventory/transactions/${editMode.txnIds[0]}`,{method:'DELETE'});
+          }
+        }catch(delErr:any){
+          // The replacement exists; failing to remove the original would double
+          // the stock, so say so plainly rather than leaving it unnoticed.
+          alert(`⚠ The updated entry was saved, but the original could not be removed.\n\n${delErr?.message??''}\n\nStock is now counted twice for this entry — delete the original from the Dashboard.`);
+        }
       }
 
       eCache.clear();setRows([mk()]);moveTo(0,'ean');

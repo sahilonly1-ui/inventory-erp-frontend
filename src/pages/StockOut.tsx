@@ -310,7 +310,17 @@ export function StockOut(){
       );
       if(editMode)window.location.href='/';
     }catch(e:any){
-      alert(`${editMode?'Update':'Dispatch'} failed: ${e.message||'Unknown error'}\n\nCheck IMEI status in IMEI Tracker.`);
+      if(editMode?.txnIds?.length){
+        // The original was reversed before this point, so the entry no longer
+        // exists. Say so, rather than letting it look like nothing happened.
+        alert(
+          `⚠ Update failed after the original entry was reversed.\n\n${e.message||'Unknown error'}\n\n`+
+          `The original Stock Out has been removed and the replacement was NOT saved — `+
+          `the units are back in stock. Re-enter this dispatch to complete it.`
+        );
+      }else{
+        alert(`Dispatch failed: ${e.message||'Unknown error'}\n\nCheck IMEI status in IMEI Tracker.`);
+      }
     }
     finally{setBusy(false);}
   },[rows,whId,cust,inv,doc,moveTo,editMode]);
