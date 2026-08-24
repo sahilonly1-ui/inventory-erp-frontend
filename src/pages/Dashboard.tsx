@@ -4,7 +4,7 @@ import { useIsPhone } from '../mobile/ui';
 import { api, getAccessToken } from '../api/client';
 
 // ── Types ──────────────────────────────────────────────────────────────────
-interface Txn { id:string; type:string; qty:number; product:string; productId:string; ean:string; vendor?:string; vendorId?:string; warehouse:string; warehouseId:string; createdAt:string; }
+interface Txn { id:string; type:string; qty:number; product:string; productId:string; ean:string; vendor?:string; vendorId?:string; warehouse:string; warehouseId:string; createdAt:string; referenceId?:string; }
 interface Daily { totals:{stockInUnits:number;stockOutUnits:number;stockInTxns:number;stockOutTxns:number;imeiIn:number;imeiOut:number}; byProduct:{productId:string;ean:string;model:string;brand:string;inQty:number;outQty:number;vendors:string[]}[]; recentTxns:Txn[]; }
 interface Stats { products:number; activeProducts:number; vendors:number; categories:number; brands:number; today:{stockIn:number;stockOut:number;imeiScanned:number}; }
 interface Supplier { id:string; name:string; }
@@ -385,7 +385,10 @@ export function Dashboard() {
         <div style={{padding:'10px 14px',display:'flex',alignItems:'center',gap:10,background:'#f8fafc',borderBottom:open?'1px solid #e2e8f0':'none'}}>
           <div onClick={()=>setOpen(x=>!x)} style={{flex:1,cursor:'pointer'}}>
             <div style={{fontWeight:700,fontSize:13,color:'#0f172a'}}>{vendor}</div>
-            <div style={{fontSize:11,color:'#94a3b8',marginTop:1}}>{txns.length} transaction{txns.length!==1?'s':''} · {sign==='+'?'':sign}{total} units · {new Date(txns[0].createdAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})} {new Date(txns[0].createdAt).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</div>
+            <div style={{fontSize:11,color:'#94a3b8',marginTop:1}}>
+              {txns.length} transaction{txns.length!==1?'s':''} · {sign==='+'?'':sign}{total} units · {new Date(txns[0].createdAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})} {new Date(txns[0].createdAt).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}
+              {txns[0].referenceId && <span style={{marginLeft:6,color:'#2563eb',fontWeight:600}}>· INV: {txns[0].referenceId}</span>}
+            </div>
           </div>
           <span style={{fontWeight:800,fontSize:14,color}}>{sign==='+'?'':sign}{total}</span>
           <ActionBtns ids={allIds} label={vendor} sign={sign}/>
