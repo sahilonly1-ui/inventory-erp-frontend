@@ -424,7 +424,7 @@ export function StockIn(){
       alert(`${editMode?'Update':'Commit'} failed: ${msg}\n\nTip: Check if any IMEI was previously scanned (use IMEI Tracker to verify).`);
     }
     finally{setBusy(false);}
-  },[rows,whId,suppId,supp,inv,doc,moveTo,editMode]);
+  },[rows,whId,suppId,supp,inv,doc,moveTo,editMode,date]);
 
   const resolveSupp=useCallback(async(name:string,state?:string)=>{
     const t=toT(name);

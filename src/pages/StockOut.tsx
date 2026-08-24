@@ -323,7 +323,7 @@ export function StockOut(){
       }
     }
     finally{setBusy(false);}
-  },[rows,whId,cust,inv,doc,moveTo,editMode]);
+  },[rows,whId,cust,inv,doc,moveTo,editMode,date,custId]);
 
   // ── Derived ────────────────────────────────────────────────────────────────
   // The customer is stored as a counterparty record, the same way Stock In
