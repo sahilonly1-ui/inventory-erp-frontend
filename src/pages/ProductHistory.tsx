@@ -9,6 +9,7 @@ interface Movement {
   quantity: number;
   balanceAfter: number;
   counterparty: string | null;
+  invoiceNo: string | null;
   warehouse: string | null;
   user: string | null;
   remarks: string | null;
@@ -141,7 +142,7 @@ export default function ProductHistory() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ background: '#f8fafc' }}>
-                    {['Date', 'Movement', 'Qty', 'Balance', 'Party', 'By', 'Units'].map(h => (
+                    {['Date', 'Movement', 'Qty', 'Balance', 'Party', 'Invoice', 'By', 'Units'].map(h => (
                       <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '.05em', borderBottom: '1px solid #e2e8f0', whiteSpace: 'nowrap' }}>{h}</th>
                     ))}
                   </tr>
@@ -195,6 +196,9 @@ function MovementRow({ m }: { m: Movement }) {
         </td>
         <td style={{ ...td, fontWeight: 700, color: '#0f172a' }}>{m.balanceAfter}</td>
         <td style={{ ...td, color: '#475569' }}>{m.counterparty ?? '—'}</td>
+        <td style={{ ...td, color: m.invoiceNo ? '#2563eb' : '#cbd5e1', fontWeight: m.invoiceNo ? 600 : 400 }}>
+          {m.invoiceNo ?? '—'}
+        </td>
         <td style={{ ...td, color: '#64748b', fontSize: 12 }}>{m.user ?? '—'}</td>
         <td style={td}>
           {hasCodes
@@ -207,7 +211,7 @@ function MovementRow({ m }: { m: Movement }) {
 
       {open && (
         <tr style={{ borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}>
-          <td colSpan={7} style={{ padding: '4px 14px 14px 34px' }}>
+          <td colSpan={8} style={{ padding: '4px 14px 14px 34px' }}>
             <SourceNote source={m.codeSource} />
             <div style={{
               display: 'grid',
@@ -294,6 +298,7 @@ function MovementCard({ m }: { m: Movement }) {
       </div>
       <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #e6e9ef', fontSize: 12, color: '#475569', display: 'grid', gap: 4 }}>
         {m.counterparty && <div>Party: {m.counterparty}</div>}
+        {m.invoiceNo && <div>Invoice: {m.invoiceNo}</div>}
         {m.user && <div>By: {m.user}</div>}
         {!hasCodes && <div style={{ color: '#b45309' }}>No unit codes recorded</div>}
         {hasCodes && !open && (
