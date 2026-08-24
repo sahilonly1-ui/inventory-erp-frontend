@@ -74,6 +74,7 @@ export function StockIn(){
   const[editMode,setEditMode]=useState<EditMode|null>(null); // set when redirected from Dashboard Edit
   const lastEan=useRef<Record<number,{v:string;t:number}>>({});
   const lastSrno=useRef<Record<number,{v:string;t:number}>>({});
+  const restored=useRef(false);
   const refs=useRef<Record<string,HTMLInputElement|null>>({});
   const R=(i:number,c:FC)=>(el:HTMLInputElement|null)=>{refs.current[`${i}-${c}`]=el;};
   const ERef=useRef<(i:number,e:string)=>void>(()=>{});
@@ -101,8 +102,16 @@ export function StockIn(){
     // Normal mode: load local draft
     const d=localStorage.getItem(DK);
     if(d){try{const{r,s,iv,dt}=JSON.parse(d);if(r?.some((x:Row)=>x.status!=='empty')){setRows(r);if(s)setSupp(s);if(iv)setInv(iv);if(dt)setDate(dt);}}catch{}}
+    restored.current=true;
   },[searchParams]);
-  useEffect(()=>{if(rows.some(r=>r.status!=='empty'))localStorage.setItem(DK,JSON.stringify({r:rows,s:supp,iv:inv,dt:date}));},[rows,supp,inv,date]);
+
+  // Persist only after the restore pass has run. Without this the save effect
+  // fires on mount with the default date and clobbers the stored one, so a
+  // draft started yesterday silently became today's entry.
+  useEffect(()=>{
+    if(!restored.current)return;
+    if(rows.some(r=>r.status!=='empty'))localStorage.setItem(DK,JSON.stringify({r:rows,s:supp,iv:inv,dt:date}));
+  },[rows,supp,inv,date]);
 
   const moveTo=useCallback((ri:number,cell:FC)=>{
     setAr(ri);setFc(cell);
@@ -321,6 +330,14 @@ export function StockIn(){
     }
         const sv=rows.filter(r=>r.status==='saved'&&r.productId);
     if(!sv.length||!whId)return;
+
+    // A draft can sit for days; make an unintended date impossible to miss.
+    const todayStr=new Date().toISOString().slice(0,10);
+    if(date!==todayStr){
+      const dl=new Date(date+'T12:00:00Z').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric',timeZone:'UTC'});
+      if(!confirm(`This entry will be recorded on ${dl}, not today.\n\nContinue?`))return;
+    }
+
     setBusy(true);
     const rmk=`${editMode?'EDIT:':''}${doc}${supp?' | '+supp:''}${inv?' | INV:'+inv:''}`;
     try{
