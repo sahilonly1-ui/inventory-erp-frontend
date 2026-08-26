@@ -23,6 +23,7 @@ interface Movement {
 
 interface History {
   product: { id: string; ean: string; model: string; brand: string };
+  duplicateProducts: { id: string; model: string }[] | null;
   currentStock: number;
   byWarehouse: { warehouse: string; quantity: number }[];
   trackedUnits: number;
@@ -122,6 +123,16 @@ export default function ProductHistory() {
               <Stat label="Total received" value={data.totalIn} tone="#16a34a" />
               <Stat label="Total dispatched" value={data.totalOut} tone="#dc2626" />
             </div>
+            {data.duplicateProducts && (
+              <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, background: '#fef2f2', border: '1px solid #fecaca', fontSize: 12, color: '#b91c1c', lineHeight: 1.55 }}>
+                <b>This barcode exists on {data.duplicateProducts.length} separate products.</b> Stock and history are
+                split across them, which is why other screens can show different numbers. The totals here cover all of them:
+                <div style={{ marginTop: 6 }}>
+                  {data.duplicateProducts.map(p => <div key={p.id}>· {p.model}</div>)}
+                </div>
+                Merge or correct the duplicates in Product Master to stop the split.
+              </div>
+            )}
             {data.trackedUnits < data.currentStock && (
               <div style={{ marginTop: 12, padding: '9px 12px', borderRadius: 8, background: '#fffbeb', border: '1px solid #fde68a', fontSize: 12, color: '#92400e', lineHeight: 1.5 }}>
                 {data.currentStock - data.trackedUnits} unit{data.currentStock - data.trackedUnits !== 1 ? 's have' : ' has'} no IMEI or serial recorded —
