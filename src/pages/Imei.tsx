@@ -305,9 +305,15 @@ export function Imei() {
 
       if(!preview.restored&&deletedCount){
         if(!confirm(`Bring back ${deletedCount} unit(s) that a deleted Stock Out removed from the tracker?\n\nThey will return as IN STOCK.`))return;
-        const back=await api<{restored:number}>('/imei/restore-deleted',
+        const back=await api<{restored:number;skippedNoEntry?:number}>('/imei/restore-deleted',
           {method:'POST',body:JSON.stringify({dryRun:false})});
-        alert(`✓ Brought back ${back.restored} unit(s).`);
+        alert(
+          `✓ Brought back ${back.restored} unit(s).`+
+          (back.skippedNoEntry
+            ? `\n\n${back.skippedNoEntry} unit(s) were left alone because their Stock In entry no longer exists — `+
+              `restoring those would add stock with nothing behind it.`
+            : '')
+        );
         load(search,status,imeiType,swiped,activated,page,brand);
         return;
       }
