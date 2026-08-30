@@ -537,9 +537,12 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
           max={new Date().toISOString().slice(0, 10)}
           onChange={e => setAsOf(e.target.value)}
           title="Show stock as it stood on this date"
-          style={{ height:34, padding:'0 10px', border:`1px solid ${asOf ? '#f59e0b' : '#e2e8f0'}`,
+          style={{ height:34, padding:'0 8px', border:`1px solid ${asOf ? '#f59e0b' : '#e2e8f0'}`,
                    borderRadius:8, background: asOf ? '#fffbeb' : '#fff', fontSize:12,
-                   color:'#0f172a', cursor:'pointer' }}
+                   color:'#0f172a', cursor:'pointer',
+                   // Sized to its content. Without an explicit width it stretches
+                   // to fill the toolbar row and dwarfs every control beside it.
+                   width:150, flex:'0 0 auto', boxSizing:'border-box' }}
         />
         {asOf && (
           <button onClick={() => setAsOf('')}
