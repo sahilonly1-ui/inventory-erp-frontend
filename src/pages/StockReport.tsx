@@ -9,7 +9,10 @@ interface ReportRow {
   category: string; categoryId: string; imeiRequired: boolean;
   totalQty: number; retail: number; activated: number;
 }
-interface ReportData { rows: ReportRow[]; categories: Category[]; brands: string[]; }
+interface ReportData { rows: ReportRow[]; categories: Category[]; brands: string[]; asOf?: string | null; }
+
+const asOfLabel = (d: string) =>
+  new Date(`${d}T12:00:00Z`).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric', timeZone:'UTC' });
 
 const fmtDate = (d: Date) =>
   d.toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
@@ -179,11 +182,13 @@ export function StockReport() {
   const reportRef = useRef<HTMLDivElement>(null);
 
   const [defaultApplied, setDefaultApplied] = useState(false);
+  // Empty means live stock. A date rebuilds the position as it stood that day.
+  const [asOf, setAsOf] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await api<ReportData>('/inventory/stock-report');
+      const r = await api<ReportData>(`/inventory/stock-report${asOf ? `?date=${asOf}` : ''}`);
       setData(r);
       setLastFetch(new Date());
       // On first load, default to showing only Smartphones + Tabs
@@ -199,7 +204,7 @@ export function StockReport() {
       }
     } catch (e: any) { alert('Failed to load: ' + e.message); }
     finally { setLoading(false); }
-  }, [defaultApplied]);
+  }, [defaultApplied, asOf]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -298,7 +303,7 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
 .gt{margin-top:2mm;background:#1e293b!important;color:#fff!important;padding:2.5pt 8pt;font-size:8pt;font-weight:700;display:flex;gap:15mm;break-inside:avoid;page-break-inside:avoid;break-before:avoid;page-break-before:avoid;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 </style></head><body>
 <div id="wrap">
-  <h1>📦 iTechArena ERP — Stock Report</h1>
+  <h1>📦 iTechArena ERP — Stock Report${asOf ? ` — as on ${asOfLabel(asOf)}` : ''}</h1>
   <div class="meta">Date: ${fmtDate(new Date())} &nbsp;·&nbsp; Brands: ${brandList.join(', ')} &nbsp;·&nbsp; Total: ${grandTotal} units (Retail: ${grandRetail} | ACC: ${grandActivated})</div>
   <div class="cols">${columnsHTML}</div>
   <div class="gt"><span>GRAND TOTAL</span><span>Qty: ${grandTotal}</span><span>Retail: ${grandRetail}</span><span>ACC: ${grandActivated}</span></div>
@@ -415,7 +420,7 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
 
       container.innerHTML = `
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
-          <div style="font-size:16px;font-weight:800;color:#1e293b">📦 iTechArena ERP — Stock Report</div>
+          <div style="font-size:16px;font-weight:800;color:#1e293b">📦 iTechArena ERP — Stock Report${asOf ? ` — as on ${asOfLabel(asOf)}` : ''}</div>
           <div style="font-size:10px;color:#64748b">${fmtDate(new Date())} · Total: ${grandTotal} units · Retail: ${grandRetail} · ACC: ${grandActivated}</div>
         </div>
         <div style="display:flex;gap:8px;align-items:flex-start">
@@ -489,7 +494,11 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
       <div style={{ padding:'10px 16px', background:'#fff', borderBottom:'1px solid #e2e8f0', display:'flex', alignItems:'center', gap:10, flexShrink:0, flexWrap:'wrap' }}>
         <div>
           <div style={{ fontSize:15, fontWeight:800, color:'#0f172a' }}>Stock Report</div>
-          <div style={{ fontSize:11, color:'#94a3b8' }}>Brand-wise · {lastFetch ? fmtDate(lastFetch) : 'Loading…'}</div>
+          <div style={{ fontSize:11, color: asOf ? '#b45309' : '#94a3b8' }}>
+            {asOf
+              ? `Brand-wise · position as on ${asOfLabel(asOf)} — not live stock`
+              : `Brand-wise · ${lastFetch ? fmtDate(lastFetch) : 'Loading…'}`}
+          </div>
         </div>
         <div style={{ flex:1 }} />
 
@@ -517,6 +526,25 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
           <button onClick={() => { setExCats(new Set()); setExBrands(new Set()); }}
             style={{ height:34, padding:'0 12px', border:'1px solid #fca5a5', borderRadius:8, background:'#fef2f2', fontSize:12, color:'#dc2626', cursor:'pointer', fontWeight:600 }}>
             ✕ Reset
+          </button>
+        )}
+
+        {/* As-of date. Empty means live stock; a past date rebuilds the
+            position from the movement history for that day. */}
+        <input
+          type="date"
+          value={asOf}
+          max={new Date().toISOString().slice(0, 10)}
+          onChange={e => setAsOf(e.target.value)}
+          title="Show stock as it stood on this date"
+          style={{ height:34, padding:'0 10px', border:`1px solid ${asOf ? '#f59e0b' : '#e2e8f0'}`,
+                   borderRadius:8, background: asOf ? '#fffbeb' : '#fff', fontSize:12,
+                   color:'#0f172a', cursor:'pointer' }}
+        />
+        {asOf && (
+          <button onClick={() => setAsOf('')}
+            style={{ height:34, padding:'0 12px', border:'1px solid #fde68a', borderRadius:8, background:'#fffbeb', fontSize:12, color:'#92400e', cursor:'pointer', fontWeight:600 }}>
+            ← Live stock
           </button>
         )}
 
