@@ -436,19 +436,43 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
 
       await new Promise(r => setTimeout(r, 200)); // let the DOM settle
 
+      // The report is laid out at 1122px, so a fixed scale of 2 produced a
+      // 2244px image — soft once WhatsApp recompresses it. Derive the scale
+      // from a target width instead, so the output stays sharp regardless of
+      // how the layout width changes later.
+      const TARGET_WIDTH = 3000;
+      const TARGET_HEIGHT = 2600;
+      const w = container.offsetWidth || 1122;
+      const h = container.offsetHeight || 1;
+      // Whichever dimension needs more magnification decides the scale, so both
+      // minimums are met; capped to keep the canvas within browser limits.
+      let scale = Math.min(6, Math.max(2, TARGET_WIDTH / w, TARGET_HEIGHT / h));
+
+      // Browsers cap canvas dimensions (commonly 16384px) and total area. A tall
+      // report at high scale silently produces a blank image instead of failing,
+      // so pull the scale back until it fits rather than exporting nothing.
+      const MAX_EDGE = 16000;
+      const MAX_AREA = 100_000_000;
+      const fitEdge = Math.min(MAX_EDGE / w, MAX_EDGE / h);
+      const fitArea = Math.sqrt(MAX_AREA / (w * h));
+      scale = Math.max(1, Math.min(scale, fitEdge, fitArea));
+
       const canvas = await html2canvas(container, {
-        scale: 2,
+        scale,
         useCORS: true,
         backgroundColor: '#ffffff',
-        width: container.offsetWidth,
-        height: container.offsetHeight,
+        width: w,
+        height: h,
       });
 
       document.body.removeChild(container);
 
       // saveFile, canvasToBlob already imported statically
       const blob = await canvasToBlob(canvas);
-      await saveFile(`StockReport_${new Date().toISOString().slice(0,10)}.png`, blob, 'image/png');
+      await saveFile(
+        `StockReport_${new Date().toISOString().slice(0,10)}_${canvas.width}x${canvas.height}.png`,
+        blob, 'image/png',
+      );
     } catch (e: any) {
       alert('Image download failed: ' + e.message + '\n\nTip: Use Print → Save as PDF instead.');
     } finally {
