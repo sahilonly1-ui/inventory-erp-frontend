@@ -263,7 +263,7 @@ export function StockReport() {
             <tr class="ch"><th class="cn">Product Name</th><th class="cq">Qty</th><th class="cr">Retail</th><th class="ca">ACC</th></tr>
           </thead>
           <tbody>
-            ${bRows.map(r=>`<tr><td class="cn">${r.model}</td><td class="cq">${r.totalQty}</td><td class="cr">${r.retail}</td><td class="ca">${r.activated||0}</td></tr>`).join('')}
+            ${bRows.map(r=>`<tr><td class="cn">${r.model}${r.demo?` <span class="dm">+${r.demo} demo</span>`:''}</td><td class="cq">${r.totalQty}</td><td class="cr">${r.retail}</td><td class="ca">${r.activated||0}</td></tr>`).join('')}
           </tbody>
           <tfoot><tr class="bt"><td class="cn">Total — ${brand}</td><td class="cq">${bTotal}</td><td class="cr">${bRet}</td><td class="ca">${bAcc}</td></tr></tfoot>
         </table>
@@ -299,6 +299,7 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
 .bh{background:#1e293b!important;color:#fff!important;font-size:8pt;font-weight:700;text-align:left;padding:2pt 4pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .ch th{background:#e8e8e8!important;font-size:7pt;font-weight:700;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .cn{text-align:left;font-size:7pt;white-space:nowrap}
+.dm{font-size:5.5pt;font-weight:700;color:#b45309;background:#fffbeb;padding:1px 4px;border-radius:6px}
 .cq,.cr,.ca{text-align:center;width:22pt;font-weight:700;font-size:7.5pt}
 .bt td{background:#f0f0f0!important;font-weight:700;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .gt{margin-top:2mm;background:#1e293b!important;color:#fff!important;padding:2.5pt 8pt;font-size:8pt;font-weight:700;display:flex;gap:15mm;break-inside:avoid;page-break-inside:avoid;break-before:avoid;page-break-before:avoid;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -409,7 +410,7 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
           <div style="background:#1e293b;color:#fff;padding:4px 8px;font-size:9px;font-weight:800">${brand}</div>
           <table style="width:100%;border-collapse:collapse;font-size:8px">
             <tr style="background:#e8e8e8"><th style="padding:2px 6px;text-align:left;border:0.5px solid #aaa;white-space:nowrap">Product Name</th><th style="padding:2px;text-align:center;width:32px;border:0.5px solid #aaa">Qty</th><th style="padding:2px;text-align:center;width:40px;border:0.5px solid #aaa;color:#16a34a">Retail</th><th style="padding:2px;text-align:center;width:30px;border:0.5px solid #aaa;color:#7c3aed">ACC</th></tr>
-            ${bRows.map((r,i)=>`<tr style="background:${i%2===0?'#fff':'#fafafa'}"><td style="padding:2px 6px;border:0.5px solid #eee;white-space:nowrap">${r.model}</td><td style="padding:2px;text-align:center;font-weight:700;border:0.5px solid #eee">${r.totalQty}</td><td style="padding:2px;text-align:center;font-weight:700;color:#16a34a;border:0.5px solid #eee">${r.retail}</td><td style="padding:2px;text-align:center;font-weight:700;color:${r.activated>0?'#7c3aed':'#ccc'};border:0.5px solid #eee">${r.activated||0}</td></tr>`).join('')}
+            ${bRows.map((r,i)=>`<tr style="background:${i%2===0?'#fff':'#fafafa'}"><td style="padding:2px 6px;border:0.5px solid #eee;white-space:nowrap">${r.model}${r.demo?` <span style="font-size:6px;font-weight:700;color:#b45309;background:#fffbeb;padding:1px 4px;border-radius:6px">+${r.demo} demo</span>`:''}</td><td style="padding:2px;text-align:center;font-weight:700;border:0.5px solid #eee">${r.totalQty}</td><td style="padding:2px;text-align:center;font-weight:700;color:#16a34a;border:0.5px solid #eee">${r.retail}</td><td style="padding:2px;text-align:center;font-weight:700;color:${r.activated>0?'#7c3aed':'#ccc'};border:0.5px solid #eee">${r.activated||0}</td></tr>`).join('')}
             <tr style="background:#f0f0f0;font-weight:700"><td style="padding:2px 6px;border:0.5px solid #ccc">Total — ${brand}</td><td style="padding:2px;text-align:center;border:0.5px solid #ccc">${bTotal}</td><td style="padding:2px;text-align:center;color:#16a34a;border:0.5px solid #ccc">${bRet}</td><td style="padding:2px;text-align:center;color:#7c3aed;border:0.5px solid #ccc">${bAcc}</td></tr>
           </table>
         </div>`;
