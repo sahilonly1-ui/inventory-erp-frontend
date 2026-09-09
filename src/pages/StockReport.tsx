@@ -7,7 +7,7 @@ interface Category  { id: string; name: string; }
 interface ReportRow {
   productId: string; ean: string; model: string; brand: string;
   category: string; categoryId: string; imeiRequired: boolean;
-  totalQty: number; retail: number; activated: number;
+  totalQty: number; retail: number; activated: number; demo?: number;
 }
 interface ReportData { rows: ReportRow[]; categories: Category[]; brands: string[]; asOf?: string | null; }
 
@@ -222,6 +222,7 @@ export function StockReport() {
   const grandTotal     = rows.reduce((s, r) => s + r.totalQty,   0);
   const grandRetail    = rows.reduce((s, r) => s + r.retail,     0);
   const grandActivated = rows.reduce((s, r) => s + r.activated,  0);
+  const grandDemo      = rows.reduce((s, r) => s + (r.demo || 0), 0);
 
   const catName   = data?.categories.filter(c => !exCats.has(c.id)).map(c=>c.name).join(', ') || 'All Categories';
   const brandName = (data?.brands ?? []).filter(b => !exBrands.has(b)).join(', ') || 'All Brands';
@@ -574,6 +575,9 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
           { l:'Total Units',   v:grandTotal,    c:'#2563eb' },
           { l:'Retail',        v:grandRetail,   c:'#16a34a' },
           { l:'Activated/ACC', v:grandActivated,c:'#7c3aed' },
+          // Demo units are shown here, separately from Retail — they are not
+          // sellable stock and were being counted as Retail before this fix.
+          { l:'Demo',          v:grandDemo,     c:'#d97706' },
           { l:'Brands',        v:brandList.length,c:'#0891b2'},
         ].map(k => (
           <div key={k.l} style={{ padding:'8px 16px', borderRight:'1px solid #e2e8f0' }}>
@@ -626,7 +630,14 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
                     <tbody>
                       {bRows.map((r,idx) => (
                         <tr key={r.productId} style={{ background:idx%2===0?'#fff':'#fafafa', borderBottom:'1px solid #f1f5f9' }}>
-                          <td style={{ padding:'4px 10px', color:'#0f172a', fontSize:11 }}>{r.model}</td>
+                          <td style={{ padding:'4px 10px', color:'#0f172a', fontSize:11 }}>
+                            {r.model}
+                            {!!r.demo && (
+                              <span style={{ marginLeft:6, fontSize:9, fontWeight:700, color:'#d97706', background:'#fffbeb', padding:'1px 6px', borderRadius:8 }}>
+                                +{r.demo} demo
+                              </span>
+                            )}
+                          </td>
                           <td style={{ padding:'4px 8px', textAlign:'center', fontWeight:700, color:'#374151' }}>{r.totalQty}</td>
                           <td style={{ padding:'4px 8px', textAlign:'center', fontWeight:700, color:'#16a34a' }}>{r.retail}</td>
                           <td style={{ padding:'4px 8px', textAlign:'center', fontWeight:700, color:r.activated>0?'#7c3aed':'#cbd5e1' }}>{r.activated||0}</td>
