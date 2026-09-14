@@ -1,8 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { saveFile, canvasToBlob } from '../native/download';
 import { useIsPhone, M, MCard, MPill, MEmpty } from '../mobile/ui';
 import { api, getAccessToken } from '../api/client';
-import { ImeiBulkUpload } from './ImeiBulkUpload';
+
+// Pulls in the xlsx library — kept out of the main IMEI Tracker chunk since
+// most visits never open this modal.
+const ImeiBulkUpload = lazy(() => import('./ImeiBulkUpload').then(m => ({ default: m.ImeiBulkUpload })));
 
 interface ImeiUnit {
   id:string; imei1:string; imei2?:string; status:string; imeiType:string;
@@ -734,10 +737,12 @@ export function Imei() {
         </div>
       )}
       {showBulk && (
-        <ImeiBulkUpload
-          onClose={()=>setShowBulk(false)}
-          onDone={()=>{ load(search,status,imeiType,swiped,activated,page,brand); }}
-        />
+        <Suspense fallback={null}>
+          <ImeiBulkUpload
+            onClose={()=>setShowBulk(false)}
+            onDone={()=>{ load(search,status,imeiType,swiped,activated,page,brand); }}
+          />
+        </Suspense>
       )}
 
       {/* ── Date Picker Modal for Swiped / Activated ── */}
