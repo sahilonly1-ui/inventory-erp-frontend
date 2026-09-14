@@ -32,8 +32,18 @@ export class NetworkError extends Error {
   }
 }
 
-let accessToken: string | null = null;
-export const setAccessToken = (t: string | null) => { accessToken = t; };
+// The access token is persisted too, not just held in memory. Without this,
+// every page reload started with no token, forced a refresh round-trip before
+// the first real request, and on a cold Render instance that round-trip alone
+// could take 20-30s — the slow-login complaint. A still-valid token now lets
+// the very first request go out immediately.
+const ACCESS_KEY = 'erp_access_token';
+let accessToken: string | null = localStorage.getItem(ACCESS_KEY);
+export const setAccessToken = (t: string | null) => {
+  accessToken = t;
+  if (t) localStorage.setItem(ACCESS_KEY, t);
+  else localStorage.removeItem(ACCESS_KEY);
+};
 export const getAccessToken = () => accessToken;
 
 const REFRESH_KEY = 'erp_refresh_token';
@@ -42,6 +52,22 @@ export const setRefreshToken = (t: string | null) => {
   else localStorage.removeItem(REFRESH_KEY);
 };
 export const getRefreshToken = () => localStorage.getItem(REFRESH_KEY);
+
+/** Seconds-since-epoch the current access token expires at, or null if it
+ *  cannot be read (missing, malformed — never worth failing over). */
+function accessTokenExpiry(): number | null {
+  if (!accessToken) return null;
+  try {
+    const payload = JSON.parse(atob(accessToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return typeof payload.exp === 'number' ? payload.exp : null;
+  } catch { return null; }
+}
+
+/** True while the token still has enough life left to skip a refresh. */
+export function accessTokenLooksValid(): boolean {
+  const exp = accessTokenExpiry();
+  return exp !== null && exp * 1000 > Date.now() + 15_000; // 15s safety margin
+}
 
 // Default timeout — 45s is long enough for Render free-tier cold start (~30s).
 const DEFAULT_TIMEOUT_MS = 45_000;
@@ -105,6 +131,41 @@ async function tryRefresh(): Promise<boolean> {
 
   try { return await refreshInFlight; }
   finally { refreshInFlight = null; }
+}
+
+/**
+ * Refreshes the access token shortly before it expires, while the app is open.
+ *
+ * Without this, every renewal happened reactively — a request would hit a 401
+ * first, then wait for the refresh round-trip before retrying. That's the
+ * visible stall this replaces: with a 12h access token there is ample time to
+ * renew quietly in the background, so a request in progress almost never has
+ * to wait on it.
+ */
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+export function cancelProactiveRefresh(): void {
+  if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
+}
+export function scheduleProactiveRefresh(): void {
+  if (refreshTimer) clearTimeout(refreshTimer);
+  const exp = (() => {
+    if (!accessToken) return null;
+    try {
+      const payload = JSON.parse(atob(accessToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      return typeof payload.exp === 'number' ? payload.exp * 1000 : null;
+    } catch { return null; }
+  })();
+  if (!exp) return;
+
+  // Refresh at 80% of the remaining life, floored at 10s so a very short-lived
+  // token (tests, misconfiguration) cannot spin the timer continuously.
+  const delay = Math.max(10_000, (exp - Date.now()) * 0.8);
+  refreshTimer = setTimeout(async () => {
+    if (getRefreshToken()) {
+      await tryRefresh();
+      scheduleProactiveRefresh(); // chain: each refresh schedules the next
+    }
+  }, delay);
 }
 
 export async function api<T = unknown>(path: string, init: RequestInit = {}, withAuth = true, timeoutMs?: number): Promise<T> {

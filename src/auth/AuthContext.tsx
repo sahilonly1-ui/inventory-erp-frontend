@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { api, setAccessToken, setRefreshToken, getRefreshToken } from '../api/client';
+import { api, setAccessToken, setRefreshToken, getRefreshToken, scheduleProactiveRefresh, cancelProactiveRefresh } from '../api/client';
 import type { User } from '../api/types';
 
 interface AuthCtx {
@@ -19,7 +19,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     (async () => {
       if (getRefreshToken()) {
-        try { setUser(await api<User>('/auth/me')); } catch { /* invalid session */ }
+        // A persisted access token that still has life left skips the refresh
+        // round-trip entirely — this is what makes a reload fast. api() still
+        // falls back to a refresh on its own if the token turns out to be
+        // stale (clock drift, revoked elsewhere).
+        try {
+          setUser(await api<User>('/auth/me'));
+          scheduleProactiveRefresh();
+        } catch { /* invalid session */ }
       }
       setLoading(false);
     })();
@@ -34,9 +41,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAccessToken(data.accessToken);
     setRefreshToken(data.refreshToken);
     setUser(await api<User>('/auth/me'));
+    scheduleProactiveRefresh();
   };
 
   const logout = () => {
+    cancelProactiveRefresh();
     setAccessToken(null);
     setRefreshToken(null);
     setUser(null);
