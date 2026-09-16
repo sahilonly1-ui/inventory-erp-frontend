@@ -7,7 +7,7 @@ interface Category  { id: string; name: string; }
 interface ReportRow {
   productId: string; ean: string; model: string; brand: string;
   category: string; categoryId: string; imeiRequired: boolean;
-  totalQty: number; retail: number; activated: number; demo?: number;
+  totalQty: number; retail: number; activated: number; demo?: number; openBox?: number;
 }
 interface ReportData { rows: ReportRow[]; categories: Category[]; brands: string[]; asOf?: string | null; }
 
