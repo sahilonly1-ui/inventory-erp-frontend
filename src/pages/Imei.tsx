@@ -161,7 +161,6 @@ export function Imei() {
   const [allBrands,setAllBrands] = useState<string[]>([]);
   const [showBulk,setShowBulk]   = useState(false);
   const [updatingId,setUpdatingId] = useState<string|null>(null);
-  const [expandedId,setExpandedId] = useState<string|null>(null);
   // Date picker for swiped/activated: { id, field: 'swiped'|'activated', date }
   const [datePicker,setDatePicker] = useState<{id:string;field:'swiped'|'activated';date:string}|null>(null);
   const debRef = useRef<ReturnType<typeof setTimeout>>();
@@ -565,9 +564,16 @@ export function Imei() {
                       {item.product?.brand}{item.product?.ean?` · ${item.product.ean}`:''}
                     </div>
                   </div>
-                  <MPill tone={item.status==='IN_STOCK'?'good':item.status==='SOLD'?'bad':'muted'}>
-                    {item.status.replace('_',' ')}
-                  </MPill>
+                  <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4}}>
+                    <MPill tone={item.status==='IN_STOCK'?'good':item.status==='SOLD'?'bad':'muted'}>
+                      {item.status.replace('_',' ')}
+                    </MPill>
+                    {item.imeiType && item.imeiType!=='NIL' && (
+                      <span style={{padding:'2px 8px',borderRadius:10,background:TYPE_META[item.imeiType]?.bg||'#f1f5f9',color:TYPE_META[item.imeiType]?.color||'#64748b',fontWeight:700,fontSize:10,whiteSpace:'nowrap'}}>
+                        {TYPE_META[item.imeiType]?.label||item.imeiType}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div style={{display:'grid',gap:8,marginTop:12,paddingTop:12,borderTop:`1px solid ${M.color.line}`}}>
@@ -614,12 +620,10 @@ export function Imei() {
             <tbody>
               {items.map((item,idx)=>{
                 const sm = STATUS_META[item.status]||{bg:'#f1f5f9',color:'#64748b',dot:'#94a3b8'};
-                const isExp = expandedId===item.id;
                 return(
                   <>
                     <tr key={item.id}
-                      style={{background:idx%2===0?'#fff':'#fafafa',borderBottom:'1px solid #f1f5f9',cursor:'pointer'}}
-                      onClick={()=>setExpandedId(isExp?null:item.id)}>
+                      style={{background:idx%2===0?'#fff':'#fafafa',borderBottom:'1px solid #f1f5f9'}}>
                       {/* IMEI */}
                       <td style={{padding:'10px 14px',fontFamily:'monospace',fontSize:12,fontWeight:600,color:'#0f172a',whiteSpace:'nowrap'}}>
                         <div>{item.imei1}</div>
@@ -630,12 +634,20 @@ export function Imei() {
                         <div style={{fontWeight:600,color:'#0f172a',fontSize:12,wordBreak:'break-word',whiteSpace:'normal',lineHeight:1.4}}>{item.product?.model||'—'}</div>
                         <div style={{fontSize:10,color:'#94a3b8',marginTop:2}}>{item.product?.brand} · {item.product?.ean}</div>
                       </td>
-                      {/* Status */}
+                      {/* Status + Type — Type shown inline so Open Box/Demo/Second IMEI
+                          units are identifiable at a glance, no click needed. */}
                       <td style={{padding:'10px 14px',whiteSpace:'nowrap'}}>
                         <span style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 10px',borderRadius:20,background:sm.bg,color:sm.color,fontSize:11,fontWeight:700}}>
                           <span style={{width:6,height:6,borderRadius:'50%',background:sm.dot,flexShrink:0}}/>
                           {item.status.replace(/_/g,' ')}
                         </span>
+                        {item.imeiType && item.imeiType!=='NIL' && (
+                          <div style={{marginTop:4}}>
+                            <span style={{padding:'2px 8px',borderRadius:10,background:TYPE_META[item.imeiType]?.bg||'#f1f5f9',color:TYPE_META[item.imeiType]?.color||'#64748b',fontWeight:700,fontSize:10}}>
+                              {TYPE_META[item.imeiType]?.label||item.imeiType}
+                            </span>
+                          </div>
+                        )}
                       </td>
                       {/* Swiped toggle */}
                       <td style={{padding:'10px 14px',textAlign:'center'}}>
@@ -675,8 +687,14 @@ export function Imei() {
                           </div>
                         ):'—'}
                       </td>
-                      {/* Supplier */}
-                      <td style={{padding:'10px 14px',color:'#374151',fontSize:12}}>{item.supplier?.name||'—'}</td>
+                      {/* Supplier (+ Warehouse, folded in here since it was the only other
+                          field the click-to-expand panel showed) */}
+                      <td style={{padding:'10px 14px',color:'#374151',fontSize:12}}>
+                        {item.supplier?.name||'—'}
+                        {item.warehouse?.name && (
+                          <div style={{fontSize:10,color:'#94a3b8',marginTop:2}}>{item.warehouse.name}</div>
+                        )}
+                      </td>
                       {/* Stock In */}
                       <td style={{padding:'10px 14px',color:'#64748b',fontSize:11,whiteSpace:'nowrap'}}>{fmt(item.createdAt)}</td>
                       {/* Last Updated */}
@@ -692,23 +710,6 @@ export function Imei() {
                         </select>
                       </td>
                     </tr>
-                    {isExp && (
-                      <tr key={`${item.id}-exp`} style={{background:'#f0f9ff'}}>
-                        <td colSpan={11} style={{padding:'12px 24px'}}>
-                          <div style={{display:'flex',gap:32,flexWrap:'wrap',fontSize:12}}>
-                            <div><span style={{color:'#94a3b8',fontWeight:600}}>IMEI 1 </span><span style={{fontFamily:'monospace',fontWeight:700}}>{item.imei1}</span></div>
-                            {item.imei2&&<div><span style={{color:'#94a3b8',fontWeight:600}}>IMEI 2 </span><span style={{fontFamily:'monospace',fontWeight:700}}>{item.imei2}</span></div>}
-                            <div><span style={{color:'#94a3b8',fontWeight:600}}>Warehouse </span><span>{item.warehouse?.name||'—'}</span></div>
-                            <div><span style={{color:'#94a3b8',fontWeight:600}}>Type </span>
-                              <span style={{padding:'2px 8px',borderRadius:10,background:TYPE_META[item.imeiType]?.bg||'#f1f5f9',color:TYPE_META[item.imeiType]?.color||'#64748b',fontWeight:600,fontSize:11}}>
-                                {TYPE_META[item.imeiType]?.label||item.imeiType}
-                              </span>
-                            </div>
-                            <div><span style={{color:'#94a3b8',fontWeight:600}}>Added </span><span>{fmt(item.createdAt)} {fmtTime(item.createdAt)}</span></div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
                   </>
                 );
               })}
