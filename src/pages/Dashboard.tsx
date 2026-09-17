@@ -4,7 +4,7 @@ import { useIsPhone } from '../mobile/ui';
 import { api, getAccessToken } from '../api/client';
 
 // ── Types ──────────────────────────────────────────────────────────────────
-interface Txn { id:string; type:string; qty:number; product:string; productId:string; ean:string; vendor?:string; vendorId?:string; warehouse:string; warehouseId:string; createdAt:string; referenceId?:string; }
+interface Txn { id:string; type:string; qty:number; product:string; productId:string; ean:string; vendor?:string; vendorId?:string; warehouse:string; warehouseId:string; createdAt:string; referenceId?:string; remarks?:string|null; }
 interface Daily { totals:{stockInUnits:number;stockOutUnits:number;stockInTxns:number;stockOutTxns:number;imeiIn:number;imeiOut:number}; byProduct:{productId:string;ean:string;model:string;brand:string;inQty:number;outQty:number;vendors:string[]}[]; recentTxns:Txn[]; }
 interface Stats { products:number; activeProducts:number; vendors:number; categories:number; brands:number; today:{stockIn:number;stockOut:number;imeiScanned:number}; }
 interface Supplier { id:string; name:string; }
@@ -324,10 +324,31 @@ export function Dashboard() {
     }
   };
 
-  // ── Group transactions by vendor ─────────────────────────────────────────
   const inTxns=(daily?.recentTxns||[]).filter(t=>t.qty>0);
   const outTxns=(daily?.recentTxns||[]).filter(t=>t.qty<0);
-  const byVendor=(txns:Txn[])=>txns.reduce((a:Record<string,Txn[]>,t)=>{const v=t.vendor||'No Vendor';if(!a[v])a[v]=[];a[v].push(t);return a;},{});
+
+  // ── Group transactions by the entry they were actually committed as ───────
+  // Grouping by vendor name alone merged every shipment from the same
+  // supplier on the same day into one card — two separate invoices received
+  // hours apart would combine into a single editable entry, with one of
+  // their invoice numbers picked at random to display. Every commit carries
+  // a document number (SIN-/SOUT-YYYYMMDD-nnnn) in its remarks, which is a
+  // reliable per-entry key; only transactions from the very same commit share
+  // one, so this keeps separate shipments separate regardless of vendor or date.
+  const extractDoc=(remarks?:string|null):string|null=>{
+    const m=/^(?:EDIT:)?([A-Z]+-\d{8}-\d+)/.exec(remarks||'');
+    return m?m[1]:null;
+  };
+  const groupKey=(t:Txn):string=>{
+    const vendor=t.vendor||'No Vendor';
+    const doc=extractDoc(t.remarks);
+    if(doc)return `${vendor}::${doc}`;
+    // No document number available — data committed before this existed.
+    // Best available fallback: same vendor, same invoice, same minute.
+    const minute=t.createdAt.slice(0,16);
+    return `${vendor}::${t.referenceId||''}::${minute}`;
+  };
+  const byVendor=(txns:Txn[])=>txns.reduce((a:Record<string,Txn[]>,t)=>{const k=groupKey(t);if(!a[k])a[k]=[];a[k].push(t);return a;},{});
   const inGroups=byVendor(inTxns);
   const outGroups=byVendor(outTxns);
 
@@ -486,7 +507,7 @@ export function Dashboard() {
                 <div style={{fontSize:10,fontWeight:800,color:'#16a34a',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>RECEIVED — BY SUPPLIER</div>
                 {Object.keys(inGroups).length===0
                   ?<div style={{color:'#94a3b8',fontSize:13,padding:'24px 0',textAlign:'center'}}>No stock received on {fmtDateLong(date)}</div>
-                  :Object.entries(inGroups).map(([v,txns])=><VendorCard key={v} vendor={v} txns={txns} color="#16a34a" sign="+"/>)
+                  :Object.entries(inGroups).map(([k,txns])=><VendorCard key={k} vendor={txns[0].vendor||'No Vendor'} txns={txns} color="#16a34a" sign="+"/>)
                 }
               </div>
               <div>
@@ -518,7 +539,7 @@ export function Dashboard() {
                 <div style={{fontSize:10,fontWeight:800,color:'#dc2626',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>DISPATCHED — BY CUSTOMER</div>
                 {Object.keys(outGroups).length===0
                   ?<div style={{color:'#94a3b8',fontSize:13,padding:'24px 0',textAlign:'center'}}>No dispatches on {fmtDateLong(date)}</div>
-                  :Object.entries(outGroups).map(([v,txns])=><VendorCard key={v} vendor={v} txns={txns} color="#dc2626" sign="-"/>)
+                  :Object.entries(outGroups).map(([k,txns])=><VendorCard key={k} vendor={txns[0].vendor||'No Vendor'} txns={txns} color="#dc2626" sign="-"/>)
                 }
               </div>
               <div>
