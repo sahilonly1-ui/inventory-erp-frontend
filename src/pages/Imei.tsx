@@ -88,7 +88,10 @@ function FilterPill({
         <div style={{
           position:'absolute',top:'calc(100% + 6px)',left:0,zIndex:300,
           background:'#fff',border:'1px solid #e2e8f0',borderRadius:10,
-          boxShadow:'0 8px 24px rgba(0,0,0,.1)',minWidth:170,overflow:'hidden',
+          boxShadow:'0 8px 24px rgba(0,0,0,.1)',minWidth:170,
+          // A long list (Brand, and now Category) ran off the bottom of the
+          // screen with no way to reach the rest — capped and made scrollable.
+          maxHeight:320,overflowY:'auto',overscrollBehavior:'contain',
         }}>
           {options.map(([v,l])=>(
             <button key={v} onClick={()=>{onChange(v);setOpen(false);}} style={{
@@ -154,6 +157,8 @@ export function Imei() {
   const [swiped,setSwiped]     = useState('');
   const [activated,setActivated] = useState('');
   const [brand,setBrand]       = useState('');
+  const [categoryId,setCategoryId] = useState('');
+  const [allCategories,setAllCategories] = useState<{id:string;name:string}[]>([]);
   const [page,setPage]         = useState(1);
   const [exporting,setExporting] = useState(false);
   const [restoring,setRestoring] = useState(false);
@@ -167,7 +172,7 @@ export function Imei() {
   const today = new Date().toISOString().slice(0,10);
 
   const load = useCallback(async(
-    q=search, s=status, t=imeiType, sw=swiped, act=activated, pg=page, br=brand
+    q=search, s=status, t=imeiType, sw=swiped, act=activated, pg=page, br=brand, cat=categoryId
   )=>{
     setLoading(true);
     try{
@@ -178,11 +183,12 @@ export function Imei() {
       if(sw)  params.set('swiped',sw);
       if(act) params.set('activated',act);
       if(br)  params.set('brand',br);
+      if(cat) params.set('categoryId',cat);
       const d=await api<Page>(`/imei?${params}`);
       setData(d);
     }catch{}
     finally{setLoading(false);}
-  },[search,status,imeiType,swiped,activated,page,brand]);
+  },[search,status,imeiType,swiped,activated,page,brand,categoryId]);
 
   useEffect(()=>{load();},[load]);
 
@@ -197,6 +203,12 @@ export function Imei() {
         setAllBrands(bs.map((b:any)=>typeof b==='string'?b:b.name).filter(Boolean));
       }catch{ /* fall back to brands seen in the current page */ }
     })();
+    (async()=>{
+      try{
+        const cs=await api<{id:string;name:string}[]>('/products/categories');
+        setAllCategories(cs);
+      }catch{ /* category filter simply won't offer options if this fails */ }
+    })();
   },[]);
 
   const onSearch=(v:string)=>{
@@ -205,24 +217,26 @@ export function Imei() {
     debRef.current=setTimeout(()=>load(v,status,imeiType,swiped,activated,1),350);
   };
 
-  const onFilterChange=(key:'status'|'imeiType'|'swiped'|'activated'|'brand',val:string)=>{
+  const onFilterChange=(key:'status'|'imeiType'|'swiped'|'activated'|'brand'|'category',val:string)=>{
     const ns  = key==='status'    ? val : status;
     const nt  = key==='imeiType'  ? val : imeiType;
     const nsw = key==='swiped'    ? val : swiped;
     const nact= key==='activated' ? val : activated;
     const nbr = key==='brand'     ? val : brand;
+    const ncat= key==='category'  ? val : categoryId;
     if(key==='status')    setStatus(val);
     if(key==='imeiType')  setImeiType(val);
     if(key==='swiped')    setSwiped(val);
     if(key==='activated') setActivated(val);
     if(key==='brand')     setBrand(val);
+    if(key==='category')  setCategoryId(val);
     setPage(1);
-    load(search,ns,nt,nsw,nact,1,nbr);
+    load(search,ns,nt,nsw,nact,1,nbr,ncat);
   };
 
   const clearAll=()=>{
-    setSearch('');setStatus('');setImeiType('');setSwiped('');setActivated('');setBrand('');setPage(1);
-    load('','','','','',1,'');
+    setSearch('');setStatus('');setImeiType('');setSwiped('');setActivated('');setBrand('');setCategoryId('');setPage(1);
+    load('','','','','',1,'','');
   };
 
   // When toggle is OFF → turn ON with today's date directly (no popup)
@@ -372,12 +386,13 @@ export function Imei() {
 
   const items = data?.items||[];
   const total = data?.total||0;
-  const hasFilters = !!(search||status||imeiType||swiped||activated||brand);
+  const hasFilters = !!(search||status||imeiType||swiped||activated||brand||categoryId);
   // Derive unique brands from loaded items for the filter dropdown
   const brandSource = allBrands.length
     ? allBrands
     : Array.from(new Set(items.map(i=>i.product?.brand||'').filter(Boolean))).sort();
   const brandOptions:[string,string][] = [['','All Brands'],...brandSource.map(b=>[b,b] as [string,string])];
+  const categoryOptions:[string,string][] = [['','All Categories'],...allCategories.map(c=>[c.id,c.name] as [string,string])];
 
   // Icons
   const IcoStatus    = <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>;
@@ -519,6 +534,11 @@ export function Imei() {
             label="Brand" value={brand} icon={IcoBrand}
             onChange={v=>onFilterChange('brand',v)}
             options={brandOptions}
+          />
+          <FilterPill
+            label="Category" value={categoryId} icon={IcoBrand}
+            onChange={v=>onFilterChange('category',v)}
+            options={categoryOptions}
           />
           {hasFilters && (
             <button onClick={clearAll} style={{
@@ -699,11 +719,19 @@ export function Imei() {
                       <td style={{padding:'10px 14px',color:'#64748b',fontSize:11,whiteSpace:'nowrap'}}>{fmt(item.createdAt)}</td>
                       {/* Last Updated */}
                       <td style={{padding:'10px 14px',color:'#94a3b8',fontSize:11,whiteSpace:'nowrap'}}>{fmt(item.updatedAt)}</td>
-                      {/* Change Status */}
+                      {/* Change Status — locked once SOLD. This dropdown moves the ledger
+                          directly (a RETURN or ADJUSTMENT entry with no paperwork behind it),
+                          so once a unit has actually been sold to a customer, reversing that
+                          belongs to a proper return process, not a casual click here. */}
                       <td style={{padding:'10px 14px'}} onClick={e=>e.stopPropagation()}>
-                        <select value={item.status} onChange={e=>changeStatus(item.id,item.imei1,e.target.value)}
-                          disabled={updatingId===item.id}
-                          style={{height:28,padding:'0 8px',border:'1px solid #e2e8f0',borderRadius:6,fontSize:11,background:'#fff',outline:'none',cursor:'pointer'}}>
+                        <select value={item.status}
+                          onChange={e=>changeStatus(item.id,item.imei1,e.target.value)}
+                          disabled={updatingId===item.id||item.status==='SOLD'}
+                          title={item.status==='SOLD'?'Sold units are locked — reverse the Stock Out entry instead of changing status here.':undefined}
+                          style={{height:28,padding:'0 8px',border:'1px solid #e2e8f0',borderRadius:6,fontSize:11,
+                                  background:item.status==='SOLD'?'#f8fafc':'#fff',outline:'none',
+                                  cursor:item.status==='SOLD'?'not-allowed':'pointer',
+                                  color:item.status==='SOLD'?'#94a3b8':undefined}}>
                           {['IN_STOCK','SOLD','RETURNED','OPEN_BOX','SERVICE','DAMAGED','LOST'].map(s=>(
                             <option key={s} value={s}>{s.replace(/_/g,' ')}</option>
                           ))}
