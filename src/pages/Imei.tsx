@@ -732,7 +732,7 @@ export function Imei() {
                                   background:item.status==='SOLD'?'#f8fafc':'#fff',outline:'none',
                                   cursor:item.status==='SOLD'?'not-allowed':'pointer',
                                   color:item.status==='SOLD'?'#94a3b8':undefined}}>
-                          {['IN_STOCK','SOLD','RETURNED','OPEN_BOX','SERVICE','DAMAGED','LOST'].map(s=>(
+                          {['IN_STOCK','SOLD','RETURNED','OPEN_BOX','DEMO','SERVICE','DAMAGED','LOST'].map(s=>(
                             <option key={s} value={s}>{s.replace(/_/g,' ')}</option>
                           ))}
                         </select>
