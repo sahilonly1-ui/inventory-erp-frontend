@@ -355,9 +355,9 @@ export function StockOut(){
   const CI=(ex:React.CSSProperties={}):React.CSSProperties=>({width:'100%',height:'100%',border:'none',padding:'0 10px',background:'transparent',fontSize:13,color:'#101828',outline:'none',fontFamily:'inherit',...ex});
 
   return(
-    <div style={{display:'flex',flexDirection:'column',height:'100vh',background:'#fff',overflow:'hidden'}}>
+    <div className="page-root" style={{display:'flex',flexDirection:'column',height:'100vh',background:'#fff',overflow:'hidden'}}>
       {/* ── Session header ──────────────────────────────────────────────── */}
-      <div style={{background:'#fff',borderBottom:'1px solid #e2e8f0',padding:'8px 16px',flexShrink:0}}>
+      <div className="page-head" style={{background:'#fff',borderBottom:'1px solid #e2e8f0',padding:'8px 16px',flexShrink:0}}>
         <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
           <span style={{fontSize:11,fontWeight:700,color:'#dc2626',background:'#fef2f2',padding:'3px 12px',borderRadius:20,border:'1px solid #fecaca'}}>{doc}</span>
           {editMode?(
@@ -371,7 +371,7 @@ export function StockOut(){
             <span style={{fontSize:13,fontWeight:700,color:'#0f172a'}}>Stock Out Entry</span>
           )}
           <div style={{flex:1}}/>
-          <span style={{fontSize:11,color:'#94a3b8'}}>{sv.length} items · {tot} units</span>
+          {!isMobile&&<span style={{fontSize:11,color:'#94a3b8'}}>{sv.length} items · {tot} units</span>}
           {editMode?(
             <button onClick={()=>{if(!confirm('Discard changes and go back to Dashboard?'))return;setEditMode(null);window.location.href='/';}}
               style={{height:28,padding:'0 10px',border:'1px solid #fecdd3',borderRadius:6,background:'#fff5f5',color:'#dc2626',fontSize:11,fontWeight:600,cursor:'pointer'}}>
@@ -380,12 +380,14 @@ export function StockOut(){
           ):(
             <button onClick={clear} style={{height:28,padding:'0 10px',border:'1px solid #fecdd3',borderRadius:6,background:'#fff5f5',color:'#dc2626',fontSize:11,fontWeight:600,cursor:'pointer'}}>Clear All</button>
           )}
+{!isMobile&&(
           <button onClick={commit} disabled={!sv.length||busy}
             style={{height:30,padding:'0 18px',border:'none',borderRadius:7,background:(!sv.length||busy)?'#94a3b8':'#dc2626',color:'#fff',fontSize:12,fontWeight:700,cursor:(!sv.length||busy)?'not-allowed':'pointer'}}>
             {busy?(editMode?'Updating…':'Dispatching…'):editMode?`💾 Update Entry (${sv.length})`:`↑ Dispatch (${sv.length})`}
           </button>
+          )}
         </div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 148px 200px 180px',gap:8}}>
+        <div className="session-grid" style={{display:'grid',gridTemplateColumns:'1fr 148px 200px 180px',gap:8}}>
           {/* Customer autocomplete */}
           <div style={{position:'relative'}}>
             <label style={{fontSize:9,fontWeight:800,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'.08em',display:'block',marginBottom:3}}>ISSUED TO / CUSTOMER</label>
@@ -420,7 +422,7 @@ export function StockOut(){
 
       {/* ── Phone: stacked cards ─────────────────────────────────────────── */}
       {isMobile && (
-        <div style={{flex:1,overflowY:'auto',padding:M.pad,paddingBottom:150,background:M.color.bg}}>
+        <div className="page-scroll" style={{flex:1,overflowY:'auto',padding:M.pad,paddingBottom:150,background:M.color.bg}}>
           {rows.filter(r=>r.ean||r.productId).length===0 && (
             <MEmpty icon="📤" title="Nothing to dispatch yet"
               hint="Tap Scan to use the camera, or type an IMEI into the first row below." />
@@ -469,7 +471,7 @@ export function StockOut(){
 
       {/* ── Desktop: grid + summary ──────────────────────────────────────── */}
       <div style={{flex:1,display:isMobile?'none':'flex',overflow:'hidden'}}>
-        <div style={{flex:1,overflowY:'auto',overflowX:'auto'}}>
+        <div className="page-scroll" style={{flex:1,overflowY:'auto',overflowX:'auto'}}>
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:13,tableLayout:'fixed',minWidth:1020}}>
             <colgroup><col style={{width:36}}/><col style={{width:140}}/><col/><col style={{width:50}}/><col style={{width:162}}/><col style={{width:148}}/><col style={{width:80}}/><col style={{width:42}}/></colgroup>
             <thead>

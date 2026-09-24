@@ -125,7 +125,7 @@ export function Suppliers() {
   const toggle = (id:string) => setSelected(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n; });
 
   return (
-    <div style={{ display:'flex', flexDirection:'column', height:'calc(100vh - 0px)', background:'#f8fafc' }}>
+    <div className="page-root" style={{ display:'flex', flexDirection:'column', height:'calc(100vh - 0px)', background:'#f8fafc' }}>
       {/* Header */}
       <div style={{ padding:'16px 24px', borderBottom:'1px solid #e2e8f0', background:'#fff', display:'flex', alignItems:'center', gap:12 }}>
         <div>
@@ -151,7 +151,7 @@ export function Suppliers() {
         </button>
       </div>
 
-      <div style={{ flex:1, overflow:'auto', padding:'16px 24px' }}>
+      <div className="page-scroll pad-phone" style={{ flex:1, overflow:'auto', padding:'16px 24px' }}>
         {/* Add form */}
         {adding && (
           <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:12, padding:'20px 24px', marginBottom:16, boxShadow:'0 1px 4px rgba(0,0,0,.06)' }}>

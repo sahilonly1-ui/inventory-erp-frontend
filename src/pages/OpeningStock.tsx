@@ -410,7 +410,7 @@ export function OpeningStock() {
     : history;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#f8fafc', overflow: 'hidden' }}>
+    <div className="page-root" style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#f8fafc', overflow: 'hidden' }}>
 
       {/* Header — two compact rows, no flex-wrap stretching */}
       <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', flexShrink: 0 }}>
@@ -474,7 +474,7 @@ export function OpeningStock() {
 
       {/* ── SCAN TAB — phone ── */}
       {tab === 'scan' && isPhone && (
-        <div style={{ flex: 1, overflowY: 'auto', padding: M.pad, paddingBottom: 150, background: M.color.bg }}>
+        <div className="page-scroll" style={{ flex: 1, overflowY: 'auto', padding: M.pad, paddingBottom: 150, background: M.color.bg }}>
           {rows.filter(r => r.ean || r.productId).length === 0 && (
             <MEmpty icon="📷" title="Nothing scanned yet"
               hint="Tap Scan to use the camera, or type a barcode into the first row below." />
@@ -545,7 +545,7 @@ export function OpeningStock() {
       {/* ── SCAN TAB — desktop ── */}
       {tab === 'scan' && !isPhone && (
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-          <div style={{ flex: 1, overflowY: 'auto', overflowX: 'auto' }}>
+          <div className="page-scroll" style={{ flex: 1, overflowY: 'auto', overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, tableLayout: 'fixed', minWidth: 860 }}>
               <colgroup>
                 <col style={{ width: 36 }} /><col style={{ width: 150 }} /><col />

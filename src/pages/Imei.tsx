@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { saveFile, canvasToBlob } from '../native/download';
-import { useIsPhone, M, MCard, MPill, MEmpty } from '../mobile/ui';
+import { useIsPhone, M, MCard, MPill, MEmpty, MSheet, MSheetOption } from '../mobile/ui';
 import { api, getAccessToken } from '../api/client';
+import { canScan, scanOnce, buzz } from '../native/scanner';
 
 // Pulls in the xlsx library — kept out of the main IMEI Tracker chunk since
 // most visits never open this modal.
@@ -50,11 +51,15 @@ function FilterPill({
 }){
   const [open,setOpen]=useState(false);
   const ref=useRef<HTMLDivElement>(null);
+  const phone=useIsPhone();
   useEffect(()=>{
+    // On a phone the options live in a sheet outside this element, so an
+    // outside-click here would close it before the tap on an option lands.
+    if(phone) return;
     const fn=(e:MouseEvent)=>{if(ref.current&&!ref.current.contains(e.target as Node))setOpen(false);};
     document.addEventListener('mousedown',fn);
     return()=>document.removeEventListener('mousedown',fn);
-  },[]);
+  },[phone]);
 
   const active = value!=='';
   const displayLabel = value ? options.find(([v])=>v===value)?.[1] || label : label;
@@ -84,7 +89,14 @@ function FilterPill({
         )}
         {!active && <span style={{fontSize:9,color:'#94a3b8',marginLeft:2}}>▼</span>}
       </button>
-      {open && (
+      {open && phone && (
+        <MSheet title={label} onClose={()=>setOpen(false)}>
+          {options.map(([v,l])=>(
+            <MSheetOption key={v} label={l.replace(/^● /,'')} selected={value===v} onClick={()=>{onChange(v);setOpen(false);}}/>
+          ))}
+        </MSheet>
+      )}
+      {open && !phone && (
         <div style={{
           position:'absolute',top:'calc(100% + 6px)',left:0,zIndex:300,
           background:'#fff',border:'1px solid #e2e8f0',borderRadius:10,
@@ -138,9 +150,9 @@ function ToggleRow({ label, colour, on, at, busy, onToggle, onEditDate }:{
         <div style={{fontSize:13,fontWeight:700,color:on?colour:'#64748b'}}>{label}</div>
         {on&&at&&(
           <button onClick={onEditDate}
-            style={{border:'none',background:'none',padding:0,fontSize:12,color:'#64748b',
-                    textDecoration:'underline dotted',cursor:'pointer'}}>
-            {fmtDay(at)} · tap to change
+            style={{border:'none',background:'none',padding:0,fontSize:11.5,color:'#64748b',minHeight:0,
+                    textDecoration:'underline dotted',cursor:'pointer',whiteSpace:'nowrap'}}>
+            {fmtDay(at)} ✎
           </button>
         )}
       </div>
@@ -210,6 +222,34 @@ export function Imei() {
       }catch{ /* category filter simply won't offer options if this fails */ }
     })();
   },[]);
+
+  // ── Camera scan into search ────────────────────────────────────────────
+  // Box labels carry the EAN, IMEI 1/2 and serial as separate barcodes; the
+  // operator points at whichever one they have. QR codes on some phone boxes
+  // pack several values into one string, so pull the first 15-digit run out
+  // as the IMEI; anything else is searched exactly as read.
+  const [scanning,setScanning] = useState(false);
+  const cleanScan=(raw:string)=>{
+    const v=raw.trim();
+    if(/^[A-Za-z0-9\-\/._]+$/.test(v)) return v;
+    const imei=v.match(/(?<!\d)\d{15}(?!\d)/);
+    if(imei) return imei[0];
+    return v.split(/[\s,;|]+/).find(Boolean) ?? v;
+  };
+  const scanToSearch=async()=>{
+    if(scanning) return;
+    setScanning(true);
+    try{
+      const hit=await scanOnce();
+      if(!hit?.value) return;               // operator backed out
+      const code=cleanScan(hit.value);
+      clearTimeout(debRef.current);
+      setSearch(code);setPage(1);           // load() re-runs via its effect
+    }catch(e:any){
+      await buzz('error');
+      alert(e?.message ?? 'Could not open the camera.');
+    }finally{ setScanning(false); }
+  };
 
   const onSearch=(v:string)=>{
     setSearch(v);setPage(1);
@@ -409,15 +449,15 @@ export function Imei() {
   };
 
   return (
-    <div style={{display:'flex',flexDirection:'column',height:'100vh',background:'#f8fafc',overflow:'hidden'}}>
+    <div className="page-root" style={{display:'flex',flexDirection:'column',height:'100vh',background:'#f8fafc',overflow:'hidden'}}>
 
       {/* ── Header ── */}
-      <div style={{padding:'12px 20px',borderBottom:'1px solid #e2e8f0',background:'#fff',flexShrink:0}}>
+      <div className="page-head" style={{padding:'12px 20px',borderBottom:'1px solid #e2e8f0',background:'#fff',flexShrink:0}}>
 
-        {/* Title row */}
-        <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:10}}>
+        {/* Title row — actions scroll sideways on a phone instead of wrapping into a wall of buttons */}
+        <div className={isPhone?'chip-row':undefined} data-keep-row style={{display:'flex',alignItems:'center',gap:12,marginBottom:10}}>
           <div>
-            <div style={{fontSize:17,fontWeight:800,color:'#0f172a',letterSpacing:'-.3px'}}>IMEI Tracker</div>
+            {!isPhone&&<div style={{fontSize:17,fontWeight:800,color:'#0f172a',letterSpacing:'-.3px'}}>IMEI Tracker</div>}
             <div style={{fontSize:11,color:'#94a3b8',marginTop:1}}>
               {loading ? 'Loading…' : `${total.toLocaleString('en-IN')} records`}
               {hasFilters && <span style={{marginLeft:6,color:'#2563eb',fontWeight:600}}>· filtered</span>}
@@ -467,9 +507,11 @@ export function Imei() {
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
           <input value={search} onChange={e=>onSearch(e.target.value)}
-            placeholder="Search IMEI, EAN, serial no., product name, brand…"
+            placeholder={canScan()?"Scan or search IMEI, EAN, serial…":"Search IMEI, EAN, serial no., product name, brand…"}
+            inputMode="search" enterKeyHint="search"
             style={{
-              width:'100%',height:36,paddingLeft:34,paddingRight:search?32:10,
+              width:'100%',height:isPhone?44:36,paddingLeft:34,
+              paddingRight:(search?32:10)+(canScan()?44:0),
               border:'1.5px solid #e2e8f0',borderRadius:8,fontSize:13,outline:'none',
               background:'#fff',boxSizing:'border-box',color:'#0f172a',
             }}
@@ -477,16 +519,30 @@ export function Imei() {
             onBlur={e=>(e.target as HTMLInputElement).style.borderColor='#e2e8f0'}
           />
           {search && (
-            <button onClick={()=>onSearch('')} style={{
-              position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',
+            <button onClick={()=>onSearch('')} aria-label="Clear search" style={{
+              position:'absolute',right:canScan()?54:10,top:'50%',transform:'translateY(-50%)',
               width:18,height:18,borderRadius:'50%',border:'none',background:'#e2e8f0',
               color:'#64748b',fontSize:11,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',
             }}>✕</button>
           )}
+          {canScan() && (
+            <button onClick={scanToSearch} disabled={scanning} aria-label="Scan barcode to search"
+              style={{
+                position:'absolute',right:4,top:'50%',transform:'translateY(-50%)',
+                width:40,height:isPhone?36:30,borderRadius:6,border:'none',
+                background:scanning?'#94a3b8':'#2563eb',color:'#fff',cursor:scanning?'wait':'pointer',
+                display:'flex',alignItems:'center',justifyContent:'center',
+              }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                <path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/>
+                <path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/>
+              </svg>
+            </button>
+          )}
         </div>
 
-        {/* Filter pills row */}
-        <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+        {/* Filter pills row — one sideways-scrolling line on a phone */}
+        <div className={isPhone?'chip-row':undefined} data-keep-row style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
           <FilterPill
             label="Status" value={status} icon={IcoStatus}
             onChange={v=>onFilterChange('status',v)}
@@ -553,7 +609,7 @@ export function Imei() {
       </div>
 
       {/* ── Table ── */}
-      <div style={{flex:1,overflow:'auto'}}>
+      <div className="page-scroll" style={{flex:1,overflow:'auto'}}>
         {loading ? (
           <div style={{display:'flex',justifyContent:'center',padding:'64px'}}>
             <div className="spinner" style={{width:28,height:28}}/>
@@ -596,7 +652,7 @@ export function Imei() {
                   </div>
                 </div>
 
-                <div style={{display:'grid',gap:8,marginTop:12,paddingTop:12,borderTop:`1px solid ${M.color.line}`}}>
+                <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1fr)',gap:8,marginTop:12,paddingTop:12,borderTop:`1px solid ${M.color.line}`}}>
                   <ToggleRow
                     label="Swiped" colour="#2563eb"
                     on={item.swiped} at={item.swipedAt}
@@ -747,7 +803,23 @@ export function Imei() {
       </div>
 
       {/* ── Pagination ── */}
-      {data && data.totalPages>1 && (
+      {data && data.totalPages>1 && isPhone && (
+        <div data-keep-row style={{display:'flex',alignItems:'center',gap:8,padding:`10px ${M.pad}px 14px`}}>
+          <button disabled={data.page<=1} onClick={()=>{const p=data.page-1;setPage(p);load(search,status,imeiType,swiped,activated,p);window.scrollTo({top:0,behavior:'smooth'});}}
+            style={{height:44,padding:'0 16px',border:`1px solid ${M.color.line}`,borderRadius:12,background:'#fff',color:data.page<=1?'#cbd5e1':M.color.ink,fontSize:14,fontWeight:600}}>
+            ‹ Prev
+          </button>
+          <div style={{flex:1,textAlign:'center',lineHeight:1.25}}>
+            <div style={{fontSize:14,fontWeight:700,color:M.color.ink}}>Page {data.page} of {data.totalPages}</div>
+            <div style={{fontSize:11,color:M.color.faint}}>{total.toLocaleString('en-IN')} units</div>
+          </div>
+          <button disabled={data.page>=data.totalPages} onClick={()=>{const p=data.page+1;setPage(p);load(search,status,imeiType,swiped,activated,p);window.scrollTo({top:0,behavior:'smooth'});}}
+            style={{height:44,padding:'0 16px',border:'none',borderRadius:12,background:data.page>=data.totalPages?'#e2e8f0':M.color.brand,color:'#fff',fontSize:14,fontWeight:700}}>
+            Next ›
+          </button>
+        </div>
+      )}
+      {data && data.totalPages>1 && !isPhone && (
         <div style={{padding:'10px 20px',borderTop:'1px solid #e2e8f0',background:'#fff',display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
           <span style={{fontSize:12,color:'#64748b',flex:1}}>
             Page {data.page} of {data.totalPages} · {total.toLocaleString('en-IN')} total

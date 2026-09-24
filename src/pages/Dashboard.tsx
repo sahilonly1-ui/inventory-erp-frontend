@@ -403,17 +403,27 @@ export function Dashboard() {
     const allIds=txns.map(t=>t.id);
     return (
       <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:10,marginBottom:8,overflow:'hidden',boxShadow:'0 1px 3px rgba(0,0,0,.04)'}}>
-        <div style={{padding:'10px 14px',display:'flex',alignItems:'center',gap:10,background:'#f8fafc',borderBottom:open?'1px solid #e2e8f0':'none'}}>
-          <div onClick={()=>setOpen(x=>!x)} style={{flex:1,cursor:'pointer'}}>
-            <div style={{fontWeight:700,fontSize:13,color:'#0f172a'}}>{vendor}</div>
-            <div style={{fontSize:11,color:'#94a3b8',marginTop:1}}>
-              {txns.length} transaction{txns.length!==1?'s':''} · {sign==='+'?'':sign}{total} units · {new Date(txns[0].createdAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})} {new Date(txns[0].createdAt).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}
+        <div data-keep-row style={{padding:isPhone?'12px 14px':'10px 14px',display:'flex',alignItems:isPhone?'flex-start':'center',gap:10,flexWrap:isPhone?'wrap':'nowrap',background:'#f8fafc',borderBottom:open?'1px solid #e2e8f0':'none'}}>
+          <div onClick={()=>setOpen(x=>!x)} style={{flex:1,minWidth:0,cursor:'pointer'}}>
+            <div style={{fontWeight:700,fontSize:isPhone?15:13,color:'#0f172a'}}>{vendor}</div>
+            <div style={{fontSize:isPhone?12:11,color:'#94a3b8',marginTop:1}}>
+              {txns.length} transaction{txns.length!==1?'s':''} · {new Date(txns[0].createdAt).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}
+              {!isPhone&&<> · {new Date(txns[0].createdAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</>}
               {txns[0].referenceId && <span style={{marginLeft:6,color:'#2563eb',fontWeight:600}}>· INV: {txns[0].referenceId}</span>}
             </div>
           </div>
-          <span style={{fontWeight:800,fontSize:14,color}}>{sign==='+'?'':sign}{total}</span>
-          <ActionBtns ids={allIds} label={vendor} sign={sign}/>
-          <span onClick={()=>setOpen(x=>!x)} style={{color:'#94a3b8',fontSize:11,cursor:'pointer',userSelect:'none'}}>{open?'▲':'▼'}</span>
+          <span style={isPhone?{fontWeight:700,fontSize:12,color,background:sign==='+'?'#f0fdf4':'#fef2f2',padding:'4px 10px',borderRadius:20,whiteSpace:'nowrap'}:{fontWeight:800,fontSize:14,color}}>{sign==='+'?(isPhone?'+':''):sign}{total}{isPhone?' units':''}</span>
+          {isPhone?(
+            <div data-keep-row style={{flexBasis:'100%',display:'flex',alignItems:'center',gap:8}}>
+              <div style={{flex:1}}><ActionBtns ids={allIds} label={vendor} sign={sign}/></div>
+              <button onClick={()=>setOpen(x=>!x)} aria-label={open?'Collapse':'Expand'} style={{width:38,height:38,border:'1px solid #e2e8f0',borderRadius:10,background:'#fff',color:'#64748b'}}>{open?'▲':'▼'}</button>
+            </div>
+          ):(
+            <>
+              <ActionBtns ids={allIds} label={vendor} sign={sign}/>
+              <span onClick={()=>setOpen(x=>!x)} style={{color:'#94a3b8',fontSize:11,cursor:'pointer',userSelect:'none'}}>{open?'▲':'▼'}</span>
+            </>
+          )}
         </div>
         {open&&(
           <div>
@@ -450,11 +460,11 @@ export function Dashboard() {
   const deletedRows=EP.rows.filter(r=>r.deleted);
 
   return (
-    <div style={{display:'flex',flexDirection:'column',height:'100vh',background:'#f8fafc',overflow:'hidden'}}>
+    <div className="page-root" style={{display:'flex',flexDirection:'column',height:'100vh',background:'#f8fafc',overflow:'hidden'}}>
       {/* Header */}
-      <div style={{padding:'12px 24px',background:'#fff',borderBottom:'1px solid #e2e8f0',display:'flex',alignItems:'center',gap:12,flexShrink:0}}>
-        <div>
-          <div style={{fontSize:17,fontWeight:800,color:'#0f172a',letterSpacing:'-.3px'}}>Dashboard</div>
+      <div className="page-head" data-keep-row style={{padding:'12px 24px',background:'#fff',borderBottom:'1px solid #e2e8f0',display:'flex',alignItems:'center',gap:12,flexShrink:0}}>
+        <div style={{minWidth:0}}>
+          {!isPhone&&<div style={{fontSize:17,fontWeight:800,color:'#0f172a',letterSpacing:'-.3px'}}>Dashboard</div>}
           <div style={{fontSize:11,color:'#94a3b8',marginTop:1}}>{fmtDateLong(date)}</div>
         </div>
         <div style={{flex:1}}/>
@@ -478,19 +488,40 @@ export function Dashboard() {
       {loading?(
         <div style={{display:'flex',alignItems:'center',justifyContent:'center',flex:1}}><div className="spinner" style={{width:28,height:28}}/></div>
       ):(
-        <div style={{flex:1,overflow:'auto',padding:'14px 24px'}}>
+        <div className="page-scroll pad-phone" style={{flex:1,overflow:'auto',padding:'14px 24px'}}>
+          {/* Phone: today's movement first — it is what the shop checks most —
+              then the catalogue counts as a compact 2-up grid. */}
+          {isPhone&&stats&&(
+            <div data-keep-row style={{display:'flex',background:'#fff',border:'1px solid #e6e9ef',borderRadius:14,marginBottom:10,overflow:'hidden'}}>
+              {([['Units in today',daily?.totals.stockInUnits??0,'#16a34a','+'],['Units out today',daily?.totals.stockOutUnits??0,'#dc2626','−']] as const).map(([l,v,c,sg],i)=>(
+                <div key={l} style={{flex:1,padding:'14px 16px',borderLeft:i?'1px solid #eef0f4':'none'}}>
+                  <div style={{fontSize:26,fontWeight:800,color:c,lineHeight:1.1,letterSpacing:'-.5px'}}>{v?sg:''}{v.toLocaleString('en-IN')}</div>
+                  <div style={{fontSize:12,color:'#64748b',marginTop:4,fontWeight:500}}>{l}</div>
+                </div>
+              ))}
+            </div>
+          )}
           {/* KPI strip */}
-          <div style={{display:'grid',gridTemplateColumns:isPhone?'repeat(2,1fr)':'repeat(7,1fr)',gap:8,marginBottom:16}}>
-            {kpis.map(k=>(
-              <div key={k.l} style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:10,padding:'12px 14px',boxShadow:'0 1px 3px rgba(0,0,0,.04)'}}>
-                <div style={{fontSize:22,fontWeight:800,color:k.c,lineHeight:1.2}}>{k.v.toLocaleString('en-IN')}</div>
-                <div style={{fontSize:10,color:'#94a3b8',marginTop:4,fontWeight:600,textTransform:'uppercase',letterSpacing:'.05em',lineHeight:1.3}}>{k.l}</div>
+          <div style={{display:'grid',gridTemplateColumns:isPhone?'repeat(2,minmax(0,1fr))':'repeat(7,1fr)',gap:isPhone?10:8,marginBottom:16}}>
+            {(isPhone?kpis.filter(k=>!k.l.includes('Today')):kpis).map(k=>(
+              <div key={k.l} style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:isPhone?14:10,padding:isPhone?'12px 14px':'12px 14px',boxShadow:'0 1px 3px rgba(0,0,0,.04)'}}>
+                <div style={{fontSize:isPhone?20:22,fontWeight:800,color:isPhone?'#0f172a':k.c,lineHeight:1.2}}>{k.v.toLocaleString('en-IN')}</div>
+                <div style={isPhone?{fontSize:12,color:'#64748b',marginTop:3,fontWeight:500}:{fontSize:10,color:'#94a3b8',marginTop:4,fontWeight:600,textTransform:'uppercase',letterSpacing:'.05em',lineHeight:1.3}}>{k.l}</div>
               </div>
             ))}
           </div>
 
-          {/* Tabs */}
-          <div style={{display:'flex',gap:0,marginBottom:14,borderBottom:'1px solid #e2e8f0'}}>
+          {/* Tabs — a segmented control on a phone */}
+          {isPhone&&(
+            <div data-keep-row role="tablist" style={{display:'flex',background:'#eef1f5',borderRadius:12,padding:3,marginBottom:14}}>
+              {([['in','Stock in',daily?.totals.stockInTxns],['out','Stock out',daily?.totals.stockOutTxns],['all','All',undefined]] as const).map(([t,l,n])=>(
+                <button key={t} role="tab" aria-selected={tab===t} onClick={()=>setTab(t)} style={{flex:1,height:38,border:'none',borderRadius:9,background:tab===t?'#fff':'transparent',boxShadow:tab===t?'0 1px 3px rgba(15,23,42,.12)':'none',color:tab===t?'#0f172a':'#64748b',fontSize:13,fontWeight:tab===t?700:500}}>
+                  {l}{n!=null&&<span style={{marginLeft:6,fontSize:11,color:t==='out'?'#dc2626':'#2563eb',fontWeight:700}}>{n}</span>}
+                </button>
+              ))}
+            </div>
+          )}
+          <div style={{display:isPhone?'none':'flex',gap:0,marginBottom:14,borderBottom:'1px solid #e2e8f0'}}>
             {([['in','📥 Stock In Today'],['out','📤 Stock Out Today'],['all','📊 All Movements']] as const).map(([t,l])=>(
               <button key={t} onClick={()=>setTab(t)} style={{padding:'8px 18px',fontSize:12,fontWeight:tab===t?700:500,color:tab===t?'#2563eb':'#64748b',background:'none',border:'none',borderBottom:`2px solid ${tab===t?'#2563eb':'transparent'}`,cursor:'pointer',transition:'all .1s',display:'flex',alignItems:'center',gap:6}}>
                 {l}

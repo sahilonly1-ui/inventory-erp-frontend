@@ -490,7 +490,7 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
   const thS: React.CSSProperties = { padding:'9px 10px', textAlign:'left', fontSize:10, fontWeight:700, color:'#64748b', textTransform:'uppercase', letterSpacing:'.06em', borderBottom:'2px solid #e2e8f0', whiteSpace:'nowrap', background:'#fff' };
 
   return (
-    <div style={{ display:'flex', flexDirection:'column', height:'100vh', background:'#f8fafc', overflow:'hidden' }}>
+    <div className="page-root" style={{ display:'flex', flexDirection:'column', height:'100vh', background:'#f8fafc', overflow:'hidden' }}>
 
       {/* Header */}
       <div style={{ padding:'10px 16px', background:'#fff', borderBottom:'1px solid #e2e8f0', display:'flex', alignItems:'center', gap:10, flexShrink:0, flexWrap:'wrap' }}>
@@ -607,7 +607,7 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
           <div style={{ fontSize:12 }}>Uncheck some filters to show more data</div>
         </div>
       ) : (
-        <div ref={reportRef} style={{ flex:1, overflowY:'auto', padding:'14px 16px' }}>
+        <div className="page-scroll pad-phone" ref={reportRef} style={{ flex:1, overflowY:'auto', padding:'14px 16px' }}>
           <div style={{ display:'flex', flexDirection: isPhone ? 'column' : 'row', gap:14, alignItems:'flex-start' }}>
             {buildBalancedColumns(isPhone ? 1 : 3).map((col, ci) => (
               <div key={ci} style={{ flex:'1 1 0', minWidth:0, width: isPhone ? '100%' : undefined }}>

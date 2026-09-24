@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { ReactNode, useEffect, useState } from 'react';
 
 /**
@@ -181,7 +182,7 @@ export function MButton({
 export function MActionBar({ children }: { children: ReactNode }) {
   return (
     <div style={{
-      position: 'fixed', left: 0, right: 0, bottom: 62,
+      position: 'fixed', left: 0, right: 0, bottom: 'calc(var(--tabbar-h) + var(--safe-b))',
       zIndex: 110,
       background: 'rgba(255,255,255,.97)',
       borderTop: `1px solid ${M.color.line}`,
@@ -235,5 +236,59 @@ export function MPill({ tone, children }: { tone: 'good' | 'warn' | 'bad' | 'bra
       fontSize: M.text.micro, fontWeight: 700, padding: '3px 9px',
       borderRadius: 999, background: map.bg, color: map.fg, whiteSpace: 'nowrap',
     }}>{children}</span>
+  );
+}
+
+// ── Bottom sheet ───────────────────────────────────────────────────────────
+// Dropdowns anchored under a chip get clipped by sideways-scrolling rows and
+// run off short screens. On a phone, pickers open from the bottom instead:
+// thumb-reachable, full width, with their own scroll.
+
+export function MSheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
+  }, [onClose]);
+
+  return createPortal(
+    <div role="dialog" aria-modal="true" aria-label={title} style={{ position: 'fixed', inset: 0, zIndex: 600 }}>
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,42,.42)', animation: 'mFade .18s ease' }} />
+      <div style={{
+        position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '78dvh',
+        background: '#fff', borderRadius: '18px 18px 0 0', display: 'flex', flexDirection: 'column',
+        paddingBottom: 'env(safe-area-inset-bottom)', boxShadow: '0 -8px 32px rgba(15,23,42,.18)',
+        animation: 'mSheetUp .22s cubic-bezier(.2,.8,.2,1)',
+      }}>
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: '#d0d5dd', margin: '8px auto 4px' }} />
+        <div data-keep-row style={{ display: 'flex', alignItems: 'center', padding: '6px 8px 8px 18px', borderBottom: `1px solid ${M.color.line}` }}>
+          <div style={{ flex: 1, fontSize: 16, fontWeight: 700, color: M.color.ink }}>{title}</div>
+          <button onClick={onClose} aria-label="Close" className="m-icon-btn">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>
+          </button>
+        </div>
+        <div style={{ overflowY: 'auto', overscrollBehavior: 'contain', padding: '6px 8px 12px' }}>{children}</div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/** A single choice row inside an MSheet. */
+export function MSheetOption({ label, selected, onClick }: { label: string; selected: boolean; onClick: () => void }) {
+  return (
+    <button onClick={onClick} style={{
+      display: 'flex', alignItems: 'center', gap: 12, width: '100%', minHeight: 48, padding: '0 12px',
+      border: 'none', borderRadius: 10, textAlign: 'left', cursor: 'pointer',
+      background: selected ? M.color.brandBg : 'transparent',
+      color: selected ? '#1d4ed8' : M.color.ink, fontSize: 15, fontWeight: selected ? 700 : 500,
+    }}>
+      <span style={{ flex: 1 }}>{label}</span>
+      {selected && (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+      )}
+    </button>
   );
 }

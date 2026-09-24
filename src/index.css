@@ -505,3 +505,113 @@ html, body {
     flex: 1 1 45%;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   App shell v2 — Sept 2026 redesign
+   One source of truth for the sidebar, phone header, tab bar and drawer, and
+   the global scroll model. Heights come from variables so fixed footers,
+   the scan button and page padding always agree.
+   ═══════════════════════════════════════════════════════════════════════════ */
+:root {
+  --tabbar-h: 60px;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
+  --nav-ink: #0f172a;
+  --nav-muted: #64748b;
+  --nav-faint: #94a3b8;
+  --nav-line: #eef0f4;
+}
+
+/* Brand block */
+.nav-brand{display:flex;align-items:center;gap:10px;min-width:0}
+.nav-logo{width:34px;height:34px;border-radius:9px;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;letter-spacing:-.4px;flex-shrink:0}
+.nav-brand-name{font-size:14px;font-weight:700;color:var(--nav-ink);line-height:1.2}
+.nav-brand-sub{font-size:10.5px;color:var(--nav-faint);font-weight:500;letter-spacing:.04em}
+
+/* Grouped nav list */
+.nav-list{flex:1;overflow-y:auto;padding:6px 10px 10px;overscroll-behavior:contain}
+.nav-group{padding-top:10px}
+.nav-group-label{font-size:10.5px;font-weight:600;color:var(--nav-faint);letter-spacing:.06em;text-transform:uppercase;padding:4px 10px 6px}
+.nav-link{display:flex;align-items:center;gap:10px;border-radius:8px;color:#475467;font-weight:500;text-decoration:none;white-space:nowrap;transition:background .12s,color .12s}
+.nav-desk .nav-link{padding:7px 10px;font-size:13px;margin-bottom:1px}
+.nav-phone .nav-link{padding:11px 12px;font-size:15px;margin-bottom:2px}
+.nav-link:hover{background:#f5f7fa;color:var(--nav-ink)}
+.nav-link.active{background:var(--brand-l);color:var(--brand);font-weight:600}
+.nav-link:focus-visible,.m-tab:focus-visible,.m-icon-btn:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+
+/* User footer */
+.nav-footer{border-top:1px solid var(--nav-line);padding:10px 10px calc(10px + var(--safe-b))}
+.nav-user{display:flex;align-items:center;gap:10px;padding:6px 8px}
+.nav-avatar{width:30px;height:30px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
+.nav-user-name{font-size:13px;font-weight:600;color:var(--nav-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nav-user-role{font-size:11px;color:var(--nav-faint);text-transform:uppercase;letter-spacing:.04em}
+.nav-signout{display:block;width:100%;text-align:left;background:none;border:none;padding:8px 10px;border-radius:8px;color:#dc2626;font-size:13px;font-weight:600;cursor:pointer}
+.nav-signout:hover{background:#fef2f2}
+
+/* Desktop shell */
+.d-shell{display:flex;min-height:100dvh;background:#f5f7fa}
+.d-sidebar{width:var(--sw);flex-shrink:0;background:#fff;border-right:1px solid #e4e7ec;display:flex;flex-direction:column;position:fixed;inset:0 auto 0 0;height:100dvh;z-index:100}
+.d-sidebar-head{padding:16px 16px 12px;border-bottom:1px solid var(--nav-line)}
+/* overflow-x:clip (not hidden) keeps sticky headers inside pages working. */
+.d-main{margin-left:var(--sw);flex:1;min-width:0;display:flex;flex-direction:column;min-height:100dvh;overflow-x:clip}
+.page-root{height:100dvh !important}
+
+/* Tablet: narrower sidebar so content keeps room for tables. */
+@media (min-width:900px) and (max-width:1100px){
+  :root{--sw:196px}
+  .nav-desk .nav-link{font-size:12.5px}
+}
+
+/* Phone shell */
+.m-shell{min-height:100dvh;background:#f5f7fa;display:flex;flex-direction:column}
+.m-header{position:sticky;top:0;z-index:120;background:rgba(255,255,255,.96);backdrop-filter:saturate(1.4) blur(8px);-webkit-backdrop-filter:saturate(1.4) blur(8px);border-bottom:1px solid #e9ecf1;display:flex;align-items:center;gap:6px;padding:8px 12px;padding-top:max(8px,var(--safe-t));min-height:54px}
+.m-title{flex:1;min-width:0;font-size:16.5px;font-weight:700;color:var(--nav-ink);letter-spacing:-.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.m-icon-btn{width:40px;height:40px;min-height:40px !important;border:none;background:none;border-radius:10px;color:#475467;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.m-icon-btn:active{background:#f1f5f9}
+/* Content always clears the tab bar and the home indicator. */
+.m-main{flex:1;min-width:0;padding-bottom:calc(var(--tabbar-h) + var(--safe-b) + 12px)}
+.m-tabbar{position:fixed;left:0;right:0;bottom:0;z-index:120;background:rgba(255,255,255,.97);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-top:1px solid #e9ecf1;display:grid;grid-template-columns:repeat(5,1fr);height:calc(var(--tabbar-h) + var(--safe-b));padding-bottom:var(--safe-b)}
+.m-tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;background:none;color:var(--nav-faint);font-size:11px;font-weight:500;text-decoration:none;cursor:pointer;min-height:0 !important;-webkit-tap-highlight-color:transparent}
+.m-tab-icon{width:48px;height:28px;border-radius:14px;display:flex;align-items:center;justify-content:center;transition:background .15s}
+.m-tab.active{color:var(--brand);font-weight:700}
+.m-tab.active .m-tab-icon{background:var(--brand-l)}
+
+/* Drawer */
+.m-drawer-wrap{position:fixed;inset:0;z-index:200}
+.m-backdrop{position:absolute;inset:0;background:rgba(15,23,42,.42);animation:mFade .18s ease}
+.m-drawer{position:absolute;top:0;left:0;bottom:0;width:292px;max-width:84vw;background:#fff;display:flex;flex-direction:column;padding-top:var(--safe-t);box-shadow:8px 0 32px rgba(15,23,42,.18);animation:mSlide .22s cubic-bezier(.2,.8,.2,1)}
+.m-drawer-head{display:flex;align-items:center;justify-content:space-between;padding:14px 10px 12px 16px;border-bottom:1px solid var(--nav-line)}
+@keyframes mFade{from{opacity:0}to{opacity:1}}
+@keyframes mSlide{from{transform:translateX(-100%)}to{transform:translateX(0)}}
+@media (prefers-reduced-motion:reduce){.m-backdrop,.m-drawer{animation:none}}
+
+/* ── Global scroll model on phones ────────────────────────────────────────
+   Pages were built as fixed 100vh panes with an inner scroller. On a phone
+   that pane sat under a sticky header and above a fixed tab bar, and 100vh
+   is taller than the visible area once the browser bar shows — so the end of
+   every list was unreachable. On phones the document scrolls, full stop. */
+@media (max-width: 899px) {
+  .page-root{height:auto !important;min-height:0 !important;overflow:visible !important}
+  .page-scroll{flex:none !important;overflow:visible !important}
+
+  /* Session headers (Stock In/Out): four desktop columns become a 2-up grid
+     with the customer/supplier field on its own full-width row. */
+  .session-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr) !important}
+  .session-grid > :first-child{grid-column:1 / -1}
+  .session-grid label{font-size:11px !important;letter-spacing:.04em !important}
+  .session-grid input,.session-grid select{height:44px !important;border-radius:10px !important}
+
+  /* Horizontal chip rows scroll inside themselves, never the page. */
+  .chip-row{display:flex !important;flex-wrap:nowrap !important;overflow-x:auto;gap:8px;margin:0 -12px;padding:2px 12px 6px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .chip-row::-webkit-scrollbar{display:none}
+  .chip-row > *{flex:0 0 auto !important}
+}
+@media (max-width:899px){.session-grid > :last-child:nth-child(even){grid-column:1 / -1}}
+@keyframes mSheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+
+/* Tagged pages manage their own gutters: full-bleed white header, 12px content. */
+@media (max-width: 899px) {
+  main > .page-root{padding-left:0 !important;padding-right:0 !important}
+  .page-head{padding:12px !important}
+  .page-root > .page-scroll.pad-phone{padding:12px !important}
+}

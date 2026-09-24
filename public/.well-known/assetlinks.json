@@ -1,0 +1,19 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.get_login_creds",
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.itecharena.erp",
+      "sha256_cert_fingerprints": [
+        "7B:A5:8F:0D:1F:58:E2:6D:2B:7E:DA:CB:08:3C:E2:9D:E2:84:7E:38:A7:10:EC:67:DB:B4:4F:F3:5A:06:7A:A4"
+      ]
+    }
+  },
+  {
+    "relation": ["delegate_permission/common.get_login_creds"],
+    "target": { "namespace": "web", "site": "https://inventoryhss.netlify.app" }
+  }
+]

@@ -436,9 +436,9 @@ export function StockIn(){
   const CI=(ex:React.CSSProperties={}):React.CSSProperties=>({width:'100%',height:'100%',border:'none',padding:'0 10px',background:'transparent',fontSize:13,color:'#101828',outline:'none',fontFamily:'inherit',...ex});
 
   return(
-    <div style={{display:'flex',flexDirection:'column',height:'100vh',background:'#fff',overflow:'hidden'}}>
+    <div className="page-root" style={{display:'flex',flexDirection:'column',height:'100vh',background:'#fff',overflow:'hidden'}}>
       {/* Session header */}
-      <div style={{background:'#fff',borderBottom:'1px solid #e2e8f0',padding:'8px 16px',flexShrink:0}}>
+      <div className="page-head" style={{background:'#fff',borderBottom:'1px solid #e2e8f0',padding:'8px 16px',flexShrink:0}}>
         <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
           <span style={{fontSize:11,fontWeight:700,color:'#2563eb',background:'#eff6ff',padding:'3px 12px',borderRadius:20,border:'1px solid #bfdbfe'}}>{doc}</span>
           <span style={{fontSize:10,fontWeight:700,color:'#f59e0b',background:'#fffbeb',padding:'2px 8px',borderRadius:10,border:'1px solid #fde68a',letterSpacing:'.05em'}}>DRAFT</span>
@@ -469,7 +469,7 @@ export function StockIn(){
             </button>
           )}
         </div>
-        <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 148px 200px 180px',gap:8}}>
+        <div className="session-grid" style={{display:'grid',gridTemplateColumns:'1fr 148px 200px 180px',gap:8}}>
           <div style={{position:'relative'}}>
             <label style={{fontSize:9,fontWeight:800,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'.08em',display:'block',marginBottom:3}}>SUPPLIER / RECEIVED FROM *</label>
             <input value={ss||(supp?toT(supp):'')} placeholder="Type supplier name…"
@@ -505,7 +505,7 @@ export function StockIn(){
       </div>
 
       <div style={{flex:1,display:'flex',overflow:'hidden'}}>
-        <div style={{flex:1,overflowY:'auto',overflowX:'auto',display:isMobile?'none':'block'}}>
+        <div className="page-scroll" style={{flex:1,overflowY:'auto',overflowX:'auto',display:isMobile?'none':'block'}}>
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:13,tableLayout:'fixed',minWidth:1020}}>
             <colgroup><col style={{width:36}}/><col style={{width:140}}/><col/><col style={{width:50}}/><col style={{width:162}}/><col style={{width:148}}/><col style={{width:108}}/><col style={{width:80}}/><col style={{width:42}}/></colgroup>
             <thead>

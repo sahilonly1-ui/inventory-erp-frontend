@@ -134,7 +134,7 @@ export function MScanFooter({
 }) {
   return (
     <div data-keep-row style={{
-      position: 'fixed', left: 0, right: 0, bottom: 62, zIndex: 110,
+      position: 'fixed', left: 0, right: 0, bottom: 'calc(var(--tabbar-h) + var(--safe-b))', zIndex: 110,
       background: 'rgba(255,255,255,.97)', backdropFilter: 'blur(6px)',
       borderTop: `1px solid ${M.color.line}`,
       padding: `10px ${M.pad}px`,

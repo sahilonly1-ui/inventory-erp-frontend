@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { isNative, scanOnce, buzz } from './scanner';
+import { canScan, scanOnce, buzz } from './scanner';
 
 interface Props {
   /** Called with each scanned code. Return false to stop a continuous run. */
@@ -20,7 +20,7 @@ export default function ScanButton({ onScan, continuous = true, label }: Props) 
   const [active, setActive] = useState(false);
   const [count, setCount] = useState(0);
 
-  if (!isNative()) return null;
+  if (!canScan()) return null;
 
   const run = async () => {
     setActive(true);
@@ -57,7 +57,7 @@ export default function ScanButton({ onScan, continuous = true, label }: Props) 
         right: 16,
         // Clears both the bottom tab bar and the sticky save bar above it,
         // which the button previously covered.
-        bottom: 138,
+        bottom: 'calc(var(--tabbar-h) + var(--safe-b) + 84px)',
         zIndex: 400,
         height: 54,
         paddingLeft: 18,
