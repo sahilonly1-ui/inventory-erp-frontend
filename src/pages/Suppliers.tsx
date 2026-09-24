@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client';
+import { useIsPhone } from '../mobile/ui';
 
 interface Supplier { id: string; name: string; code: string; state?: string; phone?: string; email?: string; gstin?: string; contactPerson?: string; address?: string; notes?: string; }
 
@@ -14,7 +15,7 @@ function SupplierForm({ initial, onSave, onCancel }: { initial?: Partial<Supplie
   const set = (k:string, v:string) => setF(x=>({...x,[k]:v}));
   return (
     <div>
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 }}>
+      <div className="form-grid-2" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 }}>
         {/* Name - full width */}
         <div style={{ gridColumn:'1/-1' }}>
           <label style={{ fontSize:11, fontWeight:700, color:'#64748b', textTransform:'uppercase', letterSpacing:'.06em', display:'block', marginBottom:4 }}>Supplier Name *</label>
@@ -121,16 +122,17 @@ export function Suppliers() {
     finally { setBusy(''); }
   };
 
+  const isPhone = useIsPhone();
   const toggleAll = () => setSelected(selected.size === filtered.length ? new Set() : new Set(filtered.map(s=>s.id)));
   const toggle = (id:string) => setSelected(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n; });
 
   return (
     <div className="page-root" style={{ display:'flex', flexDirection:'column', height:'calc(100vh - 0px)', background:'#f8fafc' }}>
       {/* Header */}
-      <div style={{ padding:'16px 24px', borderBottom:'1px solid #e2e8f0', background:'#fff', display:'flex', alignItems:'center', gap:12 }}>
-        <div>
-          <div style={{ fontSize:18, fontWeight:800, color:'#0f172a', letterSpacing:'-.3px' }}>Supplier Master</div>
-          <div style={{ fontSize:12, color:'#94a3b8', marginTop:2 }}>{suppliers.length} suppliers · {selected.size > 0 ? `${selected.size} selected` : 'Click row to select'}</div>
+      <div className="page-head" data-keep-row style={{ padding:'16px 24px', borderBottom:'1px solid #e2e8f0', background:'#fff', display:'flex', alignItems:'center', gap:12, flexWrap:isPhone?'wrap':'nowrap' }}>
+        <div style={{ minWidth:0 }}>
+          {!isPhone && <div style={{ fontSize:18, fontWeight:800, color:'#0f172a', letterSpacing:'-.3px' }}>Supplier Master</div>}
+          <div style={{ fontSize:12, color:'#94a3b8', marginTop:2 }}>{suppliers.length} suppliers · {selected.size > 0 ? `${selected.size} selected` : (isPhone ? 'Tick to select' : 'Click row to select')}</div>
         </div>
         <div style={{ flex:1 }} />
         {suppliers.length > 0 && selected.size === 0 && (
@@ -180,6 +182,36 @@ export function Suppliers() {
             {!search && <button onClick={()=>setAdding(true)} style={{ height:36, padding:'0 20px', border:'none', borderRadius:7, background:'#2563eb', color:'#fff', fontSize:13, fontWeight:600, cursor:'pointer' }}>+ Add First Supplier</button>}
           </div>
         ) : (
+          isPhone ? (
+          <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:14, overflow:'hidden' }}>
+            <div data-keep-row style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderBottom:'1px solid #eef0f4', fontSize:13, color:'#64748b' }}>
+              <input type="checkbox" checked={selected.size===filtered.length&&filtered.length>0} onChange={toggleAll} aria-label="Select all" style={{ accentColor:'#2563eb', width:20, height:20 }} />
+              <span>Showing {filtered.length} of {suppliers.length}</span>
+            </div>
+            {filtered.map(s => editing === s.id ? (
+              <div key={s.id} style={{ padding:14, background:'#f8fafc', borderBottom:'1px solid #e2e8f0' }}>
+                <div style={{ fontSize:14, fontWeight:700, marginBottom:12 }}>Editing: {s.name}</div>
+                <SupplierForm initial={s} onSave={f=>save(f,s.id)} onCancel={()=>setEditing(null)} />
+              </div>
+            ) : (
+              <div key={s.id} data-keep-row style={{ display:'flex', gap:12, padding:'12px 14px', borderBottom:'1px solid #f1f3f6', background:selected.has(s.id)?'#f5f9ff':'#fff' }}>
+                <input type="checkbox" checked={selected.has(s.id)} onChange={()=>toggle(s.id)} aria-label={`Select ${s.name}`} style={{ accentColor:'#2563eb', width:20, height:20, marginTop:2, flexShrink:0 }} />
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:15, fontWeight:700, color:'#0f172a' }}>{s.name}</div>
+                  <div style={{ fontSize:12.5, color:'#64748b', marginTop:2 }}>
+                    <span style={{ color: s.state ? '#2563eb' : '#dc2626', fontWeight:600 }}>{s.state || 'State missing'}</span>
+                    {s.phone && <> · {s.phone}</>}{s.contactPerson && <> · {s.contactPerson}</>}
+                  </div>
+                  {s.gstin && <div style={{ fontSize:11.5, fontFamily:'monospace', color:'#94a3b8', marginTop:2 }}>{s.gstin}</div>}
+                </div>
+                <div data-keep-row style={{ display:'flex', flexDirection:'column', gap:6, flexShrink:0 }}>
+                  <button onClick={()=>setEditing(s.id)} style={{ height:34, padding:'0 12px', border:'1px solid #e2e8f0', borderRadius:9, background:'#fff', fontSize:12.5, fontWeight:600, color:'#475569' }}>Edit</button>
+                  <button onClick={()=>del(s.id,s.name)} disabled={busy===s.id} style={{ height:34, padding:'0 12px', border:'1px solid #fecdd3', borderRadius:9, background:'#fff5f5', fontSize:12.5, fontWeight:600, color:'#dc2626' }}>{busy===s.id?'…':'Delete'}</button>
+                </div>
+              </div>
+            ))}
+          </div>
+          ) : (
           <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:12, overflow:'hidden', boxShadow:'0 1px 3px rgba(0,0,0,.06)' }}>
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
               <thead>
@@ -235,6 +267,7 @@ export function Suppliers() {
               {selected.size>0 && <span style={{ color:'#2563eb', fontWeight:600 }}>{selected.size} selected</span>}
             </div>
           </div>
+          )
         )}
       </div>
     </div>

@@ -1,9 +1,10 @@
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import OfflineBanner from '../native/OfflineBanner';
 import { useIsPhone } from '../mobile/ui';
 import { biometricEnabled, disableBiometric } from '../native/biometric';
+import { isNative } from '../native/scanner';
 
 type Group = 'Operations' | 'Inventory' | 'Masters' | 'Analytics' | 'System';
 type NavItem = { to: string; label: string; short?: string; svg: string; perm?: string; primary?: boolean; group: Group };
@@ -100,6 +101,27 @@ export function Layout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const isPhone = useIsPhone();
   const [drawer, setDrawer] = useState(false);
+  const edgeRef = useRef<{ x: number; y: number } | null>(null);
+  const drawerRef = useRef(drawer);
+  drawerRef.current = drawer;
+
+  // Android back button: close the menu first, then go back a screen, and
+  // only leave the app from the dashboard — the way other Android apps behave.
+  useEffect(() => {
+    if (!isNative()) return;
+    let off: (() => void) | undefined;
+    (async () => {
+      const { App } = await import('@capacitor/app');
+      const h = await App.addListener('backButton', () => {
+        if (document.querySelector('[data-sheet-open]')) { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); return; }
+        if (drawerRef.current) { setDrawer(false); return; }
+        if (window.location.pathname !== '/' && window.location.pathname !== '/login') { navigate(-1); return; }
+        App.exitApp();
+      });
+      off = () => { void h.remove(); };
+    })();
+    return () => off?.();
+  }, [navigate]);
 
   const allowed = NAV.filter(n => !n.perm || (user?.permissions ?? []).some(p => p === '*' || p === n.perm));
   const isActive = (to: string) => (to === '/' ? loc.pathname === '/' : loc.pathname.startsWith(to));
@@ -118,10 +140,9 @@ export function Layout({ children }: { children: ReactNode }) {
   }, [drawer]);
 
   if (isPhone) {
-    // Four tabs plus "More" is the most that stays comfortably tappable.
-    const tabs = ORDER.map(t => allowed.find(n => n.to === t && n.primary)).filter(Boolean).slice(0, 4) as NavItem[];
+    // No bottom tab bar: every screen gets its full height, and the drawer
+    // (hamburger or a swipe from the left edge) holds the whole menu.
     const current = allowed.find(n => isActive(n.to));
-    const moreActive = !tabs.some(t => isActive(t.to));
     return (
       <div className="m-shell">
         <header className="m-header" data-keep-row>
@@ -134,26 +155,15 @@ export function Layout({ children }: { children: ReactNode }) {
           <div className="nav-avatar" aria-hidden="true">{user?.fullName?.charAt(0)?.toUpperCase() || 'A'}</div>
         </header>
         <OfflineBanner />
-        <main className="m-main">{children}</main>
-        <nav className="m-tabbar" aria-label="Primary">
-          {tabs.map(n => {
-            const active = isActive(n.to);
-            return (
-              <Link key={n.to} to={n.to} data-keep-row className={`m-tab${active ? ' active' : ''}`} aria-current={active ? 'page' : undefined}>
-                <span className="m-tab-icon"><NavIcon svg={n.svg} size={21} /></span>
-                <span>{n.short ?? n.label}</span>
-              </Link>
-            );
-          })}
-          <button onClick={() => setDrawer(true)} className={`m-tab${moreActive ? ' active' : ''}`}>
-            <span className="m-tab-icon">
-              <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <circle cx="5" cy="12" r="1.2" /><circle cx="12" cy="12" r="1.2" /><circle cx="19" cy="12" r="1.2" />
-              </svg>
-            </span>
-            <span>More</span>
-          </button>
-        </nav>
+        <main className="m-main"
+          onTouchStart={e => { const t = e.touches[0]; edgeRef.current = t.clientX < 20 ? { x: t.clientX, y: t.clientY } : null; }}
+          onTouchMove={e => {
+            const st = edgeRef.current; if (!st) return;
+            const t = e.touches[0];
+            if (t.clientX - st.x > 60 && Math.abs(t.clientY - st.y) < 40) { edgeRef.current = null; setDrawer(true); }
+          }}>
+          {children}
+        </main>
         {drawer && (
           <div className="m-drawer-wrap" role="dialog" aria-modal="true" aria-label="Menu">
             <div className="m-backdrop" onClick={() => setDrawer(false)} />

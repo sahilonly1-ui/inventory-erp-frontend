@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client';
+import { useIsPhone, MSheet } from '../mobile/ui';
 
 type Status = 'ACTIVE'|'INACTIVE'|'DISCONTINUED'|'OPEN_BOX_ONLY'|'BLOCKED';
 interface Brand    { id:string; name:string; }
@@ -1432,6 +1433,8 @@ export default function Products(){
     }catch{return DEF_COLS;}
   });
   const [drawer,setDrawer]=useState<string|null>(null);
+  const isPhone=useIsPhone();
+  const [filterSheet,setFilterSheet]=useState(false);
   const [showBrandMaster,setShowBrandMaster]=useState(false);
   const [showCatMaster,setShowCatMaster]=useState(false);
   const [showAddProduct,setShowAddProduct]=useState(false);
@@ -1782,8 +1785,58 @@ export default function Products(){
           ))}
         </div>
 
+        {/* Phone: search + a Filters button that opens a bottom sheet, and
+            one-tap stock chips. Same state as the desktop bar below. */}
+        {isPhone&&(
+          <div style={{marginBottom:10}}>
+            <div data-keep-row style={{display:'flex',gap:8}}>
+              <div className="search-wrap" style={{flex:1}}>
+                <span className="search-icon"><svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span>
+                <input className="search-input" style={{height:44,borderRadius:12,background:'#fff'}} placeholder="Search EAN, product, brand…" value={search} onChange={e=>{setSearch(e.target.value);setPage(1);}} inputMode="search" enterKeyHint="search"/>
+              </div>
+              <button onClick={()=>setFilterSheet(true)} aria-label="Filters and sort"
+                style={{height:44,padding:'0 14px',border:`1px solid ${(brandF||catF||statusF)?'#2563eb':'#e2e8f0'}`,borderRadius:12,background:(brandF||catF||statusF)?'#eff6ff':'#fff',color:(brandF||catF||statusF)?'#1d4ed8':'#475467',fontSize:14,fontWeight:600,display:'flex',alignItems:'center',gap:6}}>
+                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/></svg>
+                Filters{[brandF,catF,statusF].filter(Boolean).length>0&&` · ${[brandF,catF,statusF].filter(Boolean).length}`}
+              </button>
+            </div>
+            <div className="chip-row" data-keep-row style={{marginTop:10}}>
+              {([['All',!lowStock&&!outOfStock&&!withStock,()=>{setLowStock(false);setOutOfStock(false);setWithStock(false);setPage(1);}],
+                 ['With stock',withStock,()=>{setWithStock(v=>!v);setLowStock(false);setOutOfStock(false);setPage(1);}],
+                 ['Low stock (<3)',lowStock,()=>{setLowStock(v=>!v);setOutOfStock(false);setWithStock(false);setPage(1);}],
+                 ['Zero stock',outOfStock,()=>{setOutOfStock(v=>!v);setLowStock(false);setWithStock(false);setPage(1);}]] as const).map(([l,on,fn])=>(
+                <button key={l} onClick={fn} style={{height:36,padding:'0 14px',borderRadius:18,border:`1px solid ${on?'#2563eb':'#e2e8f0'}`,background:on?'#2563eb':'#fff',color:on?'#fff':'#475467',fontSize:13,fontWeight:600,whiteSpace:'nowrap'}}>{l}</button>
+              ))}
+              {hasF&&<button onClick={reset} style={{height:36,padding:'0 12px',borderRadius:18,border:'1px solid #fecaca',background:'#fef2f2',color:'#dc2626',fontSize:13,fontWeight:600}}>Clear</button>}
+            </div>
+          </div>
+        )}
+        {isPhone&&filterSheet&&(
+          <MSheet title="Filter and sort" onClose={()=>setFilterSheet(false)}>
+            <div style={{display:'grid',gap:14,padding:'6px 10px 4px'}}>
+              {([['Sort by',sortKey,(v:string)=>setSortKey(v),SORT_OPTIONS.map(o=>[o.val,o.label])],
+                 ['Brand',brandF,(v:string)=>{setBrandF(v);setPage(1);},[['','All brands'],['__blank__','No brand'],...brands.map(b=>[b.name,b.name])]],
+                 ['Category',catF,(v:string)=>{setCatF(v);setPage(1);},[['','All categories'],['__blank__','No category'],...categories.filter(c=>!c.parentId).map(c=>[c.id,c.name])]],
+                 ['Status',statusF,(v:string)=>{setStatusF(v);setPage(1);},[['','All statuses'],...(['ACTIVE','INACTIVE','DISCONTINUED','OPEN_BOX_ONLY','BLOCKED'] as Status[]).map(x=>[x,getStatusLabel(x)])]]] as [string,string,(v:string)=>void,string[][]][]).map(([l,v,fn,opts])=>(
+                <label key={l} style={{display:'block'}}>
+                  <span style={{display:'block',fontSize:12,fontWeight:600,color:'#64748b',marginBottom:6}}>{l}</span>
+                  <select value={v} onChange={e=>fn(e.target.value)} style={{width:'100%',height:46,padding:'0 12px',border:'1px solid #d0d5dd',borderRadius:12,background:'#fff',fontSize:16,color:'#0f172a'}}>
+                    {opts.map(([ov,ol])=><option key={ov} value={ov}>{ol}</option>)}
+                  </select>
+                </label>
+              ))}
+              <div data-keep-row style={{display:'flex',gap:10,marginTop:4}}>
+                <button onClick={()=>{reset();}} style={{flex:1,height:46,border:'1px solid #e2e8f0',borderRadius:12,background:'#fff',fontSize:15,fontWeight:600,color:'#475467'}}>Reset</button>
+                <button onClick={()=>setFilterSheet(false)} style={{flex:2,height:46,border:'none',borderRadius:12,background:'#2563eb',color:'#fff',fontSize:15,fontWeight:700}}>
+                  Show {products?products.total.toLocaleString('en-IN'):''} products
+                </button>
+              </div>
+            </div>
+          </MSheet>
+        )}
+
         {/* Search + Sort row */}
-        <div className="filter-bar">
+        <div className="filter-bar" style={isPhone?{display:'none'}:undefined}>
           <div className="search-row">
             <div className="search-wrap">
               <span className="search-icon"><svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span>
@@ -1911,6 +1964,34 @@ export default function Products(){
           {loading?(<div className="empty" style={{padding:'60px 24px'}}><div className="spinner" style={{margin:'0 auto 14px'}}/><div className="empty-txt">Loading…</div></div>)
           :error?(<div className="empty"><div className="empty-ico">⚠️</div><div className="empty-ttl">Could not load</div><button style={{marginTop:12,height:30,padding:'0 14px',fontSize:12}} onClick={()=>{setError('');loadProducts();}}>Retry</button></div>)
           :items.length===0?(<div className="empty"><div className="empty-ico">🔍</div><div className="empty-ttl">{hasF?'No matching products':'No products yet'}</div>{hasF&&<button style={{marginTop:12,height:30,padding:'0 14px',fontSize:12}} onClick={reset}>Clear filters</button>}</div>):(
+            isPhone?(
+            <div>
+              <div data-keep-row style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderBottom:'1px solid #eef0f4',fontSize:13,color:'#64748b'}}>
+                <input type="checkbox" checked={allSel} onChange={selAll} aria-label="Select all on this page" style={{width:20,height:20,accentColor:'var(--brand)'}}/>
+                <span style={{flex:1}}>{sel.size>0?`${sel.size} selected`:`${products?.total.toLocaleString('en-IN')??''} products`}</span>
+              </div>
+              {items.map(p=>{
+                const q=stockQty(p);
+                return(
+                  <div key={p.id} data-keep-row style={{display:'flex',gap:12,padding:'12px 14px',borderBottom:'1px solid #f1f3f6',background:sel.has(p.id)?'#f5f9ff':'#fff',borderLeft:q>0&&q<=3?'3px solid #f59e0b':'3px solid transparent'}}>
+                    <input type="checkbox" checked={sel.has(p.id)} onChange={()=>toggleSel(p.id)} aria-label={`Select ${p.model}`} style={{width:20,height:20,marginTop:2,accentColor:'var(--brand)',flexShrink:0}}/>
+                    <div style={{flex:1,minWidth:0}} onClick={()=>setDrawer(p.id)}>
+                      <div style={{fontSize:14.5,fontWeight:600,color:'#0f172a',lineHeight:1.35}}>{p.model}</div>
+                      <div style={{fontSize:12,color:'#64748b',marginTop:2}}>{[p.brand,p.category?.name].filter(Boolean).join(' · ')||'—'}</div>
+                      <div style={{fontSize:11.5,color:'#94a3b8',fontFamily:'var(--mono)',marginTop:2}}>{p.ean}</div>
+                    </div>
+                    <div data-keep-row style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:6,flexShrink:0}}>
+                      <div style={{textAlign:'right'}}>
+                        <div style={{fontSize:18,fontWeight:800,lineHeight:1,color:q===0?'#dc2626':q<=3?'#b45309':'#0f172a'}}>{q}</div>
+                        <div style={{fontSize:10.5,color:'#94a3b8'}}>in stock</div>
+                      </div>
+                      <div onClick={e=>e.stopPropagation()}>{cellVal(p,'status')}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            ):(
             <div className="grid-scroll">
               <table className="grid-table">
                 <thead className="grid-thead">
@@ -1941,8 +2022,16 @@ export default function Products(){
                 </tbody>
               </table>
             </div>
+            )
           )}
-          {products&&products.totalPages>1&&(
+          {products&&products.totalPages>1&&isPhone&&(
+            <div data-keep-row style={{display:'flex',alignItems:'center',gap:8,padding:'12px 14px'}}>
+              <button disabled={page<=1} onClick={()=>{setPage(p=>p-1);window.scrollTo({top:0,behavior:'smooth'});}} style={{height:44,padding:'0 16px',border:'1px solid #e2e8f0',borderRadius:12,background:'#fff',color:page<=1?'#cbd5e1':'#0f172a',fontSize:14,fontWeight:600}}>‹ Prev</button>
+              <div style={{flex:1,textAlign:'center',fontSize:14,fontWeight:700,color:'#0f172a'}}>Page {page} of {products.totalPages}</div>
+              <button disabled={page>=products.totalPages} onClick={()=>{setPage(p=>p+1);window.scrollTo({top:0,behavior:'smooth'});}} style={{height:44,padding:'0 16px',border:'none',borderRadius:12,background:page>=products.totalPages?'#e2e8f0':'#2563eb',color:'#fff',fontSize:14,fontWeight:700}}>Next ›</button>
+            </div>
+          )}
+          {products&&products.totalPages>1&&!isPhone&&(
             <div className="pagination">
               <span className="pg-info">{((page-1)*limit+1).toLocaleString()}–{Math.min(page*limit,products.total).toLocaleString()} of {products.total.toLocaleString()}</span>
               <div className="pg-btns">

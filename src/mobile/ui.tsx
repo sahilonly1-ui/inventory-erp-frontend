@@ -254,7 +254,7 @@ export function MSheet({ title, onClose, children }: { title: string; onClose: (
   }, [onClose]);
 
   return createPortal(
-    <div role="dialog" aria-modal="true" aria-label={title} style={{ position: 'fixed', inset: 0, zIndex: 600 }}>
+    <div role="dialog" aria-modal="true" aria-label={title} data-sheet-open style={{ position: 'fixed', inset: 0, zIndex: 600 }}>
       <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,42,.42)', animation: 'mFade .18s ease' }} />
       <div style={{
         position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '78dvh',

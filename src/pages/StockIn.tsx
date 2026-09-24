@@ -504,9 +504,12 @@ export function StockIn(){
         </div>
       </div>
 
-      <div style={{flex:1,display:'flex',overflow:'hidden'}}>
-        <div className="page-scroll" style={{flex:1,overflowY:'auto',overflowX:'auto',display:isMobile?'none':'block'}}>
-          <table style={{width:'100%',borderCollapse:'collapse',fontSize:13,tableLayout:'fixed',minWidth:1020}}>
+      <div className="page-body-row" style={{flex:1,display:'flex',overflow:'hidden'}}>
+        {/* The phone card view lives inside this scroller too, so it must stay
+            visible on phones — only the desktop table is hidden there. It was
+            previously hidden as a whole, which left Stock In blank on phones. */}
+        <div className="page-scroll" style={{flex:1,overflowY:'auto',overflowX:'auto',display:'block',background:isMobile?M.color.bg:undefined}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:13,tableLayout:'fixed',minWidth:1020,display:isMobile?'none':undefined}}>
             <colgroup><col style={{width:36}}/><col style={{width:140}}/><col/><col style={{width:50}}/><col style={{width:162}}/><col style={{width:148}}/><col style={{width:108}}/><col style={{width:80}}/><col style={{width:42}}/></colgroup>
             <thead>
               <tr style={{background:'#f8fafc',position:'sticky',top:0,zIndex:5,boxShadow:'0 1px 0 #e2e8f0'}}>
@@ -633,7 +636,11 @@ export function StockIn(){
 
           {/* ── MOBILE CARD VIEW ── */}
           {isMobile&&(
-            <div style={{padding:'8px 4px'}}>
+            <div style={{padding:`${M.pad}px ${M.pad}px 150px`}}>
+              <div data-keep-row style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',margin:'2px 2px 10px'}}>
+                <div style={{fontSize:15,fontWeight:700,color:M.color.ink}}>Scan products</div>
+                <div style={{fontSize:12,color:M.color.muted}}>{sv.length} ready · {sv.reduce((t,r)=>t+r.qty,0)} units</div>
+              </div>
               {rows.map((row,i)=>{
                 const isDone=row.status==='saved';
                 const hasErr=!!row.errMsg;

@@ -495,7 +495,7 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
       {/* Header */}
       <div style={{ padding:'10px 16px', background:'#fff', borderBottom:'1px solid #e2e8f0', display:'flex', alignItems:'center', gap:10, flexShrink:0, flexWrap:'wrap' }}>
         <div>
-          <div style={{ fontSize:15, fontWeight:800, color:'#0f172a' }}>Stock Report</div>
+          <div className="dup-title" style={{ fontSize:15, fontWeight:800, color:'#0f172a' }}>Stock Report</div>
           <div style={{ fontSize:11, color: asOf ? '#b45309' : '#94a3b8' }}>
             {asOf
               ? `Brand-wise · position as on ${asOfLabel(asOf)} — not live stock`

@@ -186,7 +186,7 @@ export default function Users() {
       {/* Header */}
       <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:20 }}>
         <div>
-          <h1 style={{ fontSize:22, fontWeight:800, color:'#0f172a', margin:0 }}>Users & Access</h1>
+          <h1 className="dup-title" style={{ fontSize:22, fontWeight:800, color:'#0f172a', margin:0 }}>Users & Access</h1>
           <p style={{ fontSize:13, color:'#64748b', margin:'4px 0 0' }}>
             Manage who can sign in and what they can do. Roles bundle permissions so you assign a role, not individual permissions, to each user.
           </p>
@@ -232,7 +232,7 @@ export default function Users() {
                 </div>
 
                 {canManage && (
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginTop:12 }}>
+                  <div className="form-grid-2" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginTop:12 }}>
                     <MButton onClick={() => { setEditUser(u); setDraftRoles(new Set(roles.filter(r => rn.includes(r.name)).map(r => r.id))); }}>
                       Change Role
                     </MButton>

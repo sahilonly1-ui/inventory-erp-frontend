@@ -88,16 +88,16 @@ export function Reports() {
   return (
     <>
       <div style={{padding:'14px 20px',borderBottom:'1px solid #e2e8f0',background:'#fff'}}>
-        <div style={{fontSize:18,fontWeight:800,color:'#0f172a',letterSpacing:'-.3px'}}>Reports</div>
+        <div className="dup-title" style={{fontSize:18,fontWeight:800,color:'#0f172a',letterSpacing:'-.3px'}}>Reports</div>
         <div style={{fontSize:12,color:'#94a3b8',marginTop:2}}>Export inventory data to Excel (XLSX)</div>
       </div>
 
       <div style={{flex:1,overflow:'auto',padding:'16px 20px'}}>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 320px',gap:16,alignItems:'start'}}>
+        <div className="stack-phone" style={{display:'grid',gridTemplateColumns:'1fr 320px',gap:16,alignItems:'start'}}>
           {/* Report cards */}
           <div>
             <div style={{fontSize:11,fontWeight:700,color:'#64748b',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>Select Report Type</div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(190px,1fr))',gap:8}}>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))',gap:8}}>
               {REPORTS.map(r=>(
                 <div key={r.value} onClick={()=>setType(r.value)}
                   style={{background:type===r.value?'#eff6ff':'#fff',border:`1.5px solid ${type===r.value?'#2563eb':'#e2e8f0'}`,borderRadius:10,padding:'12px 14px',cursor:'pointer',transition:'all .1s',boxShadow:type===r.value?'0 0 0 3px rgba(37,99,235,.1)':'none'}}>

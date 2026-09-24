@@ -67,7 +67,7 @@ export default function ProductHistory() {
 
   return (
     <div style={{ padding: isPhone ? 12 : '20px 24px 60px', maxWidth: 1100, margin: '0 auto' }}>
-      <h1 style={{ fontSize: 22, fontWeight: 800, color: '#0f172a', margin: 0 }}>Product History</h1>
+      <h1 className="dup-title" style={{ fontSize: 22, fontWeight: 800, color: '#0f172a', margin: 0 }}>Product History</h1>
       <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 18px' }}>
         Every stock movement for one product, newest first, with the running balance after each one.
         Works for accessories and quantity-only entries too, not just units with an IMEI or serial.

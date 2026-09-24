@@ -615,3 +615,27 @@ html, body {
   .page-head{padding:12px !important}
   .page-root > .page-scroll.pad-phone{padding:12px !important}
 }
+
+/* The bottom tab bar is gone (Sept 2026): all fixed footers now sit on the
+   screen edge. --tabbar-h stays as the single knob if it ever returns. */
+:root{--tabbar-h:0px}
+.m-main{padding-bottom:calc(var(--safe-b) + 16px)}
+
+/* Product Master on phones: compact KPI tiles, no decorative icons. */
+@media (max-width: 899px) {
+  .kpi-grid{gap:8px !important;margin-bottom:12px !important}
+  .kpi-card{padding:10px 12px !important;border-radius:12px !important}
+  .kpi-card .kpi-icon{display:none}
+  .kpi-value{font-size:19px !important}
+  .kpi-label{font-size:11px !important;text-transform:none !important;letter-spacing:0 !important;color:#64748b !important;font-weight:500 !important}
+  .page-header .page-title{display:none}
+  .grid-wrap{border-radius:14px !important}
+}
+@media (max-width: 899px){.form-grid-2{grid-template-columns:minmax(0,1fr) !important}}
+@media (max-width: 899px){.page-body-row{overflow:visible !important;flex:none !important}}
+@media (max-width: 899px){
+  .stack-phone{grid-template-columns:minmax(0,1fr) !important}
+  .page-body-row{display:block !important}
+  .page-body-row > .page-scroll{width:100%}
+}
+@media (max-width: 899px){.dup-title{display:none !important}}
