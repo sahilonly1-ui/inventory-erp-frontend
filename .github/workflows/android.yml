@@ -151,6 +151,22 @@ jobs:
           find android -name '*.apk' -exec cp {} out/ \;
           ls -la out
 
+      # Gradle does not reliably pick up the keystore from ~/.android, so the
+      # installable APK is re-signed explicitly with the fixed key. This is what
+      # keeps updates installing over each other, keeps fingerprint sign-in
+      # after an update, and matches the website's assetlinks.json.
+      - name: Sign the APK with the fixed key
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then echo "::warning::no fixed key — skipping"; exit 0; fi
+          echo "$KEYSTORE_B64" | base64 -d > /tmp/itecharena.keystore
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          "$BT/apksigner" sign --ks /tmp/itecharena.keystore --ks-pass pass:android \
+            --ks-key-alias androiddebugkey --key-pass pass:android out/app-debug.apk
+          "$BT/apksigner" verify --print-certs out/app-debug.apk | grep -i sha-256
+          rm -f /tmp/itecharena.keystore
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
