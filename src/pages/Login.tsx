@@ -3,6 +3,7 @@ import {
   biometricAvailable, biometricEnabled, biometricOffered, markBiometricOffered,
   enableBiometric, disableBiometric, unlockWithBiometric,
 } from '../native/biometric';
+import { warmUpServer } from '../api/client';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 
@@ -55,6 +56,10 @@ export function Login() {
       setError('Fingerprint sign-in was reset on this phone. Sign in with your password to turn it on again.');
     }
   };
+
+  // Start waking the server while the fingerprint prompt or keyboard is up,
+  // so the sign-in request itself doesn't sit through a cold start.
+  useEffect(() => { warmUpServer(); }, []);
 
   // Open the fingerprint prompt straight away when it is set up.
   useEffect(() => {

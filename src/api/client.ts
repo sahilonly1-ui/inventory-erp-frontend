@@ -116,6 +116,9 @@ async function tryRefresh(): Promise<boolean> {
         if (res.status === 401 || res.status === 403) {
           setAccessToken(null);
           setRefreshToken(null);
+          // Tell the app the server itself ended the session, so it can go to
+          // the sign-in screen cleanly instead of leaving pages half-broken.
+          window.dispatchEvent(new Event('erp-session-ended'));
           return false;
         }
 
@@ -191,4 +194,37 @@ export async function api<T = unknown>(path: string, init: RequestInit = {}, wit
     throw new ApiError(json?.error?.message || res.statusText || 'Request failed', res.status);
   }
   return json.data as T;
+}
+
+/**
+ * Wakes the Render server without waiting for it.
+ *
+ * The free tier sleeps after ~15 minutes idle and takes 20-40s to wake. On a
+ * phone the app is opened and closed many times a day, so almost every open
+ * used to land on a sleeping server. Firing this the moment the app opens or
+ * comes back to the foreground means the server is usually awake by the time
+ * the first real request (or the password) is sent. Throttled so switching
+ * apps back and forth does not spam it.
+ */
+let lastWarm = 0;
+export function warmUpServer(): void {
+  if (Date.now() - lastWarm < 60_000) return;
+  lastWarm = Date.now();
+  fetch(`${BASE}/health`, { method: 'GET', cache: 'no-store' }).catch(() => { /* best effort */ });
+}
+
+/**
+ * Called when the app returns to the foreground.
+ *
+ * Android freezes timers while an app is in the background, so the proactive
+ * refresh timer cannot be trusted after a long break: the token may have
+ * expired while the app slept. Renew now if it is gone or close to going, and
+ * restart the timer from the real remaining life.
+ */
+export async function onAppResume(): Promise<void> {
+  warmUpServer();
+  if (!getRefreshToken()) return;
+  const exp = accessTokenExpiry();
+  if (exp === null || exp * 1000 < Date.now() + 60 * 60_000) await tryRefresh();
+  scheduleProactiveRefresh();
 }
