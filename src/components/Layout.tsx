@@ -127,8 +127,13 @@ export function Layout({ children }: { children: ReactNode }) {
   const isActive = (to: string) => (to === '/' ? loc.pathname === '/' : loc.pathname.startsWith(to));
   const signOut = () => { logout(); navigate('/login'); };
 
-  // Close the drawer on navigation so it never lingers over the page just chosen.
-  useEffect(() => { setDrawer(false); }, [loc.pathname]);
+  // Close the drawer on navigation so it never lingers over the page just chosen,
+  // and clear any scroll lock a menu or sheet may have left behind — a stuck
+  // lock freezes the whole screen, so every page change resets it.
+  useEffect(() => {
+    setDrawer(false);
+    if (!document.querySelector('[data-sheet-open]')) document.body.style.overflow = '';
+  }, [loc.pathname]);
   // Esc closes it too, and the page underneath must not scroll while it is open.
   useEffect(() => {
     if (!drawer) return;

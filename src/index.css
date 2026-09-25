@@ -409,10 +409,10 @@ button.ghost:hover{background:var(--surf-1)}
   }
 }
 
-/* Momentum scrolling and no rubber-band overscroll inside the app shell. */
-html, body {
-  overscroll-behavior-y: none;
-}
+/* (Removed: overscroll-behavior on html/body. Android's WebView scrolls the
+   page natively, and that rule together with overflow-x on html/body froze
+   scrolling on every screen of the app. The page root is left at the
+   browser default on purpose — see the scroll fix below.) */
 
 /* Text selection on a long-press interrupts scanning; keep it off the chrome
    but leave it on for values an operator may want to copy. */
@@ -429,14 +429,16 @@ html, body {
    wide rows pushed the document past the viewport, so every screen needed
    sideways scrolling to reach half its controls. */
 @media (max-width: 899px) {
-  html, body, #root {
+  /* SCROLL FIX (Sept 2026): overflow-x:hidden on body/#root/main silently
+     turns each into its own scroll box (overflow-y becomes auto). None of
+     them is taller than its content, so a swipe landed on a box that could
+     not move, and could not pass on to the page — every screen was frozen
+     in the app. overflow-x:clip trims sideways overflow the same way without
+     creating a scroll box, so the page itself scrolls. <html> gets nothing
+     at all: in the Android app the WebView scrolls it natively. */
+  body, #root, main {
     max-width: 100vw;
-    overflow-x: hidden;
-  }
-
-  main {
-    max-width: 100vw;
-    overflow-x: hidden;
+    overflow-x: clip;
   }
 
   /* Toolbars and header rows wrap onto the next line rather than running off
@@ -639,3 +641,9 @@ html, body {
   .page-body-row > .page-scroll{width:100%}
 }
 @media (max-width: 899px){.dup-title{display:none !important}}
+
+/* Guard for the scroll fix above: nothing in the shell may become a scroll
+   box on phones. The document is the one and only page scroller. */
+@media (max-width: 899px) {
+  body, #root, .m-shell, .m-main { overflow-y: visible !important; overscroll-behavior: auto !important; }
+}
