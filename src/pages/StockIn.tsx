@@ -8,11 +8,27 @@ import { api, ApiError } from '../api/client';
 interface Warehouse { id: string; name: string; }
 type FC = 'ean'|'imei'|'srno';
 type RS = 'empty'|'loading'|'not_found'|'found'|'saved'|'err';
-interface Row { id:string; ean:string; productId:string; model:string; brand:string; imeiRequired:boolean; srnoRequired:boolean; qty:number; imei:string; srno:string; imeiType:string; status:RS; errMsg:string; errField:'imei'|'srno'|''; }
+interface Row { id:string; ean:string; productId:string; model:string; brand:string; imeiRequired:boolean; srnoRequired:boolean; qty:number; imei:string; srno:string; imeiType:string; status:RS; errMsg:string; errField:'imei'|'srno'|''; isReturn?:boolean; returnNote?:string; }
 
 const uid=()=>Math.random().toString(36).slice(2,9);
 const genDoc=()=>`SIN-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.floor(Math.random()*9000+1000)}`;
 const mk=():Row=>({id:uid(),ean:'',productId:'',model:'',brand:'',imeiRequired:false,srnoRequired:false,qty:0,imei:'',srno:'',imeiType:'NIL',status:'empty',errMsg:'',errField:''});
+
+// A code already in the tracker means one of two different things. If the unit
+// is IN STOCK it really is a duplicate scan. If it was SOLD, it is a customer
+// return — the unit is physically back and must be taken into stock again,
+// which the old blanket "already stocked in" error made impossible.
+const fmtD=(d:string)=>new Date(d).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+function classifyExisting(existing:any):{kind:'return';note:string}|{kind:'dup';msg:string}{
+  if(existing?.status==='SOLD'){
+    const when=existing.sale?.date?fmtD(existing.sale.date):'';
+    const who=existing.sale?.customer?` to ${existing.sale.customer}`:'';
+    return {kind:'return',note:`Sold${when?' on '+when:''}${who} — will be taken back as a return`};
+  }
+  const sup=existing?.supplier?.name||'unknown supplier';
+  const st=existing?.status&&existing.status!=='IN_STOCK'?` (status: ${String(existing.status).replace(/_/g,' ')})`:'';
+  return {kind:'dup',msg:`Already stocked in on ${fmtD(existing.createdAt)} from ${sup}${st}. Duplicate scan!`};
+}
 const SK='erp_supp_v3', DK='sin_draft_v2';
 const getH=():string[]=>{try{return JSON.parse(localStorage.getItem(SK)||'[]');}catch{return[];}};
 const saveH=(n:string)=>{const h=getH().filter(x=>x!==n);localStorage.setItem(SK,JSON.stringify([n,...h].slice(0,100)));};
@@ -203,17 +219,18 @@ export function StockIn(){
     // flags the row if it turns out to be a duplicate, so the operator can keep
     // scanning at full speed instead of waiting on each network round-trip.
     // Skipped in edit mode: the loaded IMEIs belong to the entry being edited.
-    upd(i,{imei:v,qty:1,status:'saved',errMsg:'',errField:''});
+    upd(i,{imei:v,qty:1,status:'saved',errMsg:'',errField:'',isReturn:false,returnNote:''});
     const ni=i+1;if(ni<rows.length)moveTo(ni,'imei');
 
     if(!editMode){
       void (async()=>{
         try{
           const existing=await api<any>(`/imei/${encodeURIComponent(v)}`);
-          const dt=new Date(existing.createdAt).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
-          const sup=existing.supplier?.name||'unknown supplier';
+          const c=classifyExisting(existing);
           setRows(rs=>rs.map((r,x)=>x===i&&r.imei===v
-            ?{...r,status:'err',errMsg:`Already stocked in on ${dt} from ${sup}. Duplicate scan!`,errField:'imei'}
+            ?(c.kind==='return'
+                ?{...r,isReturn:true,returnNote:c.note,errMsg:'',errField:''}
+                :{...r,status:'err',errMsg:c.msg,errField:'imei'})
             :r));
         }catch{}
       })();
@@ -247,10 +264,26 @@ export function StockIn(){
     // Scanning a serial completes the row. Move to the next row's serial field
     // rather than inserting a row and jumping to EAN — that jump was letting
     // the tail of a fast gun scan land in the EAN box and spawn extra rows.
-    upd(i,{srno:v,qty:row.imei?row.qty:1,status:'saved',errMsg:'',errField:''});
+    upd(i,{srno:v,qty:row.imei?row.qty:1,status:'saved',errMsg:'',errField:'',isReturn:false,returnNote:''});
     if(i+1<rows.length) moveTo(i+1,'srno');
     else { const ni=ins(i); moveTo(ni,'srno'); }
-  },[rows,upd,ins,moveTo]);
+
+    // Serials used to be checked only when saving, so a returned serial failed
+    // at the very end. Checked here too, in the background, like IMEIs.
+    if(!editMode){
+      void (async()=>{
+        try{
+          const existing=await api<any>(`/imei/${encodeURIComponent(v)}`);
+          const c=classifyExisting(existing);
+          setRows(rs=>rs.map(r=>r.id===curId2&&r.srno===v
+            ?(c.kind==='return'
+                ?{...r,isReturn:true,returnNote:c.note,errMsg:'',errField:''}
+                :{...r,status:'err',errMsg:c.msg,errField:'srno'})
+            :r));
+        }catch{}
+      })();
+    }
+  },[rows,upd,ins,moveTo,editMode]);
 
   const del=(i:number)=>{setRows(rs=>rs.length===1?[mk()]:rs.filter((_,x)=>x!==i));moveTo(Math.max(0,ar>=i?ar-1:ar),'ean');};
   const clear=()=>{if(!confirm('Clear all rows and draft?'))return;eCache.clear();setRows([mk()]);moveTo(0,'ean');localStorage.removeItem(DK);};
@@ -364,7 +397,21 @@ export function StockIn(){
       // alone sent serial-only rows down the plain-quantity path, where the
       // serial was appended to the remarks string and no tracker record was
       // ever created — which is why they vanished on reopening the entry.
-      const imeiRows=sv.filter(r=>r.imei||r.srno);
+      // Units coming back from a customer are taken into stock as a return;
+      // they already exist in the tracker, so a normal receive would reject
+      // them as duplicates.
+      const returnRows=sv.filter(r=>r.isReturn&&(r.imei||r.srno));
+      if(returnRows.length){
+        await api('/imei/return',{method:'POST',body:JSON.stringify({
+          imeis:returnRows.map(r=>r.imei||r.srno),
+          vendorId:resolvedSuppId||undefined,
+          remarks:rmk,
+          txnDate:date,
+          invoiceNo:inv||undefined,
+        })});
+      }
+
+      const imeiRows=sv.filter(r=>!r.isReturn&&(r.imei||r.srno));
       const imeiByProduct=imeiRows.reduce((a:any,r)=>{
         if(!a[r.productId])a[r.productId]=[];
         a[r.productId].push({imei1:r.imei||r.srno,imeiType:r.imeiType||'NIL'});
@@ -522,7 +569,7 @@ export function StockIn(){
               {rows.map((row,i)=>{
                 const isA=i===ar;
                 const needsImei=(row.status==='found')||(row.status==='saved'&&row.imeiRequired&&!row.imei);
-                const bg=row.errMsg?'#fff5f5':needsImei?'#fffbeb':row.status==='saved'?'#f0fdf4':isA?'#f0f9ff':i%2===0?'#fff':'#fafafa';
+                const bg=row.errMsg?'#fff5f5':needsImei?'#fffbeb':row.isReturn?'#fff7ed':row.status==='saved'?'#f0fdf4':isA?'#f0f9ff':i%2===0?'#fff':'#fafafa';
                 const eOL=(f:FC)=>isA&&fc===f?`2px solid ${f==='imei'?'#dc2626':f==='srno'?'#2563eb':'#2563eb'}`:'2px solid transparent';
                 return(
                   <tr key={row.id} style={{background:bg}}>
@@ -568,6 +615,7 @@ export function StockIn(){
                     <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',padding:'2px 10px',color:row.model?'#0f172a':'#cbd5e1',fontWeight:row.model?500:400,verticalAlign:'middle'}}>
                       <div style={{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical' as any,overflow:'hidden',fontSize:12,lineHeight:1.35,wordBreak:'break-word'}}>
                         {row.model||'Auto-filled after EAN scan'}
+                        {row.isReturn&&row.returnNote&&<div style={{fontSize:10,fontWeight:600,color:'#c2410c',marginTop:1}}>↩ {row.returnNote}</div>}
                       </div>
                     </td>
                     {/* Qty */}
@@ -615,7 +663,8 @@ export function StockIn(){
                     {/* Status */}
                     <td style={{borderBottom:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0',padding:'0 8px',textAlign:'center'}}>
                       {row.errMsg&&<span style={{fontSize:9,background:'#fef2f2',color:'#dc2626',padding:'2px 6px',borderRadius:8,fontWeight:700,cursor:'help',display:'block',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:72}} title={row.errMsg}>✕ Error</span>}
-                      {!row.errMsg&&row.status==='saved'&&<span style={{fontSize:10,background:'#dcfce7',color:'#15803d',padding:'2px 8px',borderRadius:10,fontWeight:700}}>{row.imeiRequired?'✓ IMEI':row.srnoRequired?'✓ S/N':'✓'}</span>}
+                      {!row.errMsg&&row.status==='saved'&&row.isReturn&&<span title={row.returnNote} style={{fontSize:10,background:'#ffedd5',color:'#c2410c',padding:'2px 8px',borderRadius:10,fontWeight:700,cursor:'help'}}>↩ RETURN</span>}
+                      {!row.errMsg&&row.status==='saved'&&!row.isReturn&&<span style={{fontSize:10,background:'#dcfce7',color:'#15803d',padding:'2px 8px',borderRadius:10,fontWeight:700}}>{row.imeiRequired?'✓ IMEI':row.srnoRequired?'✓ S/N':'✓'}</span>}
                       {!row.errMsg&&row.status==='found'&&row.imeiRequired&&<span style={{fontSize:10,background:'#fef9c3',color:'#92400e',padding:'2px 8px',borderRadius:10,fontWeight:700}}>⚠ IMEI</span>}
                       {!row.errMsg&&row.status==='found'&&!row.imeiRequired&&row.srnoRequired&&<span style={{fontSize:10,background:'#fed7aa',color:'#9a3412',padding:'2px 8px',borderRadius:10,fontWeight:700}}>⚠ S/N</span>}
                       {row.status==='not_found'&&<button onClick={()=>{setDrawer(row.ean);setDf(d=>({...d,ean:row.ean}));}} title="Add this product to Product Master" style={{fontSize:10,background:'#fef2f2',color:'#dc2626',padding:'2px 8px',borderRadius:10,border:'1px solid #fecaca',cursor:'pointer',fontWeight:700}}>+ New EAN</button>}
@@ -651,7 +700,8 @@ export function StockIn(){
                   <div key={row.id} style={{margin:'0 0 12px 0',border:`2px solid ${hasErr?'#fca5a5':isDone?'#86efac':'#e2e8f0'}`,borderRadius:14,background:hasErr?'#fff5f5':isDone?'#f0fdf4':'#fff',overflow:'hidden'}}>
                     <div style={{padding:'8px 14px',background:isDone?'#dcfce7':hasErr?'#fee2e2':'#f8fafc',display:'flex',alignItems:'center',gap:8,borderBottom:'1px solid rgba(0,0,0,.06)'}}>
                       <span style={{fontSize:12,fontWeight:700,color:'#94a3b8'}}>#{i+1}</span>
-                      {isDone&&<span style={{fontSize:11,background:'#16a34a',color:'#fff',padding:'2px 10px',borderRadius:20,fontWeight:700}}>{row.imei?'✓ IMEI':'✓ Done'}</span>}
+                      {isDone&&!row.isReturn&&<span style={{fontSize:11,background:'#16a34a',color:'#fff',padding:'2px 10px',borderRadius:20,fontWeight:700}}>{row.imei?'✓ IMEI':'✓ Done'}</span>}
+                      {isDone&&row.isReturn&&<span style={{fontSize:11,background:'#ea580c',color:'#fff',padding:'2px 10px',borderRadius:20,fontWeight:700}}>↩ RETURN</span>}
                       {needsImei&&<span style={{fontSize:11,background:'#f59e0b',color:'#fff',padding:'2px 10px',borderRadius:20,fontWeight:700}}>⚠ Scan IMEI</span>}
                       {needsSrno&&<span style={{fontSize:11,background:'#f97316',color:'#fff',padding:'2px 10px',borderRadius:20,fontWeight:700}}>⚠ Sr. No.</span>}
                       {hasErr&&<span style={{fontSize:11,background:'#dc2626',color:'#fff',padding:'2px 10px',borderRadius:20,fontWeight:700}}>✕ Error</span>}
@@ -667,6 +717,7 @@ export function StockIn(){
                         style={{width:'100%',height:52,fontSize:18,padding:'0 14px',border:'1.5px solid #d0d5dd',borderRadius:10,boxSizing:'border-box',outline:'none',WebkitAppearance:'none'}}
                       />
                       {row.model&&<div style={{marginTop:8,fontSize:14,fontWeight:700,color:'#0f172a'}}>{row.model}</div>}
+                      {row.isReturn&&row.returnNote&&<div style={{marginTop:4,fontSize:12,fontWeight:600,color:'#c2410c'}}>↩ {row.returnNote}</div>}
                       {row.brand&&<div style={{fontSize:12,color:'#64748b'}}>{row.brand} · EAN: {row.ean}</div>}
                       {row.status==='not_found'&&<div style={{marginTop:6,fontSize:13,color:'#dc2626'}}>✕ Not found in Product Master</div>}
                       {row.status==='loading'&&<div style={{marginTop:6,fontSize:13,color:'#2563eb'}}>🔍 Looking up...</div>}

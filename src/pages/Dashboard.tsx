@@ -132,6 +132,7 @@ export function Dashboard() {
               srno:isImei?'':im.imei1,
               imeiType:im.imeiType||'NIL',
               status:'saved',errMsg:'',errField:'',
+              isReturn:!!(im as any).isReturn, // a returned unit must be saved as a return again
               _origTxnId:t.id,_origImeiId:im.id, // track for cleanup
             });
           }
@@ -431,7 +432,12 @@ export function Dashboard() {
               const qty=txnList.reduce((s,t)=>s+Math.abs(t.qty),0);
               return (
                 <div key={model} style={{display:'flex',alignItems:'center',padding:'8px 14px',borderBottom:'1px solid #f1f5f9',gap:8}}>
-                  <span style={{flex:1,fontSize:12,color:'#374151',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{model}</span>
+                  <span style={{flex:1,fontSize:12,color:'#374151',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                    {model}
+                    {txnList.some(t=>t.type==='RETURN')&&(
+                      <span style={{marginLeft:6,fontSize:10,fontWeight:700,color:'#c2410c',background:'#ffedd5',padding:'1px 6px',borderRadius:8}}>↩ return</span>
+                    )}
+                  </span>
                   <span style={{fontWeight:700,fontSize:13,color,flexShrink:0}}>{sign==='+'?'':sign}{qty}</span>
                 </div>
               );
