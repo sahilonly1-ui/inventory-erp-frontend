@@ -24,6 +24,8 @@ const OpeningStock   = lazy(() => import('./pages/OpeningStock').then(m => ({ de
 const StockReport    = lazy(() => import('./pages/StockReport').then(m => ({ default: m.StockReport })));
 const StockOut       = lazy(() => import('./pages/StockOut').then(m => ({ default: m.StockOut })));
 const Reports        = lazy(() => import('./pages/Reports').then(m => ({ default: m.Reports })));
+const MarketPrices   = lazy(() => import('./pages/MarketPrices'));
+const PriceAgent     = lazy(() => import('./pages/PriceAgent'));
 
 // A blank frame while a chunk downloads reads as a freeze; a small centred
 // spinner makes it obviously "loading" instead. Chunks are a few hundred KB on
@@ -67,6 +69,9 @@ export default function App() {
         <Route path="/versions"   element={<Shell><Versions /></Shell>} />
         <Route path="/users"      element={<Shell><Users /></Shell>} />
         <Route path="/product-history" element={<Shell><ProductHistory /></Shell>} />
+        <Route path="/market-prices" element={<Shell><MarketPrices /></Shell>} />
+        {/* Plain page (no sidebar) for Claude in Chrome to operate. */}
+        <Route path="/market-prices/agent" element={<ProtectedRoute><Suspense fallback={<PageFallback />}><PriceAgent /></Suspense></ProtectedRoute>} />
       </Routes>
     </AuthProvider>
   );

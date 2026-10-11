@@ -19,6 +19,8 @@ const NAV: NavItem[] = [
   { group: 'Inventory', to: '/imei',      label: 'IMEI Tracker', short: 'IMEI', primary: true, svg: '<rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>' },
   { group: 'Masters', to: '/suppliers', label: 'Supplier Master',  svg: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>' },
   { group: 'Inventory', to: '/stock-report', label: 'Stock Report', short: 'Report', svg: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/><rect x="13" y="13" width="2" height="5"/><rect x="7" y="11" width="2" height="7"/>' },
+  // perm '*' → only the admin role sees it; the page and API check again.
+  { group: 'Analytics', to: '/market-prices', label: 'Market Prices', short: 'Prices', perm: '*', svg: '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>' },
   { group: 'Analytics', to: '/reports',   label: 'Reports',          svg: '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>' },
   { group: 'System', to: '/versions',  label: 'Version History', short: 'History', svg: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>' },
   { group: 'System', to: '/users',     label: 'Users & Access',   svg: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 11l-3 3-1.5-1.5"/>', perm: 'users.read' },
@@ -27,7 +29,7 @@ const NAV: NavItem[] = [
 
 const GROUPS: Group[] = ['Operations', 'Inventory', 'Masters', 'Analytics', 'System'];
 // Order within a group follows the working day: dashboard, receive, dispatch.
-const ORDER = ['/', '/stock-in', '/stock-out', '/opening-stock', '/products', '/imei', '/stock-report', '/product-history', '/suppliers', '/reports', '/versions', '/users'];
+const ORDER = ['/', '/stock-in', '/stock-out', '/opening-stock', '/products', '/imei', '/stock-report', '/product-history', '/suppliers', '/reports', '/market-prices', '/versions', '/users'];
 
 function NavIcon({ svg, size = 16 }: { svg: string; size?: number }) {
   return (
