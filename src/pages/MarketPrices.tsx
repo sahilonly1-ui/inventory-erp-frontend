@@ -71,6 +71,8 @@ export default function MarketPrices() {
   const [err, setErr] = useState('');
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<'all' | 'stock' | 'starred' | 'custom' | 'paused'>('all');
+  const [cat, setCat] = useState('');
+  const [brand, setBrand] = useState('');
   const [open, setOpen] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -109,9 +111,32 @@ export default function MarketPrices() {
       if (filter === 'stock' && i.stock <= 0) return false;
       if (filter === 'starred' && !i.priority) return false;
       if (filter === 'custom' && i.productId) return false;
+      if (cat && (i.category ?? 'Not stocked') !== cat) return false;
+      if (brand && (i.brand ?? '').toLowerCase() !== brand.toLowerCase()) return false;
       return !t || `${i.name} ${i.brand ?? ''} ${i.ean ?? ''} ${i.category ?? ''}`.toLowerCase().includes(t);
     });
-  }, [items, q, filter]);
+  }, [items, q, filter, cat, brand]);
+
+  // Dropdown options come from what is actually being watched.
+  const catOptions = useMemo(() => [...new Set(items.map(i => i.category ?? 'Not stocked'))].sort(), [items]);
+  const brandOptions = useMemo(() => {
+    const m = new Map<string, string>();
+    items.forEach(i => { if (i.brand) m.set(i.brand.toLowerCase(), i.brand); });
+    return [...m.values()].sort((a, b) => a.localeCompare(b));
+  }, [items]);
+  const checkable = shown.filter(i => i.active);
+
+  /** Queue exactly the products on screen and open the agent page for them. */
+  const runCheck = async () => {
+    if (!checkable.length) return;
+    if (checkable.length > 25 && !confirm(`${checkable.length} products selected. Claude takes roughly 1–3 minutes per product, so this run will be long. Continue?`)) return;
+    const w = window.open('about:blank', '_blank'); // opened now so the popup isn't blocked
+    try {
+      await api('/price-watch/agent/request', { method: 'POST', body: JSON.stringify({ ids: checkable.map(i => i.id), replace: true }) });
+      if (w) w.location.href = '/market-prices/agent?queued=1';
+      await load(true);
+    } catch (e: any) { w?.close(); alert(e?.message || 'Could not queue products'); }
+  };
 
   if (!isAdmin) return <MEmpty icon="🔒" title="Admins only" hint="Market prices are visible to administrators only." />;
 
@@ -128,7 +153,8 @@ export default function MarketPrices() {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           {busy > 0 && <MPill tone="brand">{busy} waiting for agent</MPill>}
           <button style={btn()} onClick={() => setShowGuide(true)}>📘 Chrome agent setup</button>
-          <button style={btn()} onClick={() => window.open('/market-prices/agent', '_blank')}>▶ Run price check</button>
+          <button style={btn()} disabled={!checkable.length} title="Check prices for the products currently shown"
+            onClick={runCheck}>▶ Check prices{checkable.length ? ` (${checkable.length})` : ''}</button>
           <button style={btn()} onClick={() => setShowSettings(true)}>⚙ Settings</button>
           <button style={btn(true)} onClick={() => setShowAdd(true)}>+ Add product</button>
         </div>
@@ -144,11 +170,28 @@ export default function MarketPrices() {
       {/* Filters */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search product, brand, EAN…" style={{ ...mInput, flex: '1 1 240px', height: 40 }} />
+        <select value={cat} onChange={e => setCat(e.target.value)} style={{ ...mInput, height: 40, flex: '0 1 190px' }}>
+          <option value="">All categories</option>
+          {catOptions.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select value={brand} onChange={e => setBrand(e.target.value)} style={{ ...mInput, height: 40, flex: '0 1 170px' }}>
+          <option value="">All brands</option>
+          {brandOptions.map(b => <option key={b} value={b}>{b}</option>)}
+        </select>
         {([['all', 'All'], ['stock', 'In stock'], ['starred', '★ Starred'], ['custom', 'Not stocked'], ['paused', 'Paused']] as const).map(([k, l]) => (
           <button key={k} onClick={() => setFilter(k)}
             style={{ ...btn(), height: 40, background: filter === k ? M.color.ink : '#fff', color: filter === k ? '#fff' : M.color.ink }}>{l}</button>
         ))}
       </div>
+
+      {!loading && items.length > 0 && (
+        <div style={{ fontSize: 12.5, color: M.color.muted, margin: '-4px 0 10px' }}>
+          Showing {shown.length} of {items.length} products
+          {(cat || brand || q || filter !== 'all') && <button onClick={() => { setCat(''); setBrand(''); setQ(''); setFilter('all'); }}
+            style={{ marginLeft: 8, background: 'none', border: 'none', color: M.color.brand, cursor: 'pointer', fontWeight: 600 }}>Clear filters</button>}
+          {checkable.length > 0 && <> · “Check prices” will check these {checkable.length}</>}
+        </div>
+      )}
 
       {loading ? <MEmpty icon="⏳" title="Loading…" /> : !shown.length ? (
         <MEmpty icon="🏷️" title={items.length ? 'Nothing matches' : 'No products being watched yet'}
@@ -542,7 +585,7 @@ function GuideDialog({ onClose }: { onClose: () => void }) {
         <button style={{ ...btn(), height: 32, marginTop: 6 }} onClick={async () => { try { await navigator.clipboard.writeText(AGENT_PROMPT); setCopied(true); } catch { /* select manually */ } }}>{copied ? 'Copied ✓' : 'Copy prompt'}</button>
       </div></div>
       <div style={step}>{n(4)}<div>Click the <b>clock icon</b> in the panel and schedule the <b>prices</b> shortcut — e.g. daily at 10 AM, 1 PM, 4 PM and 7 PM. Runs only while the computer is on and Chrome is open.</div></div>
-      <div style={{ ...step, borderBottom: 'none' }}>{n(5)}<div>For an instant check, press ⟳ on any product (or “Run price check”), then type <b>/prices</b> in the Claude panel on the tab that opens.</div></div>
+      <div style={{ ...step, borderBottom: 'none' }}>{n(5)}<div>For an instant check: filter by category/brand, press <b>“Check prices”</b> (or ⟳ on one product), then type <b>/prices</b> in the Claude panel on the tab that opens. Claude checks every product you had on screen.</div></div>
       <div style={{ fontSize: 12, color: M.color.muted, marginTop: 6, lineHeight: 1.5 }}>Uses your Claude plan’s usage — no API key, no scraper, nothing extra to pay. Each run covers the products listed in Settings → “Products per agent run”, oldest first, starred first.</div>
     </Dialog>
   );

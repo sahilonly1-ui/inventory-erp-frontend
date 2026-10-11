@@ -32,19 +32,39 @@ export default function PriceAgent() {
   const [jobs, setJobs] = useState<Job[] | null>(null);
   const [err, setErr] = useState('');
   const [done, setDone] = useState<Record<string, string>>({});
+  const [round, setRound] = useState(1);
   const isAdmin = (user?.permissions ?? []).includes('*');
+  const queued = params.get('queued') === '1';
+  const item = params.get('item');
 
+  const fetchJobs = () => {
+    const qs = item ? `?item=${encodeURIComponent(item)}` : queued ? '?queued=1&limit=5' : '';
+    return api<Job[]>(`/price-watch/agent/jobs${qs}`);
+  };
   useEffect(() => {
     if (!isAdmin) return;
-    const item = params.get('item');
-    api<Job[]>(`/price-watch/agent/jobs${item ? `?item=${encodeURIComponent(item)}` : ''}`)
-      .then(setJobs).catch(e => setErr(e?.message || 'Could not load jobs'));
+    fetchJobs().then(setJobs).catch(e => setErr(e?.message || 'Could not load jobs'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, params]);
 
   if (!isAdmin) return <div style={{ padding: 30, fontFamily: 'system-ui' }}>Sign in to the ERP as an administrator first, then reload this page.</div>;
 
   const remaining = (jobs ?? []).filter(j => done[j.itemId] !== 'saved').length;
-  const allDone = jobs !== null && remaining === 0;
+  const batchFinished = jobs !== null && jobs.length > 0 && remaining === 0;
+
+  // A filtered run ("Check prices") can be bigger than one page: when this
+  // batch is saved, pull the next queued products until none are left.
+  useEffect(() => {
+    if (!queued || !batchFinished) return;
+    const t = setTimeout(() => {
+      fetchJobs().then(next => { setDone({}); setRound(r => r + 1); setJobs(next); window.scrollTo(0, 0); })
+        .catch(e => setErr(e?.message || 'Could not load the next products'));
+    }, 1500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queued, batchFinished]);
+
+  const allDone = jobs !== null && (jobs.length === 0 || (batchFinished && !queued));
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '20px 16px 80px', fontFamily: 'system-ui, sans-serif', color: '#0f172a', lineHeight: 1.5 }}>
@@ -61,7 +81,8 @@ export default function PriceAgent() {
         <section style={{ padding: 16, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, marginBottom: 18, fontSize: 14 }}>
           <b style={{ fontSize: 15 }}>Instructions for Claude (follow exactly)</b>
           <ol style={{ margin: '8px 0 0', paddingLeft: 20 }}>
-            <li>Work on <b>one product card at a time</b>, from top to bottom. {jobs ? `${remaining} card(s) left.` : 'Loading…'}</li>
+            <li>Work on <b>one product card at a time</b>, from top to bottom. {jobs ? `${remaining} card(s) left on this page.` : 'Loading…'}
+              {queued && <> When every card here is saved, <b>more products load automatically</b> after a moment (batch {round}) — continue with them.</>}</li>
             <li>For every store listed in the card, open its link in a new tab.
               If the link is a <b>search page</b>, open the result that is <b>exactly this product</b> — same model name and number, same variant if one is given.
               Never pick an accessory, cover, combo, bundle, refurbished/renewed listing, or a different model (e.g. “PartyBox 110” is not “PartyBox 120”).
@@ -77,6 +98,7 @@ export default function PriceAgent() {
         </section>
       )}
 
+      {batchFinished && queued && <div style={{ padding: 14, background: '#eff6ff', borderRadius: 10, marginBottom: 12, fontWeight: 600 }}>⏳ Loading the next products…</div>}
       {(jobs ?? []).map((j, idx) => <JobCard key={j.itemId} idx={idx + 1} job={j} state={done[j.itemId]} onState={s => setDone(d => ({ ...d, [j.itemId]: s }))} />)}
     </div>
   );
