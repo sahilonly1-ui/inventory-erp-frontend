@@ -434,7 +434,10 @@ function StoreDetail({ itemId, store, st, act }: { itemId: string; store: typeof
                   </div>
                   <div style={{ color: M.color.muted, marginTop: 1 }}>{o.summary}</div>
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
-                    {[o.cardType, o.mode, o.offerType.replace(/_/g, ' '), o.minTxn ? `min ${inr(o.minTxn)}` : null].filter(Boolean).map(t => (
+                    {[o.cardType, o.mode, o.offerType.replace(/_/g, ' '),
+                      o.percent ? `${o.percent}%` : null,
+                      o.maxDiscount ? (o.value > 0 ? `max ${inr(o.maxDiscount)}` : `limit ${inr(o.maxDiscount)} — exact saving at checkout`) : null,
+                      o.minTxn ? `min order ${inr(o.minTxn)}` : null].filter(Boolean).map(t => (
                       <span key={t!} style={{ fontSize: 10.5, padding: '1px 6px', borderRadius: 5, background: '#eef2f7', color: '#475569' }}>{t}</span>
                     ))}
                   </div>
