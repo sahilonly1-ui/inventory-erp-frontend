@@ -17,7 +17,7 @@ interface Snap { status: 'ok' | 'suspect' | 'unverified' | 'not_found' | 'blocke
 interface Link { url: string | null; lockedByUser: boolean; notListed: boolean; discoveredAt: string | null }
 interface StoreState { link: Link | null; latest: Snap | null; lastGood: Snap | null }
 interface Item { id: string; productId: string | null; name: string; brand: string | null; variant: string | null; source: 'auto' | 'manual'; active: boolean; priority: boolean; lastRefreshedAt: string | null; ean: string | null; ourPrice: number | null; category: string | null; stock: number; requested: boolean; stores: Record<StoreKey, StoreState> }
-interface Status { lastAgentRun: string | null; requested: number }
+interface Status { lastAgentRun: string | null; requested: number; instantRun?: boolean }
 interface Settings { autoSyncInStock: boolean; autoSyncCategories: string[]; defaultIntervalMins: number; priorityIntervalMins: number; stores: StoreKey[]; batchSize: number }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -76,7 +76,6 @@ export default function MarketPrices() {
   const [open, setOpen] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showGuide, setShowGuide] = useState(false);
   const busy = status?.requested ?? 0;
 
   const load = useCallback(async (silent = false) => {
@@ -126,16 +125,18 @@ export default function MarketPrices() {
   }, [items]);
   const checkable = shown.filter(i => i.active);
 
-  /** Queue exactly the products on screen and open the agent page for them. */
+  const [notice, setNotice] = useState('');
+  /** Queue exactly the products on screen for the price scraper. */
   const runCheck = async () => {
     if (!checkable.length) return;
-    if (checkable.length > 25 && !confirm(`${checkable.length} products selected. Claude takes roughly 1–3 minutes per product, so this run will be long. Continue?`)) return;
-    const w = window.open('about:blank', '_blank'); // opened now so the popup isn't blocked
     try {
-      await api('/price-watch/agent/request', { method: 'POST', body: JSON.stringify({ ids: checkable.map(i => i.id), replace: true }) });
-      if (w) w.location.href = '/market-prices/agent?queued=1';
+      const r = await api<{ queued: number; dispatched: boolean }>('/price-watch/agent/request', { method: 'POST', body: JSON.stringify({ ids: checkable.map(i => i.id), replace: true }) });
+      const mins = Math.max(3, Math.ceil(r.queued / 8) + 2);
+      setNotice(r.dispatched
+        ? `Checking ${r.queued} product(s) now — results appear here in about ${mins} minutes.`
+        : `${r.queued} product(s) queued. They'll be checked first in the next automatic run (9:30, 12:30, 3:30, 6:30, 9:30) — or start it now from GitHub (Actions → Price scraper → Run workflow, queued_only = 1).`);
       await load(true);
-    } catch (e: any) { w?.close(); alert(e?.message || 'Could not queue products'); }
+    } catch (e: any) { alert(e?.message || 'Could not queue products'); }
   };
 
   if (!isAdmin) return <MEmpty icon="🔒" title="Admins only" hint="Market prices are visible to administrators only." />;
@@ -152,7 +153,6 @@ export default function MarketPrices() {
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           {busy > 0 && <MPill tone="brand">{busy} waiting for agent</MPill>}
-          <button style={btn()} onClick={() => setShowGuide(true)}>📘 Chrome agent setup</button>
           <button style={btn()} disabled={!checkable.length} title="Check prices for the products currently shown"
             onClick={runCheck}>▶ Check prices{checkable.length ? ` (${checkable.length})` : ''}</button>
           <button style={btn()} onClick={() => setShowSettings(true)}>⚙ Settings</button>
@@ -161,10 +161,16 @@ export default function MarketPrices() {
       </div>
 
       {status && (
-        status.lastAgentRun
-          ? <div style={{ fontSize: 12.5, color: M.color.muted, marginBottom: 12 }}>Last price check by Claude in Chrome: <b>{ago(status.lastAgentRun)}</b> ({fmtStamp(status.lastAgentRun)})</div>
-          : <Banner tone="warn">Prices are collected by <b>Claude in Chrome</b> on your computer — free with your Claude plan. <button onClick={() => setShowGuide(true)} style={{ background: 'none', border: 'none', color: M.color.brand, fontWeight: 700, cursor: 'pointer', padding: 0 }}>Set it up (2 min) →</button></Banner>
+        <div style={{ fontSize: 12.5, color: M.color.muted, marginBottom: 12 }}>
+          {status.lastAgentRun
+            ? <>Last price update: <b>{ago(status.lastAgentRun)}</b> ({fmtStamp(status.lastAgentRun)}) · automatic 5× a day</>
+            : <>No prices collected yet — the scraper runs automatically 5× a day, or press “Check prices”.</>}
+        </div>
       )}
+      {notice && <div style={{ padding: '10px 14px', borderRadius: 10, background: M.color.brandBg, border: '1px solid #bfdbfe', color: '#1e40af', fontSize: 13, marginBottom: 12, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+        <span style={{ flex: 1 }}>{notice}</span>
+        <button onClick={() => setNotice('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1e40af', fontSize: 16 }}>×</button>
+      </div>}
       {err && <Banner tone="bad">{err}</Banner>}
 
       {/* Filters */}
@@ -189,7 +195,7 @@ export default function MarketPrices() {
           Showing {shown.length} of {items.length} products
           {(cat || brand || q || filter !== 'all') && <button onClick={() => { setCat(''); setBrand(''); setQ(''); setFilter('all'); }}
             style={{ marginLeft: 8, background: 'none', border: 'none', color: M.color.brand, cursor: 'pointer', fontWeight: 600 }}>Clear filters</button>}
-          {checkable.length > 0 && <> · “Check prices” will check these {checkable.length}</>}
+          {checkable.length > 0 && <> · “Check prices” checks these {checkable.length}</>}
         </div>
       )}
 
@@ -218,13 +224,12 @@ export default function MarketPrices() {
       )}
 
       <div style={{ fontSize: 11.5, color: M.color.faint, marginTop: 12, lineHeight: 1.6 }}>
-        Prices are read from the live store pages by Claude in Chrome, then sanity-checked before they are shown. <b style={{ color: M.color.good }}>Green</b> = cheapest verified.
+        Prices are read from the live store pages by the price scraper, then sanity-checked before they are shown. <b style={{ color: M.color.good }}>Green</b> = cheapest verified.
         <span style={{ color: M.color.warn }}> ⚠</span> = check it (possible wrong variant or unusual price). Effective price = price minus the best instant bank discount/cashback.
         Offers can depend on card type, EMI tenure and cart value — confirm on the store before quoting a customer.
       </div>
 
       {showAdd && <AddDialog onClose={() => setShowAdd(false)} onAdded={() => { setShowAdd(false); load(true); }} />}
-      {showGuide && <GuideDialog onClose={() => setShowGuide(false)} />}
       {showSettings && <SettingsDialog onClose={() => setShowSettings(false)} onSaved={() => { setShowSettings(false); load(true); }} />}
     </div>
   );
@@ -298,7 +303,7 @@ function ItemRow({ it, open, onToggle, act }: { it: Item; open: boolean; onToggl
           ) : <span style={{ color: M.color.faint }}>—</span>}
         </td>
         <td style={{ ...td, whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
-          <button title="Check this product now with Claude in Chrome" style={{ ...btn(), height: 32, padding: '0 10px' }} onClick={() => checkNow(it.id, act)}>⟳</button>
+          <button title="Check this product in the next run" style={{ ...btn(), height: 32, padding: '0 10px' }} onClick={() => checkNow(it.id, act)}>⟳</button>
         </td>
       </tr>
       {open && (
@@ -564,29 +569,7 @@ function SettingsDialog({ onClose, onSaved }: { onClose: () => void; onSaved: ()
   );
 }
 
-/** Queue one product and open the agent page for it — Claude in Chrome takes it from there. */
+/** Queue one product for the next scraper run (keeps anything already queued). */
 async function checkNow(id: string, act: Act) {
-  window.open(`/market-prices/agent?item=${id}`, '_blank');
-  await act(`/price-watch/items/${id}/request`);
-}
-
-export const AGENT_PROMPT = `Open https://inventoryhss.netlify.app/market-prices/agent in a new tab and follow the instructions written at the top of that page exactly, until it says "All done". Never guess a price or offer — only report what is visible on the store page.`;
-
-function GuideDialog({ onClose }: { onClose: () => void }) {
-  const [copied, setCopied] = useState(false);
-  const step: React.CSSProperties = { display: 'flex', gap: 10, padding: '9px 0', borderBottom: '1px solid #f1f5f9', fontSize: 13.5, lineHeight: 1.5 };
-  const n = (i: number) => <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: 11, background: M.color.brandBg, color: M.color.brand, fontWeight: 800, fontSize: 12, display: 'grid', placeItems: 'center' }}>{i}</span>;
-  return (
-    <Dialog title="Set up the Chrome price agent (free)" onClose={onClose}>
-      <div style={step}>{n(1)}<div>Install <b>Claude in Chrome</b> from the Chrome Web Store and sign in with your Claude account.</div></div>
-      <div style={step}>{n(2)}<div>Stay signed in to this ERP as admin in the same Chrome.</div></div>
-      <div style={step}>{n(3)}<div>In the Claude side panel, open Settings → <b>Shortcuts</b> → new shortcut named <b>prices</b>, with this prompt:
-        <div style={{ marginTop: 6, padding: 10, background: '#f8fafc', border: `1px solid ${M.color.line}`, borderRadius: 8, fontSize: 12.5, fontFamily: 'monospace' }}>{AGENT_PROMPT}</div>
-        <button style={{ ...btn(), height: 32, marginTop: 6 }} onClick={async () => { try { await navigator.clipboard.writeText(AGENT_PROMPT); setCopied(true); } catch { /* select manually */ } }}>{copied ? 'Copied ✓' : 'Copy prompt'}</button>
-      </div></div>
-      <div style={step}>{n(4)}<div>Click the <b>clock icon</b> in the panel and schedule the <b>prices</b> shortcut — e.g. daily at 10 AM, 1 PM, 4 PM and 7 PM. Runs only while the computer is on and Chrome is open.</div></div>
-      <div style={{ ...step, borderBottom: 'none' }}>{n(5)}<div>For an instant check: filter by category/brand, press <b>“Check prices”</b> (or ⟳ on one product), then type <b>/prices</b> in the Claude panel on the tab that opens. Claude checks every product you had on screen.</div></div>
-      <div style={{ fontSize: 12, color: M.color.muted, marginTop: 6, lineHeight: 1.5 }}>Uses your Claude plan’s usage — no API key, no scraper, nothing extra to pay. Each run covers the products listed in Settings → “Products per agent run”, oldest first, starred first.</div>
-    </Dialog>
-  );
+  await act('/price-watch/agent/request', { method: 'POST', body: JSON.stringify({ ids: [id], replace: false }) });
 }
