@@ -17,7 +17,7 @@ interface Snap { status: 'ok' | 'suspect' | 'unverified' | 'not_found' | 'blocke
 interface Link { url: string | null; lockedByUser: boolean; notListed: boolean; discoveredAt: string | null }
 interface StoreState { link: Link | null; latest: Snap | null; lastGood: Snap | null }
 interface Item { id: string; productId: string | null; name: string; brand: string | null; variant: string | null; source: 'auto' | 'manual'; active: boolean; priority: boolean; lastRefreshedAt: string | null; ean: string | null; ourPrice: number | null; category: string | null; stock: number; requested: boolean; stores: Record<StoreKey, StoreState> }
-interface Status { lastAgentRun: string | null; requested: number; instantRun?: boolean }
+interface Status { lastAgentRun: string | null; requested: number; instantRun?: boolean; localOnline?: boolean; localSeen?: string | null }
 interface RunStatus { configured: boolean; error?: string; run?: { number: number; status: string; conclusion: string | null; startedAt: string; updatedAt: string; url: string } | null }
 interface Settings { autoSyncInStock: boolean; autoSyncCategories: string[]; autoSyncBrands: string[]; includeOutOfStock: boolean; options?: { brands: string[]; categories: string[] }; defaultIntervalMins: number; priorityIntervalMins: number; stores: StoreKey[]; batchSize: number }
 
@@ -100,7 +100,7 @@ export default function MarketPrices() {
   useEffect(() => {
     if (!isAdmin) return;
     let t: ReturnType<typeof setTimeout>;
-    const loop = () => { t = setTimeout(async () => { await load(true); loop(); }, busyRef.current ? 8000 : 60000); };
+    const loop = () => { t = setTimeout(async () => { await load(true); loop(); }, busyRef.current ? 3000 : 30000); };
     loop();
     return () => clearTimeout(t);
   }, [isAdmin, load]);
@@ -136,10 +136,13 @@ export default function MarketPrices() {
   const refresh = async (ids: string[], replace: boolean) => {
     if (!ids.length) return;
     try {
-      const r = await api<{ queued: number; dispatched: boolean }>('/price-watch/agent/request', { method: 'POST', body: JSON.stringify({ ids, replace }) });
-      const mins = Math.max(2, Math.ceil(r.queued / 12) + 2);
-      setNotice(r.dispatched
-        ? `Refreshing ${r.queued} product(s) — prices update here in about ${mins} minute(s). You can keep working.`
+      const r = await api<{ queued: number; dispatched: boolean; via?: string }>('/price-watch/agent/request', { method: 'POST', body: JSON.stringify({ ids, replace }) });
+      const mins = Math.max(2, Math.ceil(r.queued / 12) + 1);
+      const secs = Math.max(15, r.queued * 8);
+      setNotice(r.via === 'local'
+        ? `Refreshing ${r.queued} product(s) on the showroom PC — prices update here in about ${secs < 90 ? `${secs} seconds` : `${Math.ceil(secs / 60)} minutes`}.`
+        : r.dispatched
+        ? `Refreshing ${r.queued} product(s) in the cloud (showroom PC scraper is offline) — prices update in about ${mins} minutes.`
         : `${r.queued} product(s) queued for the next automatic run. To refresh instantly from here, the GitHub token still needs to be added on Render (GITHUB_DISPATCH_TOKEN).`);
       await load(true);
     } catch (e: any) { alert(e?.message || 'Could not start the refresh'); }
@@ -177,6 +180,9 @@ export default function MarketPrices() {
             {running ? `running (started ${ago(run.run.startedAt)})` : run.run.conclusion === 'success' ? `finished ${ago(run.run.updatedAt)}` : `${run.run.conclusion || run.run.status} ${ago(run.run.updatedAt)}`}</b>
             {' '}<a href={run.run.url} target="_blank" rel="noreferrer" style={{ color: M.color.brand }}>details ↗</a></>}
           {run && !run.configured && <> · <span style={{ color: M.color.warn }}>instant refresh not set up</span></>}
+          {status.localOnline !== undefined && <> · Showroom PC scraper: {status.localOnline
+            ? <b style={{ color: M.color.good }}>● online</b>
+            : <span style={{ color: M.color.faint }}>○ offline{status.localSeen ? ` (last seen ${ago(status.localSeen)})` : ''}</span>}</>}
         </div>
       )}
       {notice && <div style={{ padding: '10px 14px', borderRadius: 10, background: M.color.brandBg, border: '1px solid #bfdbfe', color: '#1e40af', fontSize: 13, marginBottom: 12, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
