@@ -46,7 +46,8 @@ function view(st: StoreState | undefined) {
   if (l) return { kind: 'failed' as const, snap: l };
   return { kind: 'none' as const };
 }
-const trusted = (v: ReturnType<typeof view>) => v.kind === 'price' && v.snap.status === 'ok';
+// Only a verified, in-stock, current price can be the "best deal".
+const trusted = (v: ReturnType<typeof view>) => v.kind === 'price' && v.snap.status === 'ok' && !v.stale && v.snap.inStock !== false;
 
 function lowest(it: Item) {
   let best: { store: StoreKey; price: number; eff: number } | null = null;
@@ -266,12 +267,12 @@ function PriceCell({ st, cheapest, running }: { st: StoreState; cheapest: boolea
   const v = view(st);
   if (v.kind === 'none') return <span style={{ color: M.color.faint, fontSize: 12 }}>{running ? 'Queued' : '—'}</span>;
   if (v.kind === 'notListed') return <span style={{ color: M.color.faint, fontSize: 12 }}>Not listed</span>;
-  if (v.kind === 'failed') return <span style={{ color: M.color.warn, fontSize: 12 }} title={v.snap.notes ?? ''}>{v.snap.status === 'blocked' ? 'Blocked' : v.snap.status === 'not_found' ? 'No price' : v.snap.status === 'unverified' ? 'Unverified' : 'Error'}</span>;
+  if (v.kind === 'failed') return <span style={{ color: v.snap.inStock === false ? M.color.faint : M.color.warn, fontSize: 12 }} title={v.snap.notes ?? ''}>{v.snap.inStock === false ? 'Out of stock' : v.snap.status === 'blocked' ? 'Blocked' : v.snap.status === 'not_found' ? 'No price' : v.snap.status === 'unverified' ? 'Unverified' : 'Error'}</span>;
   const s = v.snap;
   const warn = s.status === 'suspect' || v.stale;
   return (
     <div style={{ lineHeight: 1.35, opacity: v.stale ? 0.7 : 1 }} title={[s.notes, v.stale ? `Latest attempt: ${v.latest?.status} — showing result from ${ago(s.fetchedAt)}` : ''].filter(Boolean).join('\n')}>
-      <div style={{ fontWeight: 800, fontSize: 14.5, color: cheapest ? M.color.good : M.color.ink }}>
+      <div style={{ fontWeight: 800, fontSize: 14.5, color: cheapest ? M.color.good : s.inStock === false ? M.color.faint : M.color.ink }}>
         {inr(s.price)}{warn && <span style={{ color: M.color.warn, fontSize: 12 }}> ⚠</span>}
         {s.inStock === false && <span style={{ fontSize: 10.5, color: M.color.bad, fontWeight: 700 }}> OOS</span>}
       </div>
