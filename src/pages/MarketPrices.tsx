@@ -13,7 +13,7 @@ const STORES: { key: StoreKey; label: string; color: string }[] = [
   { key: 'official', label: 'Brand site', color: '#475569' },
 ];
 interface Offer { bank: string | null; cardType: string | null; offerType: string; mode: string | null; amount: number | null; percent: number | null; maxDiscount: number | null; minTxn: number | null; summary: string; evidence: string; value: number }
-interface Snap { status: 'ok' | 'suspect' | 'unverified' | 'not_found' | 'blocked' | 'error'; price: number | null; mrp: number | null; inStock: boolean | null; title: string | null; offers: Offer[]; effectivePrice: number | null; bestOffer: string | null; priceText: string | null; notes: string | null; method: string | null; url: string; fetchedAt: string }
+interface Snap { status: 'ok' | 'suspect' | 'unverified' | 'not_found' | 'not_listed' | 'blocked' | 'error'; price: number | null; mrp: number | null; inStock: boolean | null; title: string | null; offers: Offer[]; effectivePrice: number | null; bestOffer: string | null; priceText: string | null; notes: string | null; method: string | null; url: string; fetchedAt: string }
 interface Link { url: string | null; lockedByUser: boolean; notListed: boolean; discoveredAt: string | null }
 interface StoreState { link: Link | null; latest: Snap | null; lastGood: Snap | null }
 interface Item { id: string; productId: string | null; name: string; brand: string | null; variant: string | null; source: 'auto' | 'manual'; active: boolean; priority: boolean; lastRefreshedAt: string | null; ean: string | null; ourPrice: number | null; category: string | null; stock: number; requested: boolean; stores: Record<StoreKey, StoreState> }
@@ -38,8 +38,11 @@ function view(st: StoreState | undefined) {
   if (!st) return { kind: 'none' as const };
   const l = st.latest;
   if (l && (l.status === 'ok' || l.status === 'suspect')) return { kind: 'price' as const, snap: l, stale: false };
+  // Not sold there / no price on the page now: never show an older price.
+  if (l?.status === 'not_listed' || (!l && st.link?.notListed)) return { kind: 'notListed' as const };
+  if (l?.status === 'not_found' || l?.status === 'unverified') return { kind: 'failed' as const, snap: l };
+  // Only a temporary failure (blocked / error) falls back to the last good price.
   if (st.lastGood) return { kind: 'price' as const, snap: st.lastGood, stale: true, latest: l };
-  if (st.link?.notListed) return { kind: 'notListed' as const };
   if (l) return { kind: 'failed' as const, snap: l };
   return { kind: 'none' as const };
 }
@@ -242,8 +245,8 @@ export default function MarketPrices() {
       )}
 
       <div style={{ fontSize: 11.5, color: M.color.faint, marginTop: 12, lineHeight: 1.6 }}>
-        Prices are read from the live store pages by the price scraper, then sanity-checked before they are shown. <b style={{ color: M.color.good }}>Green</b> = cheapest verified.
-        <span style={{ color: M.color.warn }}> ⚠</span> = check it (possible wrong variant or unusual price). Effective price = price minus the best instant bank discount/cashback.
+        Prices are read from the live store pages by the price scraper, then sanity-checked before they are shown. Green price under each store = best <b>full-swipe</b> (non-EMI) bank deal. <b style={{ color: M.color.good }}>Green</b> = cheapest verified.
+        <span style={{ color: M.color.warn }}> ⚠</span> = check it (possible wrong variant or unusual price). Effective price = price minus the best full-swipe (non-EMI) bank discount/cashback.
         Offers can depend on card type, EMI tenure and cart value — confirm on the store before quoting a customer.
       </div>
 
@@ -274,7 +277,7 @@ function PriceCell({ st, cheapest, running }: { st: StoreState; cheapest: boolea
       </div>
       {s.mrp && s.mrp > (s.price ?? 0) && <div style={{ fontSize: 11, color: M.color.faint, textDecoration: 'line-through' }}>{inr(s.mrp)}</div>}
       {s.effectivePrice != null && (
-        <div style={{ fontSize: 11.5, color: M.color.good, fontWeight: 700 }}>{inr(s.effectivePrice)} <span style={{ fontWeight: 500, color: M.color.muted }}>w/ {s.bestOffer?.split(' · ')[0]}</span></div>
+        <div style={{ fontSize: 11.5, color: M.color.good, fontWeight: 700 }} title={`Best full-swipe deal: ${s.bestOffer}`}>{inr(s.effectivePrice)} <span style={{ fontWeight: 500, color: M.color.muted }}>w/ {s.bestOffer?.split(' · ').slice(0, 2).join(' ')}</span></div>
       )}
       <div style={{ fontSize: 10.5, color: M.color.faint }}>{s.offers.length ? `${s.offers.length} offer${s.offers.length > 1 ? 's' : ''} · ` : ''}{ago(s.fetchedAt)}</div>
     </div>
