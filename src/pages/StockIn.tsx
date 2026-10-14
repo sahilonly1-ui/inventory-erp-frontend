@@ -414,7 +414,9 @@ export function StockIn(){
       const imeiRows=sv.filter(r=>!r.isReturn&&(r.imei||r.srno));
       const imeiByProduct=imeiRows.reduce((a:any,r)=>{
         if(!a[r.productId])a[r.productId]=[];
-        a[r.productId].push({imei1:r.imei||r.srno,imeiType:r.imeiType||'NIL'});
+        // A device with both (tablets) keeps both: the IMEI identifies it and the
+        // serial rides along. Sending only one used to drop the other silently.
+        a[r.productId].push({imei1:r.imei||r.srno,...(r.imei&&r.srno?{serialNo:r.srno}:{}),imeiType:r.imeiType||'NIL'});
         return a;
       },{});
       for(const[productId,imeis] of Object.entries(imeiByProduct) as any[]){

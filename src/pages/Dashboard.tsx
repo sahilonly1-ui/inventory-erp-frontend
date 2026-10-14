@@ -129,7 +129,9 @@ export function Dashboard() {
               id:uid(),ean:t.ean,productId:t.productId,model:t.model,brand:t.brand,
               imeiRequired:true,qty:1,
               imei:isImei?im.imei1:'',
-              srno:isImei?'':im.imei1,
+              // A unit saved with both keeps its serial separately; a serial-only
+              // unit stores the serial in the same field as an IMEI.
+              srno:isImei?((im as any).serialNo||''):im.imei1,
               imeiType:im.imeiType||'NIL',
               status:'saved',errMsg:'',errField:'',
               isReturn:!!(im as any).isReturn, // a returned unit must be saved as a return again

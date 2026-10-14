@@ -9,7 +9,7 @@ import { canScan, scanOnce, buzz } from '../native/scanner';
 const ImeiBulkUpload = lazy(() => import('./ImeiBulkUpload').then(m => ({ default: m.ImeiBulkUpload })));
 
 interface ImeiUnit {
-  id:string; imei1:string; imei2?:string; status:string; imeiType:string;
+  id:string; imei1:string; imei2?:string; serialNo?:string|null; status:string; imeiType:string;
   swiped:boolean; swipedAt?:string;
   activated:boolean; activatedAt?:string;
   product?:{ ean:string; model:string; brand:string; };
@@ -633,6 +633,7 @@ export function Imei() {
                     <div style={{fontSize:15,fontWeight:800,color:M.color.ink,fontFamily:'monospace',letterSpacing:'-.2px'}}>
                       {item.imei1}
                     </div>
+                    {item.serialNo && <div style={{fontSize:12,color:'#0369a1',fontFamily:'monospace',marginTop:2}}>S/N {item.serialNo}</div>}
                     <div style={{fontSize:M.text.body,color:M.color.ink,marginTop:4,lineHeight:1.35}}>
                       {item.product?.model ?? '—'}
                     </div>
@@ -704,6 +705,7 @@ export function Imei() {
                       <td style={{padding:'10px 14px',fontFamily:'monospace',fontSize:12,fontWeight:600,color:'#0f172a',whiteSpace:'nowrap'}}>
                         <div>{item.imei1}</div>
                         {item.imei2 && <div style={{fontSize:10,color:'#94a3b8',marginTop:2}}>{item.imei2}</div>}
+                        {item.serialNo && <div style={{fontSize:10,color:'#0369a1',marginTop:2}}>S/N {item.serialNo}</div>}
                       </td>
                       {/* Product */}
                       <td style={{padding:'10px 14px',maxWidth:240}}>
