@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import {
   api, setAccessToken, setRefreshToken, getRefreshToken, scheduleProactiveRefresh,
-  cancelProactiveRefresh, warmUpServer, onAppResume,
+  cancelProactiveRefresh, warmUpServer, onAppResume, clearSessionEndReason,
 } from '../api/client';
 import type { User } from '../api/types';
 
@@ -87,6 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       { method: 'POST', body: JSON.stringify({ email, password }) },
       false,
     );
+    clearSessionEndReason();
     setAccessToken(data.accessToken);
     setRefreshToken(data.refreshToken);
     setUser(await api<User>('/auth/me'));
@@ -94,6 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
+    clearSessionEndReason();   // signing out on purpose is not a surprise to explain
     cancelProactiveRefresh();
     setAccessToken(null);
     setRefreshToken(null);

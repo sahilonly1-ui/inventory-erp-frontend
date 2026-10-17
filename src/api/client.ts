@@ -53,6 +53,16 @@ export const setRefreshToken = (t: string | null) => {
 };
 export const getRefreshToken = () => localStorage.getItem(REFRESH_KEY);
 
+// When the app signs someone out without them asking, the reason is kept so the
+// sign-in screen can say what happened. Without it a surprise sign-out leaves
+// nothing to go on — the server's answer is gone by the time anyone looks.
+const REASON_KEY = 'erp_session_end_reason';
+export const getSessionEndReason = () => localStorage.getItem(REASON_KEY);
+export const clearSessionEndReason = () => localStorage.removeItem(REASON_KEY);
+function recordSessionEnd(why: string) {
+  try { localStorage.setItem(REASON_KEY, `${new Date().toLocaleString('en-IN')} — ${why}`); } catch { /* storage blocked */ }
+}
+
 /** Expiry (ms since epoch) of any access token, or null if it cannot be read. */
 function expiryOf(token: string | null): number | null {
   if (!token) return null;
@@ -157,6 +167,10 @@ async function tryRefresh(): Promise<boolean> {
           // must not wipe it.
           const latest = getRefreshToken();
           if (latest && latest !== rt) { rt = latest; continue; }
+
+          let serverSaid = '';
+          try { serverSaid = (await res.clone().json())?.error?.message ?? ''; } catch { /* no body */ }
+          recordSessionEnd(`the server rejected the saved login (${res.status}${serverSaid ? ': ' + serverSaid : ''})`);
 
           setAccessToken(null);
           setRefreshToken(null);

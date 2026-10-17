@@ -3,7 +3,7 @@ import {
   biometricAvailable, biometricEnabled, biometricOffered, markBiometricOffered,
   enableBiometric, disableBiometric, unlockWithBiometric,
 } from '../native/biometric';
-import { warmUpServer } from '../api/client';
+import { warmUpServer, getSessionEndReason } from '../api/client';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 
@@ -172,6 +172,14 @@ export function Login() {
                 fontSize:12, color:'#1d4ed8', display:'flex', alignItems:'center', gap:8,
               }}>
                 <div style={{width:12,height:12,border:'2px solid rgba(29,78,216,.3)',borderTopColor:'#1d4ed8',borderRadius:'50%',animation:'spin .8s linear infinite',flexShrink:0}}/> {slowMsg}
+              </div>
+            )}
+            {!error && getSessionEndReason() && (
+              <div style={{
+                background:'#fffbeb', border:'1px solid #fde68a', borderRadius:8, padding:'10px 14px',
+                fontSize:12, color:'#92400e', lineHeight:1.5,
+              }}>
+                <b>You were signed out automatically.</b><br/>{getSessionEndReason()}
               </div>
             )}
             {error && (
