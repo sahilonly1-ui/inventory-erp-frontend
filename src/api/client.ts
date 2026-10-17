@@ -53,6 +53,36 @@ export const setRefreshToken = (t: string | null) => {
 };
 export const getRefreshToken = () => localStorage.getItem(REFRESH_KEY);
 
+/** Expiry (ms since epoch) of any access token, or null if it cannot be read. */
+function expiryOf(token: string | null): number | null {
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return typeof payload.exp === 'number' ? payload.exp * 1000 : null;
+  } catch { return null; }
+}
+const hasLife = (token: string | null) => {
+  const exp = expiryOf(token);
+  return exp !== null && exp > Date.now() + 15_000;
+};
+
+// Several windows can be open on the same login and they share these two
+// storage keys. Without listening, each window kept its own stale copy of the
+// token: they all went to refresh independently around the same moments, and a
+// sign-out in one left the others looking signed in until their next failed
+// request. Browsers fire this event in every OTHER window when storage
+// changes, so it never loops back on the window that made the change.
+window.addEventListener('storage', (e) => {
+  if (e.key === ACCESS_KEY) {
+    accessToken = e.newValue;                       // adopt the token another window obtained
+    if (e.newValue) scheduleProactiveRefresh();
+  } else if (e.key === REFRESH_KEY && e.newValue === null) {
+    accessToken = null;                             // signed out (or session ended) elsewhere
+    cancelProactiveRefresh();
+    window.dispatchEvent(new Event('erp-session-ended'));
+  }
+});
+
 /** Seconds-since-epoch the current access token expires at, or null if it
  *  cannot be read (missing, malformed — never worth failing over). */
 function accessTokenExpiry(): number | null {
@@ -93,7 +123,15 @@ let refreshInFlight: Promise<boolean> | null = null;
 async function tryRefresh(): Promise<boolean> {
   if (refreshInFlight) return refreshInFlight;
   refreshInFlight = (async (): Promise<boolean> => {
-    const rt = getRefreshToken();
+    // Another window may have just refreshed. Its token is already in shared
+    // storage, so use it rather than asking the server again.
+    const shared = localStorage.getItem(ACCESS_KEY);
+    if (shared && shared !== accessToken && hasLife(shared)) {
+      accessToken = shared;
+      return true;
+    }
+
+    let rt = getRefreshToken();
     if (!rt) return false;
 
     // Render's free tier sleeps, so the first call after an idle spell can come
@@ -114,6 +152,12 @@ async function tryRefresh(): Promise<boolean> {
         // Treating any failure as "logged out" was ending scan sessions
         // whenever the backend hiccuped.
         if (res.status === 401 || res.status === 403) {
+          // If another window has signed in again since this one read the
+          // token, that newer login is the one to use — rejecting the old one
+          // must not wipe it.
+          const latest = getRefreshToken();
+          if (latest && latest !== rt) { rt = latest; continue; }
+
           setAccessToken(null);
           setRefreshToken(null);
           // Tell the app the server itself ended the session, so it can go to
