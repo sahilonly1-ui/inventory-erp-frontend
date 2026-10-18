@@ -277,6 +277,9 @@ export function StockOut(){
       if(imeiRows.length){
         await api('/imei/dispatch',{method:'POST',body:JSON.stringify({
           imeis:imeiRows.map(r=>r.imei||r.srno),
+          // Rows with both codes: send the serial too, so a unit stocked in
+          // with only its IMEI still gets its Sr. No. recorded and exported.
+          serials:imeiRows.filter(r=>r.imei&&r.srno).map(r=>({code:r.imei,serialNo:r.srno})),
           channel:'STOCK_OUT',
           remarks:rmk,
           ...(vendorId?{vendorId}:{}),
