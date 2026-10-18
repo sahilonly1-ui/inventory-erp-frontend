@@ -224,8 +224,16 @@ export function StockReport() {
   const grandActivated = rows.reduce((s, r) => s + r.activated,  0);
   const grandDemo      = rows.reduce((s, r) => s + (r.demo || 0), 0);
 
-  const catName   = data?.categories.filter(c => !exCats.has(c.id)).map(c=>c.name).join(', ') || 'All Categories';
-  const brandName = (data?.brands ?? []).filter(b => !exBrands.has(b)).join(', ') || 'All Brands';
+  // What the report is actually showing — used in the on-screen banner and in
+  // the print / PNG headers, so anyone reading it knows which stock this is.
+  const selCats   = (data?.categories ?? []).filter(c => !exCats.has(c.id)).map(c => c.name);
+  const selBrands = (data?.brands ?? []).filter(b => !exBrands.has(b));
+  const allCats   = exCats.size === 0;
+  const allBrands = exBrands.size === 0;
+  const catTitle  = allCats ? 'All Categories' : (selCats.join(' + ') || 'No Categories');
+  const brandLine = allBrands ? 'All Brands' : (selBrands.join(', ') || 'No Brands');
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  const esc = (t: string) => t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
   // Distribute brand cards across N columns, balancing by estimated height.
   // CSS multi-column paginates unreliably when printing (it was producing a
@@ -274,7 +282,7 @@ export function StockReport() {
       .map(col => `<div class="col">${col.brands.map(cardFor).join('')}</div>`)
       .join('');
 
-    return `<!DOCTYPE html><html><head><title>Stock Report ${fmtDate(new Date())}</title>
+    return `<!DOCTYPE html><html><head><title>${esc(catTitle)} Stock Report ${fmtDate(new Date())}</title>
 <style>
 @page{size:A4 landscape;margin:5mm 5mm}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -290,6 +298,9 @@ html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact;margin:0;pad
 body{font-family:Arial,sans-serif;font-size:7.5pt;color:#000}
 #wrap{transform-origin:top left;width:max-content}
 h1{font-size:11pt;font-weight:800;margin-bottom:1mm}
+.hd{display:flex;align-items:baseline;gap:5mm;margin-bottom:1.5mm}
+.hd .cat{font-size:20pt;font-weight:900;letter-spacing:.02em;color:#000;line-height:1.05}
+.hd .sub{font-size:9pt;font-weight:700;color:#444;white-space:nowrap}
 .meta{font-size:7pt;color:#444;margin-bottom:2mm;padding-bottom:1mm;border-bottom:1px solid #bbb}
 .cols{display:flex;gap:3mm;align-items:flex-start;width:max-content}
 .col{flex:0 0 auto}
@@ -305,8 +316,11 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
 .gt{margin-top:2mm;background:#1e293b!important;color:#fff!important;padding:2.5pt 8pt;font-size:8pt;font-weight:700;display:flex;gap:15mm;break-inside:avoid;page-break-inside:avoid;break-before:avoid;page-break-before:avoid;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 </style></head><body>
 <div id="wrap">
-  <h1>📦 iTechArena ERP — Stock Report${asOf ? ` — as on ${asOfLabel(asOf)}` : ''}</h1>
-  <div class="meta">Date: ${fmtDate(new Date())} &nbsp;·&nbsp; Brands: ${brandList.join(', ')} &nbsp;·&nbsp; Total: ${grandTotal} units (Retail: ${grandRetail} | ACC: ${grandActivated})</div>
+  <div class="hd">
+    <div class="cat">${esc(catTitle.toUpperCase())}</div>
+    <div class="sub">iTechArena — Stock Report${asOf ? ` as on ${asOfLabel(asOf)}` : ` · ${fmtDate(new Date())}`}</div>
+  </div>
+  <div class="meta">Categories: <b>${esc(catTitle)}</b> &nbsp;·&nbsp; Brands: <b>${esc(allBrands ? 'All Brands' : brandList.join(', '))}</b> &nbsp;·&nbsp; Total: ${grandTotal} units (Retail: ${grandRetail} | ACC: ${grandActivated})</div>
   <div class="cols">${columnsHTML}</div>
   <div class="gt"><span>GRAND TOTAL</span><span>Qty: ${grandTotal}</span><span>Retail: ${grandRetail}</span><span>ACC: ${grandActivated}</span></div>
 </div>
@@ -421,15 +435,18 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
         .join('');
 
       container.innerHTML = `
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
-          <div style="font-size:16px;font-weight:800;color:#1e293b">📦 iTechArena ERP — Stock Report${asOf ? ` — as on ${asOfLabel(asOf)}` : ''}</div>
-          <div style="font-size:10px;color:#64748b">${fmtDate(new Date())} · Total: ${grandTotal} units · Retail: ${grandRetail} · ACC: ${grandActivated}</div>
+        <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:4px;flex-wrap:wrap">
+          <div style="font-size:26px;font-weight:900;color:#0f172a;letter-spacing:.02em;line-height:1.1">${esc(catTitle.toUpperCase())}</div>
+          <div style="font-size:12px;font-weight:700;color:#475569">iTechArena — Stock Report${asOf ? ` as on ${asOfLabel(asOf)}` : ` · ${fmtDate(new Date())}`}</div>
+        </div>
+        <div style="font-size:10px;color:#64748b;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #e2e8f0">
+          Brands: <b style="color:#0f172a">${esc(allBrands ? 'All Brands' : brandList.join(', '))}</b> · Total: ${grandTotal} units · Retail: ${grandRetail} · ACC: ${grandActivated}
         </div>
         <div style="display:flex;gap:8px;align-items:flex-start">
           ${brandSectionsHTML}
         </div>
         <div style="margin-top:8px;background:#1e293b;color:#fff;padding:6px 12px;border-radius:6px;display:flex;gap:24px;font-size:9px;font-weight:700">
-          <span>GRAND TOTAL</span><span>Quantity: ${grandTotal}</span><span>Retail: ${grandRetail}</span><span>ACC (Activated): ${grandActivated}</span>
+          <span>GRAND TOTAL</span><span>Quantity: ${grandTotal}</span><span>Retail: ${grandRetail}</span><span>ACC: ${grandActivated}</span>
         </div>`;
       
       document.body.appendChild(container);
@@ -575,7 +592,7 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
           { l:'Products',  v:rows.length,       c:'#374151' },
           { l:'Total Units',   v:grandTotal,    c:'#2563eb' },
           { l:'Retail',        v:grandRetail,   c:'#16a34a' },
-          { l:'Activated/ACC', v:grandActivated,c:'#7c3aed' },
+          { l:'ACC',           v:grandActivated,c:'#7c3aed' },
           // Demo units are shown here, separately from Retail — they are not
           // sellable stock and were being counted as Retail before this fix.
           { l:'Demo',          v:grandDemo,     c:'#d97706' },
@@ -588,12 +605,45 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
         ))}
         <div style={{ padding:'8px 16px', flex:1, display:'flex', alignItems:'center' }}>
           <span style={{ fontSize:11, color:'#64748b' }}>
-            {exCats.size > 0 ? `${(data?.categories??[]).filter(c=>!exCats.has(c.id)).length} categories` : 'All categories'}
+            {allCats ? 'All categories' : plural(selCats.length, 'category', 'categories')}
             {' · '}
-            {exBrands.size > 0 ? `${(data?.brands??[]).filter(b=>!exBrands.has(b)).length} brands` : 'All brands'}
+            {allBrands ? 'All brands' : plural(selBrands.length, 'brand', 'brands')}
           </span>
         </div>
       </div>
+
+      {/* "What am I looking at" banner — big enough to read from across the
+          counter. Lists every selected category by name. */}
+      {data && (
+        <div style={{ background: allCats ? '#f0fdf4' : '#eff6ff', borderBottom:`2px solid ${allCats ? '#86efac' : '#93c5fd'}`,
+                      padding: isPhone ? '10px 14px' : '12px 18px', flexShrink:0,
+                      display:'flex', alignItems:'center', gap:14, flexWrap:'wrap' }}>
+          <span style={{ fontSize:11, fontWeight:800, color:'#64748b', letterSpacing:'.08em', textTransform:'uppercase' }}>
+            Showing stock of
+          </span>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+            {allCats ? (
+              <span style={{ fontSize: isPhone ? 20 : 26, fontWeight:900, color:'#15803d', lineHeight:1.15 }}>ALL CATEGORIES</span>
+            ) : selCats.length === 0 ? (
+              <span style={{ fontSize: isPhone ? 20 : 26, fontWeight:900, color:'#dc2626', lineHeight:1.15 }}>NO CATEGORY SELECTED</span>
+            ) : selCats.map(n => (
+              <span key={n} style={{ fontSize: isPhone ? 18 : 24, fontWeight:900, color:'#fff', background:'#1d4ed8',
+                                     padding: isPhone ? '3px 12px' : '4px 16px', borderRadius:10, lineHeight:1.2,
+                                     letterSpacing:'.02em', whiteSpace:'nowrap' }}>
+                {n.toUpperCase()}
+              </span>
+            ))}
+          </div>
+          {!allBrands && (
+            <span style={{ fontSize: isPhone ? 13 : 15, fontWeight:700, color:'#334155' }}>
+              · Brands: <span style={{ color:'#0f172a' }}>{brandLine}</span>
+            </span>
+          )}
+          {asOf && (
+            <span style={{ fontSize: isPhone ? 13 : 15, fontWeight:800, color:'#b45309' }}>· As on {asOfLabel(asOf)}</span>
+          )}
+        </div>
+      )}
 
       {/* Report body */}
       {loading ? (
