@@ -603,47 +603,42 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
             <div style={{ fontSize:10, color:'#94a3b8', fontWeight:600, textTransform:'uppercase', letterSpacing:'.05em' }}>{k.l}</div>
           </div>
         ))}
-        <div style={{ padding:'8px 16px', flex:1, display:'flex', alignItems:'center' }}>
-          <span style={{ fontSize:11, color:'#64748b' }}>
+        {/* Filter summary + "what am I looking at" chips, in the strip's empty
+            space so the report body keeps its full height. Chips are big enough
+            to read from across the counter. */}
+        <div style={{ padding:'6px 16px', flex:1, minWidth:0, display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+          <span style={{ fontSize:11, color:'#64748b', whiteSpace:'nowrap' }}>
             {allCats ? 'All categories' : plural(selCats.length, 'category', 'categories')}
             {' · '}
             {allBrands ? 'All brands' : plural(selBrands.length, 'brand', 'brands')}
           </span>
+          {data && (
+            <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:8 }}>
+              {allCats ? (
+                <span style={{ fontSize: isPhone ? 16 : 22, fontWeight:900, color:'#fff', background:'#16a34a',
+                               padding:'3px 14px', borderRadius:10, lineHeight:1.2, whiteSpace:'nowrap' }}>ALL CATEGORIES</span>
+              ) : selCats.length === 0 ? (
+                <span style={{ fontSize: isPhone ? 16 : 22, fontWeight:900, color:'#fff', background:'#dc2626',
+                               padding:'3px 14px', borderRadius:10, lineHeight:1.2, whiteSpace:'nowrap' }}>NO CATEGORY SELECTED</span>
+              ) : selCats.map(n => (
+                <span key={n} style={{ fontSize: isPhone ? 16 : 22, fontWeight:900, color:'#fff', background:'#1d4ed8',
+                                       padding:'3px 14px', borderRadius:10, lineHeight:1.2,
+                                       letterSpacing:'.02em', whiteSpace:'nowrap' }}>
+                  {n.toUpperCase()}
+                </span>
+              ))}
+              {!allBrands && (
+                <span style={{ fontSize: isPhone ? 12 : 14, fontWeight:700, color:'#334155' }}>
+                  Brands: <span style={{ color:'#0f172a' }}>{brandLine}</span>
+                </span>
+              )}
+              {asOf && (
+                <span style={{ fontSize: isPhone ? 12 : 14, fontWeight:800, color:'#b45309' }}>As on {asOfLabel(asOf)}</span>
+              )}
+            </div>
+          )}
         </div>
       </div>
-
-      {/* "What am I looking at" banner — big enough to read from across the
-          counter. Lists every selected category by name. */}
-      {data && (
-        <div style={{ background: allCats ? '#f0fdf4' : '#eff6ff', borderBottom:`2px solid ${allCats ? '#86efac' : '#93c5fd'}`,
-                      padding: isPhone ? '10px 14px' : '12px 18px', flexShrink:0,
-                      display:'flex', alignItems:'center', gap:14, flexWrap:'wrap' }}>
-          <span style={{ fontSize:11, fontWeight:800, color:'#64748b', letterSpacing:'.08em', textTransform:'uppercase' }}>
-            Showing stock of
-          </span>
-          <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
-            {allCats ? (
-              <span style={{ fontSize: isPhone ? 20 : 26, fontWeight:900, color:'#15803d', lineHeight:1.15 }}>ALL CATEGORIES</span>
-            ) : selCats.length === 0 ? (
-              <span style={{ fontSize: isPhone ? 20 : 26, fontWeight:900, color:'#dc2626', lineHeight:1.15 }}>NO CATEGORY SELECTED</span>
-            ) : selCats.map(n => (
-              <span key={n} style={{ fontSize: isPhone ? 18 : 24, fontWeight:900, color:'#fff', background:'#1d4ed8',
-                                     padding: isPhone ? '3px 12px' : '4px 16px', borderRadius:10, lineHeight:1.2,
-                                     letterSpacing:'.02em', whiteSpace:'nowrap' }}>
-                {n.toUpperCase()}
-              </span>
-            ))}
-          </div>
-          {!allBrands && (
-            <span style={{ fontSize: isPhone ? 13 : 15, fontWeight:700, color:'#334155' }}>
-              · Brands: <span style={{ color:'#0f172a' }}>{brandLine}</span>
-            </span>
-          )}
-          {asOf && (
-            <span style={{ fontSize: isPhone ? 13 : 15, fontWeight:800, color:'#b45309' }}>· As on {asOfLabel(asOf)}</span>
-          )}
-        </div>
-      )}
 
       {/* Report body */}
       {loading ? (
