@@ -87,6 +87,31 @@ export function StockIn(){
   const[busy,setBusy]=useState(false);
   const[drawer,setDrawer]=useState<string|null>(null);
   const[df,setDf]=useState({ean:'',model:'',brand:'',cat:'',cost:'',sell:'',mrp:'',gst:'18',imei:false});
+  // Brands / categories for the "New Product Detected" drawer — every field there is mandatory,
+  // same as Product Master → Add Product.
+  const[dfMeta,setDfMeta]=useState<{brands:{id:string;name:string}[];cats:{id:string;name:string;parentId?:string|null}[]}>({brands:[],cats:[]});
+  const[dfErr,setDfErr]=useState('');const[dfBusy,setDfBusy]=useState(false);
+  useEffect(()=>{
+    if(!drawer)return;
+    setDfErr('');
+    Promise.allSettled([api<any[]>('/products/brands/list'),api<any[]>('/products/categories')]).then(([b,c])=>{
+      setDfMeta({brands:b.status==='fulfilled'&&Array.isArray(b.value)?b.value:[],cats:c.status==='fulfilled'&&Array.isArray(c.value)?c.value.filter((x:any)=>!x.parentId):[]});
+    });
+  },[drawer]);
+  const saveNewProduct=async()=>{
+    const miss=!df.model.trim()?'Product Name':!df.brand.trim()?'Brand':!df.cat?'Category':!(parseFloat(df.mrp)>0)?'MRP (more than 0)':!(parseFloat(df.cost)>0)?'Cost Price (more than 0)':'';
+    if(miss){setDfErr(`${miss} is required`);return;}
+    setDfBusy(true);setDfErr('');
+    try{
+      const b=dfMeta.brands.find(x=>x.name===df.brand);
+      await api('/products',{method:'POST',body:JSON.stringify({ean:df.ean,model:df.model.trim(),brand:df.brand.trim(),brandId:b?.id,categoryId:df.cat,
+        costPrice:parseFloat(df.cost),sellingPrice:parseFloat(df.mrp),imeiRequired:df.imei,gstRate:parseFloat(df.gst)||18,status:'ACTIVE'})});
+      eCache.delete(df.ean);setDrawer(null);
+      setDf({ean:'',model:'',brand:'',cat:'',cost:'',sell:'',mrp:'',gst:'18',imei:false});
+      const xi=rows.findIndex(r=>r.ean===df.ean&&r.status==='not_found');if(xi>=0){upd(xi,{errMsg:'',status:'empty'});moveTo(xi,'ean');}
+    }catch(e:any){setDfErr(e.message||'Failed to save');}
+    finally{setDfBusy(false);}
+  };
   const[editMode,setEditMode]=useState<EditMode|null>(null); // set when redirected from Dashboard Edit
   const lastEan=useRef<Record<number,{v:string;t:number}>>({});
   const lastSrno=useRef<Record<number,{v:string;t:number}>>({});
@@ -786,17 +811,37 @@ export function StockIn(){
               <div style={{fontSize:12,color:'#94a3b8',marginTop:2}}>EAN <strong style={{color:'#2563eb',fontFamily:'monospace'}}>{drawer}</strong></div>
             </div>
             <div style={{flex:1,overflow:'auto',padding:'16px 20px'}}>
-              {([['Product Name *','model','text'],['Brand','brand','text'],['Category','cat','text'],['Sell Price ₹','sell','number'],['MRP ₹','mrp','number'],['Cost ₹','cost','number'],['GST %','gst','number']] as [string,keyof typeof df,string][]).map(([l,k,t])=>(
-                <div key={k as string} style={{marginBottom:12}}>
-                  <label style={{fontSize:10,fontWeight:700,color:'#64748b',textTransform:'uppercase',letterSpacing:'.06em',display:'block',marginBottom:4}}>{l}</label>
-                  <input type={t} value={df[k] as string} onChange={e=>setDf(d=>({...d,[k]:e.target.value}))} style={{width:'100%',height:36,padding:'0 10px',border:'1.5px solid #d0d5dd',borderRadius:7,fontSize:13,outline:'none',boxSizing:'border-box'}}/>
-                </div>
-              ))}
+              {dfErr&&<div style={{background:'#fef2f2',border:'1px solid #fecaca',color:'#dc2626',borderRadius:8,padding:'8px 10px',fontSize:12,fontWeight:600,marginBottom:12}}>{dfErr}</div>}
+              {(()=>{
+                const L=(t:string)=><label style={{fontSize:10,fontWeight:700,color:'#64748b',textTransform:'uppercase',letterSpacing:'.06em',display:'block',marginBottom:4}}>{t} <span style={{color:'#dc2626'}}>*</span></label>;
+                const st={width:'100%',height:36,padding:'0 10px',border:'1.5px solid #d0d5dd',borderRadius:7,fontSize:13,outline:'none',boxSizing:'border-box' as const,background:'#fff'};
+                const f=(k:keyof typeof df,v:string)=>{setDf(d=>({...d,[k]:v}));setDfErr('');};
+                return(<>
+                  <div style={{marginBottom:12}}>{L('Product Name')}<input value={df.model} onChange={e=>f('model',e.target.value)} style={st}/></div>
+                  <div style={{marginBottom:12}}>{L('Brand')}
+                    <select value={df.brand} onChange={e=>f('brand',e.target.value)} style={st}>
+                      <option value="">Select brand…</option>
+                      {dfMeta.brands.map(b=><option key={b.id} value={b.name}>{b.name}</option>)}
+                    </select>
+                  </div>
+                  <div style={{marginBottom:12}}>{L('Category')}
+                    <select value={df.cat} onChange={e=>f('cat',e.target.value)} style={st}>
+                      <option value="">Select category…</option>
+                      {dfMeta.cats.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:12}}>
+                    <div>{L('MRP ₹')}<input type="number" min="1" value={df.mrp} onChange={e=>f('mrp',e.target.value)} style={st}/></div>
+                    <div>{L('Cost ₹')}<input type="number" min="1" value={df.cost} onChange={e=>f('cost',e.target.value)} style={st}/></div>
+                  </div>
+                  <div style={{marginBottom:12}}>{L('GST %')}<input type="number" value={df.gst} onChange={e=>f('gst',e.target.value)} style={st}/></div>
+                </>);
+              })()}
               <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',marginBottom:20}}>
                 <input type="checkbox" checked={df.imei} onChange={e=>setDf(d=>({...d,imei:e.target.checked}))} style={{width:16,height:16,accentColor:'#2563eb'}}/>
                 <span style={{fontSize:13,color:'#374151',fontWeight:500}}>Requires IMEI tracking (phones/tablets)</span>
               </label>
-              <button onClick={async()=>{if(!df.model)return;try{await api('/products',{method:'POST',body:JSON.stringify({ean:df.ean,model:df.model,brand:df.brand,categoryName:df.cat,costPrice:parseFloat(df.cost)||0,sellingPrice:parseFloat(df.sell)||0,imeiRequired:df.imei,gstRate:parseFloat(df.gst)||18,status:'ACTIVE'})});eCache.delete(df.ean);setDrawer(null);const xi=rows.findIndex(r=>r.ean===df.ean&&r.status==='not_found');if(xi>=0){upd(xi,{errMsg:'',status:'empty'});moveTo(xi,'ean');}}catch(e:any){alert(e.message);}}} style={{width:'100%',height:42,border:'none',borderRadius:8,background:'#2563eb',color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer'}}>Save & Continue</button>
+              <button onClick={saveNewProduct} disabled={dfBusy} style={{width:'100%',height:42,border:'none',borderRadius:8,background:'#2563eb',color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer'}}>{dfBusy?'Saving…':'Save & Continue'}</button>
             </div>
           </div>
         </div>

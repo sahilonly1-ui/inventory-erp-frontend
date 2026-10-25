@@ -481,11 +481,12 @@ function BulkImportModal({categories,brands,onClose,onDone}:{categories:Category
 }
 
 // ── Add Product Modal ─────────────────────────────────────────────────────
-function AddProductModal({brands:initBrands,categories,onClose,onSaved}:{brands:Brand[];categories:Category[];onClose:()=>void;onSaved:()=>void}){
+function AddProductModal({brands:initBrands,categories,onClose,onSaved}:{brands:Brand[];categories:Category[];onClose:()=>void;onSaved:(correctedName?:string)=>void}){
   const [brands,setBrands]=useState<Brand[]>(initBrands);
   const [form,setForm]=useState({ean:'',model:'',brand:'',brandId:'',categoryId:'',costPrice:'',sellingPrice:'',status:'ACTIVE' as Status,imeiRequired:false,srnoRequired:false});
   const [busy,setBusy]=useState(false);
   const [err,setErr]=useState('');
+  const [errField,setErrField]=useState('');
   const [newBrand,setNewBrand]=useState('');
   const [addingBrand,setAddingBrand]=useState(false);
   const set=(k:string,v:string)=>setForm(f=>({...f,[k]:v}));
@@ -504,14 +505,19 @@ function AddProductModal({brands:initBrands,categories,onClose,onSaved}:{brands:
   };
 
   const save=async()=>{
-    if(!form.ean.trim()){setErr('EAN/Barcode is required');return;}
-    if(!form.model.trim()){setErr('Product Name is required');return;}
-    if(!form.brand.trim()){setErr('Brand is required');return;}
-    if(!form.costPrice||Number(form.costPrice)<0){setErr('Cost Price is required');return;}
-    if(!form.sellingPrice||Number(form.sellingPrice)<0){setErr('MRP is required');return;}
-    setBusy(true);setErr('');
+    // Every field on this form is mandatory. Prices must be more than 0 — a blank or 0
+    // MRP / Cost Price used to slip through because "0" counted as filled in.
+    const fail=(f:string,m:string)=>{setErrField(f);setErr(m);};
+    if(!form.ean.trim())return fail('ean','EAN / Barcode is required');
+    if(!form.model.trim())return fail('model','Product Name is required');
+    if(!form.brand.trim())return fail('brand','Brand is required — select one or add a new brand');
+    if(!(Number(form.costPrice)>0))return fail('costPrice','Cost Price is required and must be more than 0');
+    if(!(Number(form.sellingPrice)>0))return fail('sellingPrice','MRP is required and must be more than 0');
+    if(!form.categoryId)return fail('categoryId','Category is required');
+    if(!form.status)return fail('status','Status is required');
+    setBusy(true);setErr('');setErrField('');
     try{
-      await api('/products',{method:'POST',body:JSON.stringify({
+      const saved:any=await api('/products',{method:'POST',body:JSON.stringify({
         ean:form.ean.trim(),model:form.model.trim(),brand:form.brand.trim(),
         brandId:form.brandId||undefined,
         categoryId:form.categoryId||undefined,
@@ -520,38 +526,44 @@ function AddProductModal({brands:initBrands,categories,onClose,onSaved}:{brands:
         imeiRequired:form.imeiRequired,
         serialRequired:form.srnoRequired,
       })});
-      onSaved();onClose();
+      // The server tidies the name (double spaces, small spelling slips) — tell staff if it changed.
+      const finalName=saved?.model||saved?.data?.model;
+      onSaved(finalName&&finalName!==form.model.trim()?finalName:undefined);onClose();
     }catch(e:any){setErr(e.message||'Failed to save');}
     finally{setBusy(false);}
   };
 
   const inp={height:34,padding:'0 10px',border:'1px solid var(--bdr)',borderRadius:'var(--r-md)',fontSize:13,outline:'none',width:'100%',boxSizing:'border-box' as const};
   const lbl={fontSize:11,fontWeight:600,color:'var(--txt-2)',marginBottom:4,display:'block' as const};
+  const req=<span style={{color:'var(--err)'}}>*</span>;
+  // Red border on the field that failed validation
+  const bx=(f:string)=>errField===f?{...inp,borderColor:'var(--err)',boxShadow:'0 0 0 2px var(--err-bg)'}:inp;
+  const setF=(k:string,v:string)=>{set(k,v);if(errField===k){setErrField('');setErr('');}};
 
   return(
     <div className="modal-overlay" onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
       <div className="modal" style={{width:540}}>
         <div className="modal-hdr" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <div className="modal-ttl">Add New Product</div>
-          <button onClick={onClose} style={{width:28,height:28,background:'var(--err-bg)',border:'1px solid var(--err-bdr)',borderRadius:'var(--r-md)',cursor:'pointer',fontSize:14,fontWeight:700,color:'var(--err)'}}>✕</button>
+          <button onClick={onClose} style={{width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',padding:0,lineHeight:1,flexShrink:0,background:'var(--err-bg)',border:'1px solid var(--err-bdr)',borderRadius:'var(--r-md)',cursor:'pointer',fontSize:14,fontWeight:700,color:'var(--err)'}}>✕</button>
         </div>
         <div className="modal-body" style={{maxHeight:'65vh',overflowY:'auto'}}>
           {err&&<div className="alert alert-err" style={{marginBottom:12}}>{err}</div>}
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
             <div style={{gridColumn:'span 2'}}>
               <label style={lbl}>EAN / Barcode <span style={{color:'var(--err)'}}>*</span></label>
-              <input style={inp} value={form.ean} onChange={e=>set('ean',e.target.value)} placeholder="e.g. 8801234567890"/>
+              <input style={bx('ean')} value={form.ean} onChange={e=>setF('ean',e.target.value)} placeholder="e.g. 8801234567890"/>
             </div>
             <div style={{gridColumn:'span 2'}}>
               <label style={lbl}>Product Name <span style={{color:'var(--err)'}}>*</span></label>
-              <input style={inp} value={form.model} onChange={e=>set('model',e.target.value)} placeholder="Full product name"/>
+              <input style={bx('model')} value={form.model} onChange={e=>setF('model',e.target.value)} placeholder="Full product name"/>
             </div>
             {/* Brand with inline add */}
             <div style={{gridColumn:'span 2'}}>
               <label style={lbl}>Brand <span style={{color:'var(--err)'}}>*</span></label>
               <div style={{display:'flex',gap:6}}>
-                <select value={form.brandId} onChange={e=>{const b=brands.find(x=>x.id===e.target.value);set('brandId',e.target.value);set('brand',b?.name||'');}}
-                  style={{...inp,flex:1,appearance:'none',cursor:'pointer'}}>
+                <select value={form.brandId} onChange={e=>{const b=brands.find(x=>x.id===e.target.value);set('brandId',e.target.value);setF('brand',b?.name||'');}}
+                  style={{...bx('brand'),flex:1,appearance:'none',cursor:'pointer'}}>
                   <option value="">Select brand…</option>
                   {brands.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
@@ -569,22 +581,22 @@ function AddProductModal({brands:initBrands,categories,onClose,onSaved}:{brands:
             </div>
             <div>
               <label style={lbl}>Cost Price ₹ <span style={{color:'var(--err)'}}>*</span></label>
-              <input type="number" style={inp} value={form.costPrice} onChange={e=>set('costPrice',e.target.value)} placeholder="0"/>
+              <input type="number" min="1" style={bx('costPrice')} value={form.costPrice} onChange={e=>setF('costPrice',e.target.value)} placeholder="Enter cost price"/>
             </div>
             <div>
               <label style={lbl}>MRP ₹ <span style={{color:'var(--err)'}}>*</span></label>
-              <input type="number" style={inp} value={form.sellingPrice} onChange={e=>set('sellingPrice',e.target.value)} placeholder="0"/>
+              <input type="number" min="1" style={bx('sellingPrice')} value={form.sellingPrice} onChange={e=>setF('sellingPrice',e.target.value)} placeholder="Enter MRP"/>
             </div>
             <div>
-              <label style={lbl}>Category</label>
-              <select style={{...inp,appearance:'none',cursor:'pointer'}} value={form.categoryId} onChange={e=>set('categoryId',e.target.value)}>
+              <label style={lbl}>Category {req}</label>
+              <select style={{...bx('categoryId'),appearance:'none',cursor:'pointer'}} value={form.categoryId} onChange={e=>setF('categoryId',e.target.value)}>
                 <option value="">Select category…</option>
                 {categories.filter(c=>!c.parentId).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
             <div>
-              <label style={lbl}>Status</label>
-              <select style={{...inp,appearance:'none',cursor:'pointer'}} value={form.status} onChange={e=>set('status',e.target.value as Status)}>
+              <label style={lbl}>Status {req}</label>
+              <select style={{...bx('status'),appearance:'none',cursor:'pointer'}} value={form.status} onChange={e=>setF('status',e.target.value as Status)}>
                 {(['ACTIVE','INACTIVE','DISCONTINUED','OPEN_BOX_ONLY','BLOCKED'] as Status[]).map(s=><option key={s} value={s}>{S_LBL[s]}</option>)}
               </select>
             </div>
@@ -641,7 +653,7 @@ function StatusManager({labels,onSave,onClose}:{labels:Record<string,string>;onS
       <div className="modal" style={{width:440}}>
         <div className="modal-hdr" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <div><div className="modal-ttl">Status Labels</div><div style={{fontSize:11,color:'var(--txt-3)',marginTop:1}}>Rename how statuses appear in the ERP</div></div>
-          <button onClick={onClose} style={{width:28,height:28,background:'var(--err-bg)',border:'1px solid var(--err-bdr)',borderRadius:'var(--r-md)',cursor:'pointer',fontSize:14,fontWeight:700,color:'var(--err)'}}>✕</button>
+          <button onClick={onClose} style={{width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',padding:0,lineHeight:1,flexShrink:0,background:'var(--err-bg)',border:'1px solid var(--err-bdr)',borderRadius:'var(--r-md)',cursor:'pointer',fontSize:14,fontWeight:700,color:'var(--err)'}}>✕</button>
         </div>
         <div className="modal-body">
           {STATUSES.map(s=>(
@@ -758,7 +770,7 @@ function BrandMaster({brands,onClose,onRefresh}:{brands:Brand[];onClose:()=>void
               <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
               Template
             </button>
-            <button onClick={onClose} style={{width:28,height:28,background:'var(--err-bg)',border:'1px solid var(--err-bdr)',borderRadius:'var(--r-md)',cursor:'pointer',fontSize:14,fontWeight:700,color:'var(--err)'}}>✕</button>
+            <button onClick={onClose} style={{width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',padding:0,lineHeight:1,flexShrink:0,background:'var(--err-bg)',border:'1px solid var(--err-bdr)',borderRadius:'var(--r-md)',cursor:'pointer',fontSize:14,fontWeight:700,color:'var(--err)'}}>✕</button>
           </div>
         </div>
 
@@ -1057,7 +1069,7 @@ function CategoryMaster({categories,onClose,onRefresh}:{categories:Category[];on
               <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
               Template
             </button>
-            <button onClick={onClose} style={{width:28,height:28,background:'var(--err-bg)',border:'1px solid var(--err-bdr)',borderRadius:'var(--r-md)',cursor:'pointer',fontSize:14,fontWeight:700,color:'var(--err)'}}>✕</button>
+            <button onClick={onClose} style={{width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',padding:0,lineHeight:1,flexShrink:0,background:'var(--err-bg)',border:'1px solid var(--err-bdr)',borderRadius:'var(--r-md)',cursor:'pointer',fontSize:14,fontWeight:700,color:'var(--err)'}}>✕</button>
           </div>
         </div>
 
@@ -1268,8 +1280,17 @@ function Drawer({pid,brands,categories,onClose,onUpdated}:{pid:string;brands:Bra
   const save=async(field:string,value:any)=>{await api(`/products/${pid}`,{method:'PATCH',body:JSON.stringify({[field]:value})});load();onUpdated();};
   const qty=p?stockQty(p):0;
   const FRow=({label,val,field,type='text',opts}:{label:string;val:string;field:string;type?:string;opts?:{v:string;l:string}[]})=>{
-    const [ed,setEd]=useState(false);const [v,setV]=useState(val);const [busy,setBusy]=useState(false);
-    const go=async(nv:string)=>{setBusy(true);try{await save(field,type==='number'?parseFloat(nv):nv);}finally{setBusy(false);setEd(false);}};
+    const [ed,setEd]=useState(false);const [v,setV]=useState(val);const [busy,setBusy]=useState(false);const [fe,setFe]=useState('');
+    const REQ:Record<string,string>={ean:'EAN / Barcode',model:'Product Name',brand:'Brand',costPrice:'Cost Price',sellingPrice:'MRP',categoryId:'Category',status:'Status'};
+    const go=async(nv:string)=>{
+      if(REQ[field]){
+        if(type==='number'?!(parseFloat(nv)>0):!String(nv??'').trim()){setFe(`${REQ[field]} is required${type==='number'?' and must be more than 0':''}`);return;}
+      }
+      setFe('');setBusy(true);
+      try{await save(field,type==='number'?parseFloat(nv):(typeof nv==='string'?nv.trim():nv));setEd(false);}
+      catch(e:any){setFe(e?.message||'Save failed');}
+      finally{setBusy(false);}
+    };
     return(
       <div className="info-field">
         <div className="info-lbl" style={{display:'flex',justifyContent:'space-between'}}>
@@ -1285,8 +1306,9 @@ function Drawer({pid,brands,categories,onClose,onUpdated}:{pid:string;brands:Bra
               style={{width:'100%',height:28,padding:'0 8px',border:'1px solid var(--brand)',borderRadius:'var(--r-sm)',fontSize:12,outline:'none'}}/>)}
             <div style={{display:'flex',gap:4,marginTop:4}}>
               <button onClick={()=>go(v)} disabled={busy} style={{height:22,padding:'0 8px',fontSize:11,fontWeight:600,background:'var(--brand)',color:'#fff',border:'none',borderRadius:'var(--r-sm)',cursor:'pointer'}}>{busy?'…':'Save'}</button>
-              <button onClick={()=>setEd(false)} style={{height:22,padding:'0 6px',fontSize:11,background:'var(--surf-2)',border:'1px solid var(--bdr)',borderRadius:'var(--r-sm)',cursor:'pointer',color:'var(--txt-2)'}}>Cancel</button>
+              <button onClick={()=>{setEd(false);setFe('');}} style={{height:22,padding:'0 6px',fontSize:11,background:'var(--surf-2)',border:'1px solid var(--bdr)',borderRadius:'var(--r-sm)',cursor:'pointer',color:'var(--txt-2)'}}>Cancel</button>
             </div>
+            {fe&&<div style={{fontSize:11,color:'var(--err)',marginTop:4,fontWeight:600}}>{fe}</div>}
           </div>
         ):<div className="info-val">{val||'—'}</div>}
       </div>
@@ -1618,6 +1640,7 @@ export default function Products(){
 
   // Optimistically patch one field on one product, then sync with server.
   const patchField=async(p:Product,field:'status'|'costPrice'|'sellingPrice',value:string)=>{
+    if(field!=='status'&&!(Number(value)>0)){showT(`${field==='sellingPrice'?'MRP':'Cost Price'} is required and must be more than 0`);setEditCell(null);return;}
     const payload:any=field==='status'?{status:value}:{[field]:Number(value)};
     setSavingCell(true);
     // optimistic UI update
@@ -2054,7 +2077,7 @@ export default function Products(){
       {showStatusMgr&&<StatusManager labels={statusLabels} onSave={setStatusLabels} onClose={()=>setShowStatusMgr(false)}/>}
       {showBrandMaster&&<BrandMaster brands={brands} onClose={()=>setShowBrandMaster(false)} onRefresh={loadMeta}/>}
       {showCatMaster&&<CategoryMaster categories={categories} onClose={()=>setShowCatMaster(false)} onRefresh={loadMeta}/>}
-      {showAddProduct&&<AddProductModal brands={brands} categories={categories} onClose={()=>setShowAddProduct(false)} onSaved={()=>{loadProducts();loadMeta();showT('Product added ✓');}}/>}
+      {showAddProduct&&<AddProductModal brands={brands} categories={categories} onClose={()=>setShowAddProduct(false)} onSaved={(fixed)=>{loadProducts();loadMeta();showT(fixed?`Product added ✓ — name auto-corrected to "${fixed}"`:'Product added ✓');}}/>}
       {showBulkImport&&<BulkImportModal categories={categories} brands={brands} onClose={()=>setShowBulkImport(false)} onDone={()=>{loadProducts();loadMeta();}}/>}
       {drawer&&<Drawer pid={drawer} brands={brands} categories={categories} onClose={()=>setDrawer(null)} onUpdated={()=>{loadProducts();loadMeta();}}/>}
     </>
