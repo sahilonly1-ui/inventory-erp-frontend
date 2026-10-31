@@ -13,7 +13,7 @@ import { useIsPhone } from '../mobile/ui';
 
 type Field = { key: string; label: string };
 type Row = {
-  productId: string; ean: string; brand: string; model: string; key: string; qty: number;
+  productId: string; ean: string; brand: string; model: string; key: string; qty: number; activated: number;
   price: number; priceEdited: boolean; costPrice: number; mrp: number;
   status: 'PENDING' | 'FETCHING' | 'OK' | 'NOT_FOUND' | 'ERROR' | 'NO_AI';
   specs: Record<string, string>; sources: string[]; error: string | null; sourceUrl: string | null; manual: boolean;
@@ -111,10 +111,11 @@ export default function Specs() {
     const f = sheet.fields;
     const date = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
     const body = groups.map(([brand, rows]) => `
-      <tr class="brand"><td colspan="${f.length + 2}">${esc(brand)}</td></tr>
+      <tr class="brand"><td colspan="${f.length + 3}">${esc(brand)}</td></tr>
       ${rows.map(r => `<tr>
         <td class="model">${esc(r.model)}</td>
         <td class="price">${inr(r.price)}</td>
+        <td class="stock">${r.qty}</td>
         ${r.status === 'OK' || Object.keys(r.specs).length
           ? f.map(x => `<td>${esc(r.specs[x.key] || '—')}</td>`).join('')
           : `<td colspan="${f.length}" class="na">Specifications not available</td>`}
@@ -135,13 +136,14 @@ tr{page-break-inside:avoid}
 tr.brand td{background:#e2e8f0;font-weight:900;font-size:9.5pt;padding:1.6mm 1.2mm;border-bottom:1pt solid #1e293b}
 td.model{font-weight:700}
 td.price{font-weight:800;white-space:nowrap}
+td.stock{text-align:center;font-weight:800}
 td.na{color:#888;font-style:italic}
 .ft{margin-top:2mm;font-size:6.5pt;color:#666}
 </style></head><body>
 <div class="hd"><h1>${esc(sheet.category.name)} specifications</h1>
 <div class="sub">iTechArena, in stock on ${date}</div></div>
-<table><colgroup><col style="width:15%"><col style="width:6.5%">${f.map(() => `<col>`).join('')}</colgroup>
-<thead><tr><th>Model &amp; Variant</th><th>Price</th>${f.map(x => `<th>${esc(x.label)}</th>`).join('')}</tr></thead>
+<table><colgroup><col style="width:15%"><col style="width:6.5%"><col style="width:4.5%">${f.map(() => `<col>`).join('')}</colgroup>
+<thead><tr><th>Model &amp; Variant</th><th>Price</th><th style="text-align:center">Stock</th>${f.map(x => `<th>${esc(x.label)}</th>`).join('')}</tr></thead>
 <tbody>${body}</tbody></table>
 <div class="ft">Specifications are from the manufacturer and authorised spec sources. Prices and availability may change.</div>
 </body></html>`;
@@ -196,15 +198,16 @@ td.na{color:#888;font-style:italic}
           <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>Nothing in stock in {sheet.category.name}. Pick another category.</div>
         )}
         {sheet && sheet.rows.length > 0 && (
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 300 + fields.length * 150 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 380 + fields.length * 150 }}>
             <thead><tr>
               <th style={{ ...th, minWidth: 220 }}>Model &amp; Variant</th>
               <th style={{ ...th, minWidth: 90 }}>Price</th>
+              <th style={{ ...th, minWidth: 80, textAlign: 'center' }}>Available Stock</th>
               {fields.map(f => <th key={f.key} style={{ ...th, minWidth: 150 }}>{f.label}</th>)}
             </tr></thead>
             <tbody>
               {groups.map(([brand, rows]) => [
-                <tr key={`b-${brand}`}><td colSpan={fields.length + 2}
+                <tr key={`b-${brand}`}><td colSpan={fields.length + 3}
                   style={{ background: '#1e293b', color: '#fff', fontWeight: 800, fontSize: 14, padding: '8px 12px' }}>{brand}
                   <span style={{ fontWeight: 500, fontSize: 12, color: '#cbd5e1', marginLeft: 8 }}>{rows.length}</span></td></tr>,
                 ...rows.map(r => {
@@ -215,7 +218,6 @@ td.na{color:#888;font-style:italic}
                       <td style={{ ...cell, fontWeight: 600, color: '#0f172a' }}>
                         {r.model}
                         <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500, marginTop: 2 }}>
-                          {r.qty} in stock
                           {canEdit && (r.status === 'OK' || hasSpecs) && !editingThis && (
                             <button onClick={() => setEditRow({ key: r.key, v: { ...r.specs } })}
                               style={{ marginLeft: 8, border: 'none', background: 'none', color: '#2563eb', fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: 0 }}>Edit specs</button>
@@ -243,6 +245,11 @@ td.na{color:#888;font-style:italic}
                             {inr(r.price)}
                           </span>
                         )}
+                      </td>
+                      <td style={{ ...cell, textAlign: 'center', whiteSpace: 'nowrap' }}>
+                        <span style={{ display: 'inline-block', minWidth: 30, padding: '2px 8px', borderRadius: 999, fontWeight: 800, fontSize: 13,
+                                       background: r.qty <= 1 ? '#fef3c7' : '#dcfce7', color: r.qty <= 1 ? '#92400e' : '#166534' }}>{r.qty}</span>
+                        {r.activated > 0 && <div style={{ fontSize: 10.5, color: '#7c3aed', fontWeight: 700, marginTop: 3 }}>{r.activated} ACC</div>}
                       </td>
                       {editingThis ? (
                         <td colSpan={fields.length} style={cell}>
