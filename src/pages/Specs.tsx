@@ -63,6 +63,7 @@ export default function Specs() {
 
   // While specs are still being fetched, check back every few seconds.
   const pending = sheet?.rows.filter(r => busy(r.status)).length ?? 0;
+  const noAi = sheet?.rows.filter(r => r.status === 'NO_AI').length ?? 0;
   useEffect(() => {
     if (timer.current) window.clearTimeout(timer.current);
     if (pending > 0) timer.current = window.setTimeout(() => load(true), 6000);
@@ -175,11 +176,14 @@ td.na{color:#888;font-style:italic}
         </div>
       </div>
 
-      {sheet && (pending > 0 || !sheet.aiEnabled) && (
-        <div style={{ padding: '8px 20px', fontSize: 12.5, fontWeight: 600, background: sheet.aiEnabled ? '#eff6ff' : '#fff7ed', color: sheet.aiEnabled ? '#1d4ed8' : '#9a3412', borderBottom: '1px solid #e5e7eb' }}>
-          {sheet.aiEnabled
-            ? `Fetching specifications for new models: ${ready} of ${models} ready. This page updates by itself.`
-            : 'Automatic fetching is not set up yet. Specs can still be added by hand or from a website link once it is set up.'}
+      {sheet && pending > 0 && (
+        <div style={{ padding: '8px 20px', fontSize: 12.5, fontWeight: 600, background: '#eff6ff', color: '#1d4ed8', borderBottom: '1px solid #e5e7eb' }}>
+          Fetching specifications for new models: {ready} of {models} ready. This page updates by itself.
+        </div>
+      )}
+      {sheet && pending === 0 && noAi > 0 && (
+        <div style={{ padding: '8px 20px', fontSize: 12.5, fontWeight: 600, background: '#fff7ed', color: '#9a3412', borderBottom: '1px solid #e5e7eb' }}>
+          Automatic fetching for {sheet.category.name} is not switched on yet. Specs can be typed in for now.
         </div>
       )}
 
@@ -265,7 +269,7 @@ td.na{color:#888;font-style:italic}
                         <td colSpan={fields.length} style={{ ...cell, background: '#fffbeb' }}>
                           <div style={{ position: 'sticky', left: 0, maxWidth: 'min(860px, 72vw)' }}>
                           <div style={{ fontSize: 12.5, fontWeight: 700, color: '#92400e' }}>
-                            {r.status === 'NO_AI' ? 'Specifications not fetched yet.' : 'Specifications for this exact model could not be found.'}
+                            {r.status === 'NO_AI' ? 'Automatic fetching is not switched on for this category yet.' : r.status === 'ERROR' ? 'Fetching the specifications did not work this time.' : 'Specifications for this exact model could not be found.'}
                             {' '}Provide a website link that has this model's specifications (brand site, GSMArena, 91mobiles…).
                           </div>
                           {r.error && r.status === 'ERROR' && <div style={{ fontSize: 11.5, color: '#b45309', marginTop: 2 }}>{r.error}</div>}
