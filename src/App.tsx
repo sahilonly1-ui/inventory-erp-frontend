@@ -21,6 +21,7 @@ const ProductHistory = lazy(() => import('./pages/ProductHistory'));
 const Suppliers      = lazy(() => import('./pages/Suppliers').then(m => ({ default: m.Suppliers })));
 const StockIn        = lazy(() => import('./pages/StockIn').then(m => ({ default: m.StockIn })));
 const OpeningStock   = lazy(() => import('./pages/OpeningStock').then(m => ({ default: m.OpeningStock })));
+const Specs          = lazy(() => import('./pages/Specs'));
 const StockReport    = lazy(() => import('./pages/StockReport').then(m => ({ default: m.StockReport })));
 const StockOut       = lazy(() => import('./pages/StockOut').then(m => ({ default: m.StockOut })));
 const Reports        = lazy(() => import('./pages/Reports').then(m => ({ default: m.Reports })));
@@ -61,6 +62,7 @@ export default function App() {
         <Route path="/stock-in"   element={<Shell><StockIn /></Shell>} />
         <Route path="/opening-stock" element={<Shell><OpeningStock /></Shell>} />
         <Route path="/stock-report"   element={<Shell><StockReport /></Shell>} />
+        <Route path="/specs"      element={<Shell><Specs /></Shell>} />
         <Route path="/stock-out"  element={<Shell><StockOut /></Shell>} />
         <Route path="/imei"       element={<Shell><Imei /></Shell>} />
         <Route path="/suppliers"  element={<Shell><Suppliers /></Shell>} />
