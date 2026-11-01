@@ -333,7 +333,8 @@ export function Imei() {
     setUpdatingId(id);
     try{
       await api(`/imei/${encodeURIComponent(imei1)}/status`,{method:'PATCH',body:JSON.stringify({status:ns})});
-      setData(d=>d?{...d,items:d.items.map(i=>i.id===id?{...i,status:ns}:i)}:d);
+      // Back to IN STOCK makes a demo / open-box unit a regular (sellable) unit again.
+      setData(d=>d?{...d,items:d.items.map(i=>i.id===id?{...i,status:ns,imeiType:ns==='IN_STOCK'&&(i.imeiType==='DEMO'||i.imeiType==='OPEN_BOX')?'NIL':i.imeiType}:i)}:d);
     }catch(e:any){alert(e.message);}
     finally{setUpdatingId(null);}
   };
@@ -782,7 +783,9 @@ export function Imei() {
                           so once a unit has actually been sold to a customer, reversing that
                           belongs to a proper return process, not a casual click here. */}
                       <td style={{padding:'10px 14px'}} onClick={e=>e.stopPropagation()}>
-                        <select value={item.status}
+                        {/* A unit received as Demo / Open Box sits at IN STOCK with that type —
+                            show the type here so choosing IN STOCK actually fires and converts it. */}
+                        <select value={item.status==='IN_STOCK'&&(item.imeiType==='DEMO'||item.imeiType==='OPEN_BOX')?item.imeiType:item.status}
                           onChange={e=>changeStatus(item.id,item.imei1,e.target.value)}
                           disabled={updatingId===item.id||item.status==='SOLD'}
                           title={item.status==='SOLD'?'Sold units are locked — reverse the Stock Out entry instead of changing status here.':undefined}
