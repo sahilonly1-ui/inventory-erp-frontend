@@ -24,6 +24,8 @@ type Cat = { id: string; name: string; count: number };
 const inr = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');
 const esc = (t: string) => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const busy = (s: Row['status']) => s === 'PENDING' || s === 'FETCHING';
+// Specs the AI filled from its own knowledge (no web page) — salesman should verify before quoting.
+const fromAi = (r: Row) => (r.sources ?? []).includes('ai:knowledge');
 
 export default function Specs() {
   const isPhone = useIsPhone();
@@ -114,7 +116,7 @@ export default function Specs() {
     const body = groups.map(([brand, rows]) => `
       <tr class="brand"><td colspan="${f.length + 3}">${esc(brand)}</td></tr>
       ${rows.map(r => `<tr>
-        <td class="model">${esc(r.model)}</td>
+        <td class="model">${esc(r.model)}${!r.manual && fromAi(r) ? ' *' : ''}</td>
         <td class="price">${inr(r.price)}</td>
         <td class="stock">${r.qty}</td>
         ${r.status === 'OK' || Object.keys(r.specs).length
@@ -146,7 +148,7 @@ td.na{color:#888;font-style:italic}
 <table><colgroup><col style="width:15%"><col style="width:6.5%"><col style="width:4.5%">${f.map(() => `<col>`).join('')}</colgroup>
 <thead><tr><th>Model &amp; Variant</th><th>Price</th><th style="text-align:center">Stock</th>${f.map(x => `<th>${esc(x.label)}</th>`).join('')}</tr></thead>
 <tbody>${body}</tbody></table>
-<div class="ft">Specifications are from the manufacturer and authorised spec sources. Prices and availability may change.</div>
+<div class="ft">Specifications are from the manufacturer and authorised spec sources${sheet.rows.some(r => !r.manual && fromAi(r)) ? '; * marked items are unverified, please confirm before purchase' : ''}. Prices and availability may change.</div>
 </body></html>`;
     const w = window.open('', '_blank');
     if (!w) { alert('Allow pop-ups to print'); return; }
@@ -234,6 +236,10 @@ td.na{color:#888;font-style:italic}
                             <button onClick={() => setLinkOpen(linkOpen === r.key ? null : r.key)} style={link} title="Fetch from a website you choose">Other link</button>
                           </>}
                           {r.manual && <span style={{ fontSize: 10, color: '#a16207' }}>edited</span>}
+                          {!r.manual && fromAi(r) && (r.status === 'OK') && (
+                            <span title="Filled from AI knowledge, not from a website. Check before telling a customer, or use Other link."
+                              style={{ fontSize: 9.5, fontWeight: 800, color: '#9a3412', background: '#ffedd5', borderRadius: 4, padding: '0 5px' }}>AI — verify</span>
+                          )}
                         </div>
                         {linkOpen === r.key && (
                           <div style={{ marginTop: 5 }}>
