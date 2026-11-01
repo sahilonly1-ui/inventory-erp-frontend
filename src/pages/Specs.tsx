@@ -39,6 +39,7 @@ export default function Specs() {
   const [editPrice, setEditPrice] = useState<{ id: string; v: string } | null>(null);
   const [editRow, setEditRow] = useState<{ key: string; v: Record<string, string> } | null>(null);
   const [links, setLinks] = useState<Record<string, string>>({});
+  const [linkOpen, setLinkOpen] = useState<string | null>(null);
   const timer = useRef<number | null>(null);
 
   const say = (t: string) => { setToast(t); window.setTimeout(() => setToast(''), 3500); };
@@ -155,8 +156,11 @@ td.na{color:#888;font-style:italic}
 
   // ── UI ──────────────────────────────────────────────────────────────────
   const fields = sheet?.fields ?? [];
-  const cell: React.CSSProperties = { padding: '8px 10px', borderBottom: '1px solid var(--bdr-s, #e5e7eb)', verticalAlign: 'top', fontSize: 12.5, lineHeight: 1.4 };
-  const th: React.CSSProperties = { padding: '9px 10px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#475569', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 1, whiteSpace: 'nowrap' };
+  // Sized to fit the screen width: fixed layout, compact type, text wraps inside its column.
+  const fs = isPhone ? 11 : 11.5;
+  const cell: React.CSSProperties = { padding: '6px 7px', borderBottom: '1px solid var(--bdr-s, #e5e7eb)', verticalAlign: 'top', fontSize: fs, lineHeight: 1.35, overflowWrap: 'anywhere' };
+  const th: React.CSSProperties = { padding: '7px 7px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: '#475569', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 1, whiteSpace: 'normal', lineHeight: 1.25 };
+  const link: React.CSSProperties = { border: 'none', background: 'none', color: '#2563eb', fontSize: 10.5, fontWeight: 700, cursor: 'pointer', padding: 0 };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
@@ -198,12 +202,16 @@ td.na{color:#888;font-style:italic}
           <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>Nothing in stock in {sheet.category.name}. Pick another category.</div>
         )}
         {sheet && sheet.rows.length > 0 && (
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 380 + fields.length * 150 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: isPhone ? 900 : undefined }}>
+            <colgroup>
+              <col style={{ width: '14%' }} /><col style={{ width: '6.5%' }} /><col style={{ width: '5%' }} />
+              {fields.map(f => <col key={f.key} />)}
+            </colgroup>
             <thead><tr>
-              <th style={{ ...th, minWidth: 220 }}>Model &amp; Variant</th>
-              <th style={{ ...th, minWidth: 90 }}>Price</th>
-              <th style={{ ...th, minWidth: 80, textAlign: 'center' }}>Available Stock</th>
-              {fields.map(f => <th key={f.key} style={{ ...th, minWidth: 150 }}>{f.label}</th>)}
+              <th style={th}>Model &amp; Variant</th>
+              <th style={th}>Price</th>
+              <th style={{ ...th, textAlign: 'center' }}>Stock</th>
+              {fields.map(f => <th key={f.key} style={th}>{f.label}</th>)}
             </tr></thead>
             <tbody>
               {groups.map(([brand, rows]) => [
@@ -217,13 +225,28 @@ td.na{color:#888;font-style:italic}
                     <tr key={r.productId}>
                       <td style={{ ...cell, fontWeight: 600, color: '#0f172a' }}>
                         {r.model}
-                        <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500, marginTop: 2 }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 8px', marginTop: 3, fontWeight: 500 }}>
                           {canEdit && (r.status === 'OK' || hasSpecs) && !editingThis && (
-                            <button onClick={() => setEditRow({ key: r.key, v: { ...r.specs } })}
-                              style={{ marginLeft: 8, border: 'none', background: 'none', color: '#2563eb', fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: 0 }}>Edit specs</button>
+                            <button onClick={() => setEditRow({ key: r.key, v: { ...r.specs } })} style={link}>Edit</button>
                           )}
-                          {r.manual && <span style={{ marginLeft: 8, color: '#a16207' }}>edited by hand</span>}
+                          {(r.status === 'OK' || hasSpecs) && !busy(r.status) && <>
+                            <button onClick={() => refetch(r, false)} style={link} title="Fetch these specifications again">Refetch</button>
+                            <button onClick={() => setLinkOpen(linkOpen === r.key ? null : r.key)} style={link} title="Fetch from a website you choose">Other link</button>
+                          </>}
+                          {r.manual && <span style={{ fontSize: 10, color: '#a16207' }}>edited</span>}
                         </div>
+                        {linkOpen === r.key && (
+                          <div style={{ marginTop: 5 }}>
+                            <input autoFocus value={links[r.key] ?? ''} onChange={e => setLinks(l => ({ ...l, [r.key]: e.target.value }))}
+                              onKeyDown={e => { if (e.key === 'Enter') { refetch(r, true); setLinkOpen(null); } if (e.key === 'Escape') setLinkOpen(null); }}
+                              placeholder="Paste specs page link"
+                              style={{ width: '100%', height: 26, padding: '0 6px', border: '1px solid #93c5fd', borderRadius: 6, fontSize: 11 }} />
+                            <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                              <button onClick={() => { refetch(r, true); setLinkOpen(null); }} style={{ fontSize: 10.5, fontWeight: 700, color: '#fff', background: '#2563eb', border: 'none', borderRadius: 5, padding: '3px 8px', cursor: 'pointer' }}>Fetch</button>
+                              <button onClick={() => setLinkOpen(null)} style={{ fontSize: 10.5, border: '1px solid #e2e8f0', background: '#fff', color: '#334155', borderRadius: 5, padding: '3px 8px', cursor: 'pointer' }}>Cancel</button>
+                            </div>
+                          </div>
+                        )}
                       </td>
                       <td style={{ ...cell, whiteSpace: 'nowrap' }}>
                         {editPrice?.id === r.productId ? (
@@ -231,7 +254,7 @@ td.na{color:#888;font-style:italic}
                             <input autoFocus type="number" min="1" value={editPrice.v} onChange={e => setEditPrice({ id: r.productId, v: e.target.value })}
                               onKeyDown={e => { if (e.key === 'Enter') savePrice(r, editPrice.v); if (e.key === 'Escape') setEditPrice(null); }}
                               placeholder={String(Math.round(r.costPrice))}
-                              style={{ width: 90, height: 28, padding: '0 6px', border: '1.5px solid #2563eb', borderRadius: 6, fontSize: 13 }} />
+                              style={{ width: '100%', maxWidth: 90, height: 26, padding: '0 5px', border: '1.5px solid #2563eb', borderRadius: 6, fontSize: 12 }} />
                             <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
                               <button onClick={() => savePrice(r, editPrice.v)} style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: '#2563eb', border: 'none', borderRadius: 5, padding: '3px 8px', cursor: 'pointer' }}>Save</button>
                               <button onClick={() => setEditPrice(null)} style={{ fontSize: 11, border: '1px solid #e2e8f0', background: '#fff', color: '#334155', borderRadius: 5, padding: '3px 8px', cursor: 'pointer' }}>Cancel</button>
@@ -241,13 +264,13 @@ td.na{color:#888;font-style:italic}
                         ) : (
                           <span onClick={() => canEdit && setEditPrice({ id: r.productId, v: String(Math.round(r.price)) })}
                             title={canEdit ? 'Click to change the price shown on this sheet (cost price is not changed)' : ''}
-                            style={{ fontWeight: 800, fontSize: 13.5, color: '#0f172a', cursor: canEdit ? 'pointer' : 'default', borderBottom: canEdit ? '1px dashed #94a3b8' : 'none' }}>
+                            style={{ fontWeight: 800, fontSize: fs + 1, color: '#0f172a', cursor: canEdit ? 'pointer' : 'default', borderBottom: canEdit ? '1px dashed #94a3b8' : 'none' }}>
                             {inr(r.price)}
                           </span>
                         )}
                       </td>
                       <td style={{ ...cell, textAlign: 'center', whiteSpace: 'nowrap' }}>
-                        <span style={{ display: 'inline-block', minWidth: 30, padding: '2px 8px', borderRadius: 999, fontWeight: 800, fontSize: 13,
+                        <span style={{ display: 'inline-block', minWidth: 24, padding: '1px 7px', borderRadius: 999, fontWeight: 800, fontSize: fs + 0.5,
                                        background: r.qty <= 1 ? '#fef3c7' : '#dcfce7', color: r.qty <= 1 ? '#92400e' : '#166534' }}>{r.qty}</span>
                         {r.activated > 0 && <div style={{ fontSize: 10.5, color: '#7c3aed', fontWeight: 700, marginTop: 3 }}>{r.activated} ACC</div>}
                       </td>
