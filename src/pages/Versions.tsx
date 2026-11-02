@@ -167,7 +167,10 @@ export function Versions() {
         showToast('✓ Restored successfully');
       }
       load();
-    } catch (e: any) { showToast('Restore failed: ' + e.message); }
+    } catch (e: any) {
+      // A failed restore must be seen — a 3-second toast was easy to miss.
+      alert('Restore failed\n\n' + (e.message || 'Unknown error'));
+    }
     finally { setRestoringId(null); }
   };
 
