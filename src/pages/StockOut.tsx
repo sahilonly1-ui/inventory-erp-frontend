@@ -250,32 +250,18 @@ export function StockOut(){
     setBusy(true);
     const rmk=`${editMode?'EDIT:':''}${doc}${cust?' → '+cust:''}${inv?' | INV:'+inv:''}`;
     try{
-      // ── EDIT MODE: delete original transactions first ─────────────────────────────
-      if(editMode?.txnIds?.length){
-        if(!confirm(`This will replace the original Stock Out entry for ${editMode.supplierName} (${editMode.txnIds.length} transaction${editMode.txnIds.length!==1?'s':''}).\n\nProceed?`)){
-          setBusy(false);return;
-        }
-        if(editMode.txnIds.length>1){
-          await api('/inventory/transactions/bulk-delete',{method:'POST',body:JSON.stringify({ids:editMode.txnIds})});
-        }else{
-          await api(`/inventory/transactions/${editMode.txnIds[0]}`,{method:'DELETE'});
-        }
-      }
-
-      // ── Batch dispatch all IMEIs in one call ──────────────────────────────────────
-      // Skip IMEI duplicate check in edit mode (these IMEIs were already in the system)
-      // Resolve the customer once for the whole entry.
+      // The customer is resolved before anything is touched.
       const vendorId=custId||(cust?await resolveCustomer(cust):'');
       if(cust.trim()&&!vendorId){
-        if(!confirm(`"${cust.trim()}" could not be saved as a customer.\n\nDispatch anyway? It will show as "No Vendor".`))return;
+        if(!confirm(`"${cust.trim()}" could not be saved as a customer.\n\nDispatch anyway? It will show as "No Vendor".`)){setBusy(false);return;}
       }
 
+      // Build every line of the entry first.
       // Only units that carry a code go through the IMEI tracker dispatch.
-      // If a code is not found there, it was never scanned in — the right
-      // response is a clear error, not an automatic reroute.
+      const ops:{type:string;body:any}[]=[];
       const imeiRows=sv.filter(r=>r.imei||r.srno);
       if(imeiRows.length){
-        await api('/imei/dispatch',{method:'POST',body:JSON.stringify({
+        ops.push({type:'imeiDispatch',body:{
           imeis:imeiRows.map(r=>r.imei||r.srno),
           // Rows with both codes: send the serial too, so a unit stocked in
           // with only its IMEI still gets its Sr. No. recorded and exported.
@@ -285,9 +271,8 @@ export function StockOut(){
           ...(vendorId?{vendorId}:{}),
           txnDate:date,
           invoiceNo:inv||undefined,
-        })});
+        }});
       }
-
       // Accessories — no IMEI or serial at all — use the plain quantity path.
       const untrackedByProduct=sv.filter(r=>!r.imei&&!r.srno).reduce((a:any,r)=>{
         if(!a[r.productId])a[r.productId]={productId:r.productId,qty:0};
@@ -295,14 +280,28 @@ export function StockOut(){
         return a;
       },{});
       for(const[productId,data] of Object.entries(untrackedByProduct) as any[]){
-        await api('/inventory/stock-out',{method:'POST',body:JSON.stringify({
+        ops.push({type:'stockOut',body:{
           productId,warehouseId:whId,
           quantity:data.qty,
           remarks:rmk,
           ...(vendorId?{vendorId}:{}),
           txnDate:date,
           invoiceNo:inv||undefined,
-        })});
+        }});
+      }
+
+      if(editMode?.txnIds?.length){
+        // ── EDIT: replace the old entry in ONE step on the server. If anything
+        // fails, nothing changes and the original entry stays as it was.
+        if(!confirm(`This will replace the original Stock Out entry for ${editMode.supplierName} (${editMode.txnIds.length} transaction${editMode.txnIds.length!==1?'s':''}).\n\nProceed?`)){
+          setBusy(false);return;
+        }
+        await api('/inventory/entries/replace',{method:'POST',body:JSON.stringify({deleteIds:editMode.txnIds,ops})});
+      }else{
+        for(const op of ops){
+          if(op.type==='imeiDispatch')await api('/imei/dispatch',{method:'POST',body:JSON.stringify(op.body)});
+          else await api('/inventory/stock-out',{method:'POST',body:JSON.stringify(op.body)});
+        }
       }
 
       if(cust)saveC(cust);
@@ -314,13 +313,8 @@ export function StockOut(){
       if(editMode)window.location.href='/';
     }catch(e:any){
       if(editMode?.txnIds?.length){
-        // The original was reversed before this point, so the entry no longer
-        // exists. Say so, rather than letting it look like nothing happened.
-        alert(
-          `⚠ Update failed after the original entry was reversed.\n\n${e.message||'Unknown error'}\n\n`+
-          `The original Stock Out has been removed and the replacement was NOT saved — `+
-          `the units are back in stock. Re-enter this dispatch to complete it.`
-        );
+        // Edits are all-or-nothing on the server: a failure leaves the original entry untouched.
+        alert(`⚠ Update not saved.\n\n${e.message||'Unknown error'}\n\nThe original Stock Out entry has NOT been changed — fix the problem above and press Update again.`);
       }else{
         alert(`Dispatch failed: ${e.message||'Unknown error'}\n\nCheck IMEI status in IMEI Tracker.`);
       }

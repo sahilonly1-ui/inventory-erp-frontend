@@ -399,53 +399,30 @@ export function StockIn(){
     setBusy(true);
     const rmk=`${editMode?'EDIT:':''}${doc}${supp?' | '+supp:''}${inv?' | INV:'+inv:''}`;
     try{
-      // ── EDIT MODE: the original must be removed before the replacement ─────────
-      //
-      // Writing the replacement first looks safer, but the units carry unique
-      // IMEIs: while the original still holds them, re-entering the same IMEIs
-      // is rejected as duplicates. So the original is reversed first, and the
-      // failure path below states plainly what happened if the rewrite fails.
-      if(editMode?.txnIds?.length){
-        if(!confirm(`This will replace the original entry from ${editMode.supplierName} (${editMode.txnIds.length} transaction${editMode.txnIds.length!==1?'s':''}).\n\nThe original is reversed first, then re-entered with your changes.\n\nProceed?`)){
-          setBusy(false);return;
-        }
-        if(editMode.txnIds.length>1){
-          await api('/inventory/transactions/bulk-delete',{method:'POST',body:JSON.stringify({ids:editMode.txnIds})});
-        }else{
-          await api(`/inventory/transactions/${editMode.txnIds[0]}`,{method:'DELETE'});
-        }
-      }
-
-      // ── Save all rows (same as normal stock-in) ───────────────────────────────────────────────────
+      // Build every line of the entry first; nothing is changed until it is all ready.
       // Serials are unit identifiers exactly like IMEIs and live in the same
-      // table, so they must go through /imei/receive too. Filtering on r.imei
-      // alone sent serial-only rows down the plain-quantity path, where the
-      // serial was appended to the remarks string and no tracker record was
-      // ever created — which is why they vanished on reopening the entry.
-      // Units coming back from a customer are taken into stock as a return;
-      // they already exist in the tracker, so a normal receive would reject
-      // them as duplicates.
+      // table, so they go through /imei/receive too. Units coming back from a
+      // customer are taken into stock as a return (they already exist in the tracker).
+      const ops:{type:string;body:any}[]=[];
       const returnRows=sv.filter(r=>r.isReturn&&(r.imei||r.srno));
       if(returnRows.length){
-        await api('/imei/return',{method:'POST',body:JSON.stringify({
+        ops.push({type:'imeiReturn',body:{
           imeis:returnRows.map(r=>r.imei||r.srno),
           vendorId:resolvedSuppId||undefined,
           remarks:rmk,
           txnDate:date,
           invoiceNo:inv||undefined,
-        })});
+        }});
       }
-
       const imeiRows=sv.filter(r=>!r.isReturn&&(r.imei||r.srno));
       const imeiByProduct=imeiRows.reduce((a:any,r)=>{
         if(!a[r.productId])a[r.productId]=[];
-        // A device with both (tablets) keeps both: the IMEI identifies it and the
-        // serial rides along. Sending only one used to drop the other silently.
+        // A device with both (tablets) keeps both: the IMEI identifies it and the serial rides along.
         a[r.productId].push({imei1:r.imei||r.srno,...(r.imei&&r.srno?{serialNo:r.srno}:{}),imeiType:r.imeiType||'NIL'});
         return a;
       },{});
       for(const[productId,imeis] of Object.entries(imeiByProduct) as any[]){
-        await api('/imei/receive',{method:'POST',body:JSON.stringify({
+        ops.push({type:'imeiReceive',body:{
           productId,warehouseId:whId,
           imeis,
           vendorId:resolvedSuppId||undefined,
@@ -453,9 +430,8 @@ export function StockIn(){
           remarks:rmk,
           txnDate:date,
           invoiceNo:inv||undefined,
-        })});
+        }});
       }
-
       // Only rows with no unit code at all — accessories counted by quantity.
       const nonImeiByProduct=sv.filter(r=>!r.imei&&!r.srno).reduce((a:any,r)=>{
         if(!a[r.productId])a[r.productId]={productId:r.productId,qty:0};
@@ -463,13 +439,27 @@ export function StockIn(){
         return a;
       },{});
       for(const[productId,data] of Object.entries(nonImeiByProduct) as any[]){
-        await api('/inventory/stock-in',{method:'POST',body:JSON.stringify({
+        ops.push({type:'stockIn',body:{
           productId,warehouseId:whId,
           quantity:data.qty,
           vendorId:resolvedSuppId||undefined,
           remarks:rmk,
           txnDate:date,
-        })});
+        }});
+      }
+
+      if(editMode?.txnIds?.length){
+        // ── EDIT: the server replaces the old entry in ONE step — all or nothing.
+        // If any line fails, nothing changes and the original entry stays as it was.
+        if(!confirm(`This will replace the original entry from ${editMode.supplierName} (${editMode.txnIds.length} transaction${editMode.txnIds.length!==1?'s':''}).\n\nProceed?`)){
+          setBusy(false);return;
+        }
+        await api('/inventory/entries/replace',{method:'POST',body:JSON.stringify({deleteIds:editMode.txnIds,ops})});
+      }else{
+        for(const op of ops){
+          const path=op.type==='imeiReturn'?'/imei/return':op.type==='imeiReceive'?'/imei/receive':'/inventory/stock-in';
+          await api(path,{method:'POST',body:JSON.stringify(op.body)});
+        }
       }
 
       eCache.clear();setRows([mk()]);moveTo(0,'ean');
@@ -483,14 +473,8 @@ export function StockIn(){
     }catch(e:any){
       const msg=e.message||'Unknown error';
       if(editMode?.txnIds?.length){
-        // The original was already reversed at this point, so the entry no
-        // longer exists anywhere. Saying "update failed" alone would suggest
-        // nothing changed, which is the opposite of what happened.
-        alert(
-          `⚠ Update failed AFTER the original entry was reversed.\n\n${msg}\n\n`+
-          `The original entry is gone and the replacement was not saved. Your scanned rows are still on screen — `+
-          `press Update again to write them, or use Cancel Edit and re-enter the stock.`
-        );
+        // Edits are all-or-nothing on the server: a failure leaves the original entry untouched.
+        alert(`⚠ Update not saved.\n\n${msg}\n\nThe original entry has NOT been changed — your scanned rows are still on screen. Fix the problem above and press Update again.`);
       }else{
         alert(`Commit failed: ${msg}\n\nTip: Check if any IMEI was previously scanned (use IMEI Tracker to verify).`);
       }
