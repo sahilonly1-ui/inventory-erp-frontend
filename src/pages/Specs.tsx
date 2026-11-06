@@ -81,10 +81,14 @@ export default function Specs() {
   const brandChoices = useMemo(() => brandCounts(sheet?.rows ?? []), [sheet]);
   // A brand picked in one category may not exist in the next; then show all.
   const activeBrand = brandChoices.some(([b]) => b === brand) ? brand : '';
-  const viewGroups = useMemo(
+  const view = useMemo(
     () => buildView(sheet?.rows ?? [], { brand: activeBrand, priceSort }),
     [sheet, activeBrand, priceSort],
   );
+  const viewGroups = view.groups;
+  // Price order is one list across every brand: no brand headers, so each row
+  // carries its brand instead.
+  const grouped = view.grouped;
   const viewRows = useMemo(() => viewGroups.flatMap(([, r]) => r), [viewGroups]);
   const models = new Set(sheet?.rows.map(r => r.key)).size;
   const ready = new Set(sheet?.rows.filter(r => r.status === 'OK').map(r => r.key)).size;
@@ -122,9 +126,9 @@ export default function Specs() {
     const f = sheet.fields;
     const date = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
     const body = viewGroups.map(([brand, rows]) => `
-      <tr class="brand"><td colspan="${f.length + 3}">${esc(brand)}</td></tr>
+      ${grouped ? `<tr class="brand"><td colspan="${f.length + 3}">${esc(brand)}</td></tr>` : ''}
       ${rows.map(r => `<tr>
-        <td class="model">${esc(r.model)}${!r.manual && fromAi(r) ? ' *' : ''}</td>
+        <td class="model">${grouped ? '' : `<span class="bd">${esc(r.brand)}</span>`}${esc(r.model)}${!r.manual && fromAi(r) ? ' *' : ''}</td>
         <td class="price">${inr(r.price)}</td>
         <td class="stock">${r.qty}</td>
         ${r.status === 'OK' || Object.keys(r.specs).length
@@ -146,6 +150,7 @@ td{border-bottom:.5pt solid #cbd5e1;padding:1.2mm;vertical-align:top;word-wrap:b
 tr{page-break-inside:avoid}
 tr.brand td{background:#e2e8f0;font-weight:900;font-size:9.5pt;padding:1.6mm 1.2mm;border-bottom:1pt solid #1e293b}
 td.model{font-weight:700}
+.bd{display:block;font-size:6pt;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.05em}
 td.price{font-weight:800;white-space:nowrap}
 td.stock{text-align:center;font-weight:800}
 td.na{color:#888;font-style:italic}
@@ -235,15 +240,16 @@ td.na{color:#888;font-style:italic}
             </tr></thead>
             <tbody>
               {viewGroups.map(([brand, rows]) => [
-                <tr key={`b-${brand}`}><td colSpan={fields.length + 3}
+                ...(grouped ? [<tr key={`b-${brand}`}><td colSpan={fields.length + 3}
                   style={{ background: '#1e293b', color: '#fff', fontWeight: 800, fontSize: 14, padding: '8px 12px' }}>{brand}
-                  <span style={{ fontWeight: 500, fontSize: 12, color: '#cbd5e1', marginLeft: 8 }}>{rows.length}</span></td></tr>,
+                  <span style={{ fontWeight: 500, fontSize: 12, color: '#cbd5e1', marginLeft: 8 }}>{rows.length}</span></td></tr>] : []),
                 ...rows.map(r => {
                   const editingThis = editRow?.key === r.key;
                   const hasSpecs = Object.keys(r.specs).length > 0;
                   return (
                     <tr key={r.productId}>
                       <td style={{ ...cell, fontWeight: 600, color: '#0f172a' }}>
+                        {!grouped && <div style={{ fontSize: 9.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 1 }}>{r.brand}</div>}
                         {r.model}
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 8px', marginTop: 3, fontWeight: 500 }}>
                           {canEdit && (r.status === 'OK' || hasSpecs) && !editingThis && (
