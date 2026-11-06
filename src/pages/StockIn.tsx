@@ -233,7 +233,7 @@ export function StockIn(){
 
     // 2. Within-session duplicate (same IMEI scanned twice in this draft)
     const curId=rows[i]?.id;
-    const sessDup=rows.findIndex(r=>r.id!==curId&&r.imei===v);
+    const sessDup=rows.findIndex(r=>r.id!==curId&&r.imei.toLowerCase()===v.toLowerCase());
     if(sessDup!==-1){
       upd(i,{errMsg:`Duplicate scan! IMEI already entered in row ${sessDup+1} of this entry.`,status:'err',errField:'imei'});
       moveTo(i,'imei');return;
@@ -281,7 +281,7 @@ export function StockIn(){
     }
     // Within-session duplicate Sr.No.
     const curId2=rows[i]?.id;
-    const sessDup=rows.findIndex(r=>r.id!==curId2&&r.srno===v);
+    const sessDup=rows.findIndex(r=>r.id!==curId2&&r.srno.toLowerCase()===v.toLowerCase());
     if(sessDup!==-1){
       upd(i,{errMsg:`Duplicate! Sr.No. "${v}" already in row ${sessDup+1} of this entry.`,status:'err',errField:'srno'});
       moveTo(i,'srno');return;
