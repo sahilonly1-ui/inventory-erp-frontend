@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { useIsPhone } from '../mobile/ui';
+import { buildView, brandCounts, PriceSort } from './specsView';
 
 /*
  * Specifications — a customer-facing spec sheet of everything in stock, one
@@ -42,6 +43,8 @@ export default function Specs() {
   const [editRow, setEditRow] = useState<{ key: string; v: Record<string, string> } | null>(null);
   const [links, setLinks] = useState<Record<string, string>>({});
   const [linkOpen, setLinkOpen] = useState<string | null>(null);
+  const [brand, setBrand] = useState('');
+  const [priceSort, setPriceSort] = useState<PriceSort>('');
   const timer = useRef<number | null>(null);
 
   const say = (t: string) => { setToast(t); window.setTimeout(() => setToast(''), 3500); };
@@ -73,11 +76,16 @@ export default function Specs() {
     return () => { if (timer.current) window.clearTimeout(timer.current); };
   }, [sheet, pending, load]);
 
-  const groups = useMemo(() => {
-    const m = new Map<string, Row[]>();
-    for (const r of sheet?.rows ?? []) m.set(r.brand, [...(m.get(r.brand) ?? []), r]);
-    return [...m.entries()];
-  }, [sheet]);
+  // Brand and price filters. The screen and the A4 print both read viewGroups,
+  // so a printout always matches what is on screen.
+  const brandChoices = useMemo(() => brandCounts(sheet?.rows ?? []), [sheet]);
+  // A brand picked in one category may not exist in the next; then show all.
+  const activeBrand = brandChoices.some(([b]) => b === brand) ? brand : '';
+  const viewGroups = useMemo(
+    () => buildView(sheet?.rows ?? [], { brand: activeBrand, priceSort }),
+    [sheet, activeBrand, priceSort],
+  );
+  const viewRows = useMemo(() => viewGroups.flatMap(([, r]) => r), [viewGroups]);
   const models = new Set(sheet?.rows.map(r => r.key)).size;
   const ready = new Set(sheet?.rows.filter(r => r.status === 'OK').map(r => r.key)).size;
 
@@ -113,7 +121,7 @@ export default function Specs() {
     if (!sheet) return;
     const f = sheet.fields;
     const date = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-    const body = groups.map(([brand, rows]) => `
+    const body = viewGroups.map(([brand, rows]) => `
       <tr class="brand"><td colspan="${f.length + 3}">${esc(brand)}</td></tr>
       ${rows.map(r => `<tr>
         <td class="model">${esc(r.model)}${!r.manual && fromAi(r) ? ' *' : ''}</td>
@@ -144,11 +152,11 @@ td.na{color:#888;font-style:italic}
 .ft{margin-top:2mm;font-size:6.5pt;color:#666}
 </style></head><body>
 <div class="hd"><h1>${esc(sheet.category.name)} specifications</h1>
-<div class="sub">iTechArena, in stock on ${date}</div></div>
+<div class="sub">iTechArena, in stock on ${date}${activeBrand ? ` \u00b7 ${esc(activeBrand)}` : ''}${priceSort === 'asc' ? ' \u00b7 price low to high' : ''}</div></div>
 <table><colgroup><col style="width:15%"><col style="width:6.5%"><col style="width:4.5%">${f.map(() => `<col>`).join('')}</colgroup>
 <thead><tr><th>Model &amp; Variant</th><th>Price</th><th style="text-align:center">Stock</th>${f.map(x => `<th>${esc(x.label)}</th>`).join('')}</tr></thead>
 <tbody>${body}</tbody></table>
-<div class="ft">Specifications are from the manufacturer and authorised spec sources${sheet.rows.some(r => !r.manual && fromAi(r)) ? '; * marked items are unverified, please confirm before purchase' : ''}. Prices and availability may change.</div>
+<div class="ft">Specifications are from the manufacturer and authorised spec sources${viewRows.some(r => !r.manual && fromAi(r)) ? '; * marked items are unverified, please confirm before purchase' : ''}. Prices and availability may change.</div>
 </body></html>`;
     const w = window.open('', '_blank');
     if (!w) { alert('Allow pop-ups to print'); return; }
@@ -170,13 +178,23 @@ td.na{color:#888;font-style:italic}
         <div style={{ flex: 1, minWidth: 180 }}>
           <div style={{ fontSize: 17, fontWeight: 800, color: '#0f172a' }}>Specifications</div>
           <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-            {sheet ? `${sheet.rows.length} items in stock, ${models} models` : 'Only items in stock are listed'}
+            {sheet ? `${viewRows.length}${viewRows.length !== sheet.rows.length ? ` of ${sheet.rows.length}` : ''} items in stock, ${new Set(viewRows.map(r => r.key)).size} models` : 'Only items in stock are listed'}
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <select value={catId} onChange={e => setCatId(e.target.value)} aria-label="Category"
           style={{ width: 'auto', flex: '0 0 auto', height: 38, padding: '0 12px', border: '1.5px solid #c7d2fe', borderRadius: 10, fontSize: 14, fontWeight: 700, color: '#1e3a8a', background: '#eef2ff', minWidth: 200 }}>
           {cats.map(c => <option key={c.id} value={c.id}>{c.name} ({c.count})</option>)}
+        </select>
+        <select value={activeBrand} onChange={e => setBrand(e.target.value)} aria-label="Brand"
+          style={{ width: 'auto', flex: '0 0 auto', height: 38, padding: '0 12px', border: '1.5px solid #c7d2fe', borderRadius: 10, fontSize: 14, fontWeight: 700, color: '#1e3a8a', background: '#eef2ff', minWidth: 160 }}>
+          <option value="">All Brands ({sheet?.rows.length ?? 0})</option>
+          {brandChoices.map(([b, n]) => <option key={b} value={b}>{b} ({n})</option>)}
+        </select>
+        <select value={priceSort} onChange={e => setPriceSort(e.target.value as PriceSort)} aria-label="Price order"
+          style={{ width: 'auto', flex: '0 0 auto', height: 38, padding: '0 12px', border: '1.5px solid #c7d2fe', borderRadius: 10, fontSize: 14, fontWeight: 700, color: '#1e3a8a', background: '#eef2ff', minWidth: 190 }}>
+          <option value="">Price: Default</option>
+          <option value="asc">Price: Low to High</option>
         </select>
         <button onClick={() => load()} style={{ height: 38, padding: '0 14px', border: '1px solid #e2e8f0', borderRadius: 10, background: '#fff', color: '#334155', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Refresh</button>
         <button onClick={handlePrint} disabled={!sheet?.rows.length}
@@ -216,7 +234,7 @@ td.na{color:#888;font-style:italic}
               {fields.map(f => <th key={f.key} style={th}>{f.label}</th>)}
             </tr></thead>
             <tbody>
-              {groups.map(([brand, rows]) => [
+              {viewGroups.map(([brand, rows]) => [
                 <tr key={`b-${brand}`}><td colSpan={fields.length + 3}
                   style={{ background: '#1e293b', color: '#fff', fontWeight: 800, fontSize: 14, padding: '8px 12px' }}>{brand}
                   <span style={{ fontWeight: 500, fontSize: 12, color: '#cbd5e1', marginLeft: 8 }}>{rows.length}</span></td></tr>,
