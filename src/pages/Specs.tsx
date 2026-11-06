@@ -127,7 +127,7 @@ export default function Specs() {
 <style>
 @page{size:A4 landscape;margin:8mm}
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:Inter,'Segoe UI',Arial,sans-serif;color:#111;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{font-family:Inter,'Segoe UI',Arial,sans-serif;font-feature-settings:'calt' 0;color:#111;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .hd{display:flex;align-items:baseline;justify-content:space-between;border-bottom:2px solid #111;padding-bottom:2mm;margin-bottom:2mm}
 .hd h1{font-size:17pt;font-weight:900;letter-spacing:.01em}
 .hd .sub{font-size:8.5pt;color:#444;font-weight:600}

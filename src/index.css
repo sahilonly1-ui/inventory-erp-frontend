@@ -647,3 +647,10 @@ button.ghost:hover{background:var(--surf-1)}
 @media (max-width: 899px) {
   body, #root, .m-shell, .m-main { overflow-y: visible !important; overscroll-behavior: auto !important; }
 }
+
+/* Inter's "contextual alternates" quietly redraw an x that follows a digit as a
+   raised multiplication sign: "N6x 5G" showed as "N6× 5G", "12x" as "12×". The
+   stored name was always a plain x — only the drawing changed — so editing and
+   saving it never helped. The feature is switched off everywhere (it is
+   inherited, so this covers inputs and the dashboard cards too). */
+*, *::before, *::after { font-feature-settings: "calt" 0; }
