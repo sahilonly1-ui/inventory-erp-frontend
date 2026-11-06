@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { useIsPhone, M, MCard, MPill, MEmpty, mInput } from '../mobile/ui';
+import { ourPriceOf } from './ourPrice';
 
 // ── Types (mirror /price-watch/items) ──────────────────────────────────────
 type StoreKey = 'amazon' | 'flipkart' | 'reliance' | 'croma' | 'official';
@@ -16,7 +17,7 @@ interface Offer { bank: string | null; cardType: string | null; offerType: strin
 interface Snap { status: 'ok' | 'suspect' | 'unverified' | 'not_found' | 'not_listed' | 'blocked' | 'error'; price: number | null; mrp: number | null; inStock: boolean | null; title: string | null; offers: Offer[]; effectivePrice: number | null; bestOffer: string | null; priceText: string | null; notes: string | null; method: string | null; url: string; fetchedAt: string }
 interface Link { url: string | null; lockedByUser: boolean; notListed: boolean; discoveredAt: string | null }
 interface StoreState { link: Link | null; latest: Snap | null; lastGood: Snap | null }
-interface Item { id: string; productId: string | null; name: string; brand: string | null; variant: string | null; source: 'auto' | 'manual'; active: boolean; priority: boolean; lastRefreshedAt: string | null; ean: string | null; ourPrice: number | null; category: string | null; stock: number; requested: boolean; stores: Record<StoreKey, StoreState> }
+interface Item { id: string; productId: string | null; name: string; brand: string | null; variant: string | null; source: 'auto' | 'manual'; active: boolean; priority: boolean; lastRefreshedAt: string | null; ean: string | null; ourPrice: number | null; specPrice: number | null; category: string | null; stock: number; requested: boolean; stores: Record<StoreKey, StoreState> }
 interface Status { lastAgentRun: string | null; requested: number; instantRun?: boolean; localOnline?: boolean; localSeen?: string | null }
 interface RunStatus { configured: boolean; error?: string; run?: { number: number; status: string; conclusion: string | null; startedAt: string; updatedAt: string; url: string } | null }
 interface Settings { autoSyncInStock: boolean; autoSyncCategories: string[]; autoSyncBrands: string[]; includeOutOfStock: boolean; options?: { brands: string[]; categories: string[] }; defaultIntervalMins: number; priorityIntervalMins: number; stores: StoreKey[]; batchSize: number }
@@ -233,7 +234,7 @@ export default function MarketPrices() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 1100 }}>
             <thead>
               <tr style={{ background: '#f8fafc' }}>
-                {['Product', 'MRP (ERP)', ...STORES.map(s => s.label), 'Best deal', ''].map(h => (
+                {['Product', 'Our price', ...STORES.map(s => s.label), 'Best deal', ''].map(h => (
                   <th key={h} style={{ position: 'sticky', top: 0, zIndex: 2, background: '#f8fafc', boxShadow: `inset 0 -1px 0 ${M.color.line}`, padding: '10px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: M.color.muted, textTransform: 'uppercase', letterSpacing: '.04em', borderBottom: `1px solid ${M.color.line}`, whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
@@ -314,13 +315,15 @@ function RowRefresh({ it, act }: { it: Item; act: Act }) {
 
 function ItemRow({ it, open, onToggle, act }: { it: Item; open: boolean; onToggle: () => void; act: Act }) {
   const low = lowest(it);
+  const our = ourPriceOf(it);
   const td: React.CSSProperties = { padding: '11px 12px', verticalAlign: 'top', borderBottom: open ? 'none' : '1px solid #f1f5f9' };
   return (
     <>
       <tr onClick={onToggle} style={{ cursor: 'pointer', background: open ? '#f8fafc' : undefined }}>
         <td style={{ ...td, maxWidth: 280 }}><ItemTitle it={it} /></td>
         <td style={{ ...td, whiteSpace: 'nowrap' }}>
-          <div style={{ fontWeight: 700 }} title="MRP from Product Master">{it.ourPrice ? inr(it.ourPrice) : '—'}</div>
+          <div style={{ fontWeight: 700 }} title={our.isMrp ? 'MRP from Product Master: no price has been set for this on the Specifications tab' : 'Price set on the Specifications tab'}>{our.value ? inr(our.value) : '—'}</div>
+          {our.value && our.isMrp && <div style={{ fontSize: 10, color: M.color.faint }}>MRP</div>}
           {it.productId && <div style={{ fontSize: 11, color: it.stock > 0 ? M.color.good : M.color.faint }}>Stock {it.stock}</div>}
         </td>
         {STORES.map(s => <td key={s.key} style={{ ...td, whiteSpace: 'nowrap' }}><PriceCell st={it.stores[s.key]} cheapest={low?.store === s.key} running={it.requested} /></td>)}
@@ -329,7 +332,7 @@ function ItemRow({ it, open, onToggle, act }: { it: Item; open: boolean; onToggl
             <>
               <div style={{ fontWeight: 800, color: M.color.good }}>{inr(low.eff)}</div>
               <div style={{ fontSize: 11, color: M.color.muted }}>{STORES.find(s => s.key === low.store)?.label}</div>
-              {it.ourPrice ? <Diff ours={it.ourPrice} market={low.eff} /> : null}
+              {our.value ? <Diff ours={our.value} market={low.eff} isMrp={our.isMrp} /> : null}
             </>
           ) : <span style={{ color: M.color.faint }}>—</span>}
         </td>
@@ -344,17 +347,20 @@ function ItemRow({ it, open, onToggle, act }: { it: Item; open: boolean; onToggl
   );
 }
 
-function Diff({ ours, market }: { ours: number; market: number }) {
-  // "ours" is the MRP from Product Master, so show how far below MRP the market sells.
+function Diff({ ours, market, isMrp }: { ours: number; market: number; isMrp: boolean }) {
+  // "ours" is the price set on the Specifications tab, or the MRP when none is set:
+  // show how far the market sells below (or above) that.
   const pct = Math.round(((ours - market) / ours) * 100);
-  if (Math.abs(pct) < 1) return <div style={{ fontSize: 11, color: M.color.muted }}>at MRP</div>;
+  const base = isMrp ? 'MRP' : 'our price';
+  if (Math.abs(pct) < 1) return <div style={{ fontSize: 11, color: M.color.muted }}>at {base}</div>;
   return <div style={{ fontSize: 11, fontWeight: 700, color: pct > 0 ? M.color.good : M.color.bad }}>
-    {pct > 0 ? `${pct}% below MRP` : `${-pct}% above MRP`}
+    {pct > 0 ? `${pct}% below ${base}` : `${-pct}% above ${base}`}
   </div>;
 }
 
 function ItemCard({ it, open, onToggle, act }: { it: Item; open: boolean; onToggle: () => void; act: Act }) {
   const low = lowest(it);
+  const our = ourPriceOf(it);
   return (
     <MCard>
       <div onClick={onToggle} style={{ cursor: 'pointer' }}>
@@ -373,9 +379,9 @@ function ItemCard({ it, open, onToggle, act }: { it: Item; open: boolean; onTogg
             </div>
           ))}
           <div style={{ padding: 8, borderRadius: 9, background: '#f8fafc' }}>
-            <div style={{ fontSize: 10.5, fontWeight: 700, color: M.color.muted }}>MRP (ERP)</div>
-            <div style={{ fontWeight: 800 }}>{it.ourPrice ? inr(it.ourPrice) : '—'}</div>
-            {it.ourPrice && low ? <Diff ours={it.ourPrice} market={low.eff} /> : null}
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: M.color.muted }}>{our.isMrp ? 'MRP (ERP)' : 'Our price'}</div>
+            <div style={{ fontWeight: 800 }}>{our.value ? inr(our.value) : '—'}</div>
+            {our.value && low ? <Diff ours={our.value} market={low.eff} isMrp={our.isMrp} /> : null}
           </div>
         </div>
       </div>
