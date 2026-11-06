@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import OfflineBanner from '../native/OfflineBanner';
 import { useIsPhone } from '../mobile/ui';
+import { FitToScreen } from './FitToScreen';
 import { biometricEnabled, disableBiometric } from '../native/biometric';
 import { isNative } from '../native/scanner';
 
@@ -200,7 +201,7 @@ export function Layout({ children }: { children: ReactNode }) {
       </aside>
       <main className="d-main">
         <OfflineBanner />
-        {children}
+        <FitToScreen>{children}</FitToScreen>
       </main>
     </div>
   );

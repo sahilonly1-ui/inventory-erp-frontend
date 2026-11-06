@@ -230,7 +230,7 @@ export default function MarketPrices() {
           {shown.map(it => <ItemCard key={it.id} it={it} open={open === it.id} onToggle={() => setOpen(open === it.id ? null : it.id)} act={act} />)}
         </div>
       ) : (
-        <div style={{ background: '#fff', border: `1px solid ${M.color.line}`, borderRadius: 12, overflow: 'auto', maxHeight: 'calc(100vh - 210px)' }}>
+        <div style={{ background: '#fff', border: `1px solid ${M.color.line}`, borderRadius: 12, overflow: 'auto', maxHeight: 'calc(100vh / var(--fit-z, 1) - 210px)' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 1100 }}>
             <thead>
               <tr style={{ background: '#f8fafc' }}>

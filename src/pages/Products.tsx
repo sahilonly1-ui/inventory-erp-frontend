@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client';
 import { useIsPhone, MSheet } from '../mobile/ui';
+import { currentFitZoom } from '../components/FitToScreen';
 
 type Status = 'ACTIVE'|'INACTIVE'|'DISCONTINUED'|'OPEN_BOX_ONLY'|'BLOCKED';
 interface Brand    { id:string; name:string; }
@@ -1689,7 +1690,7 @@ export default function Products(){
           <span style={{fontVariantNumeric:'tabular-nums',opacity:.4}}>{fmt(raw)}</span>
           {/* Fixed-position popover — escapes table scroll/overflow clipping entirely, stacked input ABOVE buttons */}
           <div onClick={e=>e.stopPropagation()} style={{
-            position:'fixed',top:editPos.top,left:editPos.left,zIndex:2000,
+            position:'fixed',top:editPos.top/currentFitZoom(),left:editPos.left/currentFitZoom(),zIndex:2000,
             background:'var(--surf-0)',border:'1px solid var(--brand)',borderRadius:'var(--r-md)',
             boxShadow:'0 10px 28px rgba(0,0,0,.18)',padding:8,display:'flex',flexDirection:'column',gap:6,minWidth:104,
           }}>
