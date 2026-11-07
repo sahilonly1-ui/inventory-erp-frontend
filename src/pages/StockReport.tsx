@@ -278,9 +278,11 @@ export function StockReport() {
       </div>`;
     };
 
-    const columnsHTML = buildBalancedColumns(3)
-      .map(col => `<div class="col">${col.brands.map(cardFor).join('')}</div>`)
-      .join('');
+    // Every brand card with a weight (about its height in lines). The page script lays
+    // them out in as many columns as fill the A4 sheet best — a fixed 3 columns left
+    // the right side of the sheet empty and the type tiny when the list was long.
+    const cards = brandList.map(brand => ({ w: byBrand[brand].length + 3, b: brand, h: cardFor(brand) }));
+    const cardsJson = JSON.stringify(cards).replace(/</g, '\u003c');
 
     return `<!DOCTYPE html><html><head><title>${esc(catTitle)} Stock Report ${fmtDate(new Date())}</title>
 <style>
@@ -321,58 +323,65 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
     <div class="sub">iTechArena — Stock Report${asOf ? ` as on ${asOfLabel(asOf)}` : ` · ${fmtDate(new Date())}`}</div>
   </div>
   <div class="meta">Categories: <b>${esc(catTitle)}</b> &nbsp;·&nbsp; Brands: <b>${esc(allBrands ? 'All Brands' : brandList.join(', '))}</b> &nbsp;·&nbsp; Total: ${grandTotal} units (Retail: ${grandRetail} | ACC: ${grandActivated})</div>
-  <div class="cols">${columnsHTML}</div>
+  <div class="cols" id="cols"></div>
   <div class="gt"><span>GRAND TOTAL</span><span>Qty: ${grandTotal}</span><span>Retail: ${grandRetail}</span><span>ACC: ${grandActivated}</span></div>
 </div>
 <script>
 (function(){
-  // Shrink the report until it fits one A4 landscape page.
-  //
-  // The zoom property is used rather than transform:scale on purpose: a
-  // transform only changes what is painted, so the browser still paginates
-  // against the original box and pushes the overflow onto a second sheet.
-  // Zoom reflows the layout, so pagination sees the reduced size.
+  var CARDS = ${cardsJson};
   var MM = 96 / 25.4;                 // px per mm at CSS 96dpi
-
-  // Budget for margins we do not control. The @page rule asks for 5mm, but
-  // Chrome's "Default" margin setting can override it with roughly 10mm per
-  // side, and that extra loss is exactly what pushed the grand total onto a
-  // second sheet. Assume the worst case so the fit holds either way.
-  var MARGIN_MM = 12;                 // per side, worst case
+  // Budget for margins we do not control: Chrome's "Default" margin setting can
+  // override the 5mm @page margin with about 10mm per side.
+  var MARGIN_MM = 12;
   var availW = (297 - MARGIN_MM * 2) * MM;
   var availH = (210 - MARGIN_MM * 2) * MM;
-
   var wrap = document.getElementById('wrap');
+  var box = document.getElementById('cols');
 
-  // Give every column the same width: the widest one. Letting each column size
-  // to its own content leaves the cards ragged and misaligned, so measure the
-  // natural widths first, then lock them all to the largest. Product names stay
-  // on one line, and the three columns still line up on a single grid.
-  var cols = wrap.querySelectorAll('.col');
-  var i, maxW = 0;
-  for (i = 0; i < cols.length; i++) cols[i].style.width = 'max-content';
-  for (i = 0; i < cols.length; i++) {
-    var cw = cols[i].getBoundingClientRect().width;
-    if (cw > maxW) maxW = cw;
+  // Largest-first into the shortest column keeps columns even; alphabetical inside each.
+  function layout(n) {
+    var cols = []; for (var k = 0; k < n; k++) cols.push({ w: 0, c: [] });
+    var sorted = CARDS.slice().sort(function (a, b) { return b.w - a.w; });
+    for (var i = 0; i < sorted.length; i++) {
+      var t = cols[0];
+      for (var j = 1; j < cols.length; j++) if (cols[j].w < t.w) t = cols[j];
+      t.c.push(sorted[i]); t.w += sorted[i].w;
+    }
+    box.innerHTML = cols.filter(function (c) { return c.c.length; }).map(function (c) {
+      c.c.sort(function (a, b) { return a.b.localeCompare(b.b); });
+      return '<div class="col">' + c.c.map(function (x) { return x.h; }).join('') + '</div>';
+    }).join('');
+    // Same width for every column (the widest), so cards line up on one grid.
+    var els = box.querySelectorAll('.col'), maxW = 0, q;
+    for (q = 0; q < els.length; q++) els[q].style.width = 'max-content';
+    for (q = 0; q < els.length; q++) maxW = Math.max(maxW, els[q].getBoundingClientRect().width);
+    for (q = 0; q < els.length; q++) els[q].style.width = maxW + 'px';
   }
-  for (i = 0; i < cols.length; i++) cols[i].style.width = maxW + 'px';
+  function fitZoom() {
+    var zoom = 1;
+    for (var pass = 0; pass < 8; pass++) {
+      wrap.style.zoom = zoom;
+      var r = wrap.getBoundingClientRect();
+      var fit = Math.min(availW / r.width, availH / r.height);
+      if (fit >= 1 && fit < 1.02) break;
+      zoom = Math.max(0.2, Math.min(3, zoom * fit * 0.98));
+    }
+    return zoom;
+  }
 
-  // With names on a single line, BOTH dimensions can be the binding
-  // constraint. Scale by whichever runs out first — that fills the sheet and
-  // keeps the type as large as it can be.
-  var zoom = 1;
-  for (var pass = 0; pass < 8; pass++) {
-    wrap.style.zoom = zoom;
-    var r = wrap.getBoundingClientRect();          // already includes zoom
-    var fitW = availW / r.width;
-    var fitH = availH / r.height;
-    var fit = Math.min(fitW, fitH);
-    if (fit >= 1 && fit < 1.02) break;             // close enough, stop
-    // Undershoot a touch so borders never tip onto a second sheet.
-    zoom = zoom * fit * 0.98;
-    if (zoom < 0.2) { zoom = 0.2; wrap.style.zoom = zoom; break; }
-    if (zoom > 3)   { zoom = 3;   wrap.style.zoom = zoom; break; }
+  // Try 1 to 8 columns and keep the one that lets the text be largest —
+  // the layout that uses the whole sheet, width and height.
+  var maxCols = Math.max(1, Math.min(8, CARDS.length));
+  var best = { n: 1, z: 0 };
+  for (var n = 1; n <= maxCols; n++) {
+    wrap.style.zoom = 1;
+    layout(n);
+    var z = fitZoom();
+    if (z > best.z) best = { n: n, z: z };
   }
+  wrap.style.zoom = 1;
+  layout(best.n);
+  var zoom = fitZoom();
   window.__reportZoom = zoom;   // read by the caller before printing
   window.__reportReady = true;
 })();
