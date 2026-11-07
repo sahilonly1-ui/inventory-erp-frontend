@@ -18,7 +18,7 @@ interface Snap { status: 'ok' | 'suspect' | 'unverified' | 'not_found' | 'not_li
 interface Link { url: string | null; lockedByUser: boolean; notListed: boolean; discoveredAt: string | null }
 interface StoreState { link: Link | null; latest: Snap | null; lastGood: Snap | null }
 interface Item { id: string; productId: string | null; name: string; brand: string | null; variant: string | null; source: 'auto' | 'manual'; active: boolean; priority: boolean; lastRefreshedAt: string | null; ean: string | null; ourPrice: number | null; specPrice: number | null; category: string | null; stock: number; requested: boolean; stores: Record<StoreKey, StoreState> }
-interface Status { lastAgentRun: string | null; requested: number; instantRun?: boolean; localOnline?: boolean; localSeen?: string | null }
+interface Status { lastAgentRun: string | null; requested: number; instantRun?: boolean; localOnline?: boolean; localSeen?: string | null; notWatchedBrands?: { brand: string; products: number }[] }
 interface RunStatus { configured: boolean; error?: string; run?: { number: number; status: string; conclusion: string | null; startedAt: string; updatedAt: string; url: string } | null }
 interface Settings { autoSyncInStock: boolean; autoSyncCategories: string[]; autoSyncBrands: string[]; includeOutOfStock: boolean; options?: { brands: string[]; categories: string[] }; defaultIntervalMins: number; priorityIntervalMins: number; stores: StoreKey[]; batchSize: number }
 
@@ -195,6 +195,20 @@ export default function MarketPrices() {
         <button onClick={() => setNotice('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1e40af', fontSize: 16 }}>×</button>
       </div>}
       {err && <Banner tone="bad">{err}</Banner>}
+      {/* A brand left off the brand list in Settings is simply absent from this page —
+          say so, with how many in-stock products it has, instead of letting it look as if
+          those phones were not in stock. */}
+      {!!status?.notWatchedBrands?.length && (
+        <Banner tone="warn">
+          <b>In stock but not watched here:</b>{' '}
+          {status.notWatchedBrands.map(b => `${b.brand} (${b.products})`).join(', ')}.
+          {' '}The brand list in Settings leaves these out.
+          <button style={{ ...btn(true), height: 30, marginLeft: 10 }}
+            onClick={() => act('/price-watch/settings', { method: 'PUT', body: JSON.stringify({ autoSyncBrands: [] }) })}>
+            Watch all brands
+          </button>
+        </Banner>
+      )}
 
       {/* Filters */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
