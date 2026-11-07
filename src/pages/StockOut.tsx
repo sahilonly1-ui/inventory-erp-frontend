@@ -19,7 +19,7 @@ const CK='erp_customers_v1';
 const getC=():string[]=>{try{return JSON.parse(localStorage.getItem(CK)||'[]');}catch{return[];}};
 const saveC=(n:string)=>{const h=getC().filter(x=>x!==n);localStorage.setItem(CK,JSON.stringify([n,...h].slice(0,100)));};
 const DEF=['Amazon','Flipkart','JioMart','Meesho','Walk In Customer','Service Center','Return'];
-const pCache=new Map<string,{id:string;model:string;brand:string;imeiRequired:boolean;srnoRequired:boolean}|null>();
+const pCache=new Map<string,{id:string;model:string;brand:string;imeiRequired:boolean;srnoRequired:boolean;uncoded?:number}|null>();
 // seq removed — per-row safety via setRows guard
 
 // Edit mode context stored in server session by Dashboard
@@ -115,9 +115,9 @@ export function StockOut(){
     let p=pCache.get(v);
     if(p===undefined){
       try{
-        const r=await api<{product:{id:string;model:string;brand:string;imeiRequired:boolean;srnoRequired:boolean}}>(`/inventory/lookup?ean=${encodeURIComponent(v)}`);
-        p={id:r.product.id,model:r.product.model,brand:r.product.brand,imeiRequired:r.product.imeiRequired,srnoRequired:r.product.srnoRequired||false};
-        pCache.set(v,p);
+        const r=await api<{product:{id:string;model:string;brand:string;imeiRequired:boolean;srnoRequired:boolean;uncodedInStock?:number}}>(`/inventory/lookup?ean=${encodeURIComponent(v)}`);
+        p={id:r.product.id,model:r.product.model,brand:r.product.brand,imeiRequired:r.product.imeiRequired,srnoRequired:r.product.srnoRequired||false,uncoded:r.product.uncodedInStock||0};
+        // Not cached: the uncoded count changes as stock moves.
       }catch(err){
         // Don't permanently cache a miss — the next scan should retry.
         p=pCache.get(v)??null;
@@ -133,8 +133,13 @@ export function StockOut(){
     setRows(rs=>{
       if(rs[i]?.ean!==v)return rs;
       if(!p){return rs.map((r,x)=>x===i?{...r,status:'not_found' as const,errMsg:'EAN not found in product master'}:r);}
-      const needsImei=(p as any).imeiRequired||false;
-      const needsSrno=p!.srnoRequired||false;
+      // Old stock received without IMEI / serial can go out by quantity (as many as
+      // there are uncoded units, counting rows already on this screen). Units that
+      // carry a code still need it.
+      const uncodedLeft=((p as any).uncoded||0)-rs.filter((r,x)=>x!==i&&r.productId===(p as any).id&&!r.imei&&!r.srno).reduce((n,r)=>n+(r.qty||1),0);
+      const byQty=uncodedLeft>0;
+      const needsImei=!byQty&&((p as any).imeiRequired||false);
+      const needsSrno=!byQty&&(p!.srnoRequired||false);
       // Accessories carry neither IMEI nor serial — no scanning needed, so
       // the row is immediately ready to dispatch instead of waiting at 'found'.
       const autoStatus=(!needsImei&&!needsSrno)?'saved' as const:'found' as const;
