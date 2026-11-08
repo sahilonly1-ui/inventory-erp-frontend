@@ -214,7 +214,7 @@ td.na{color:#888;font-style:italic}
 
       {sheet && (unpriced > 0 || onlyUnpriced) && (
         <div style={{ padding: '7px 20px', fontSize: 12.5, fontWeight: 700, background: '#fff7ed', color: '#9a3412', borderBottom: '1px solid #fed7aa', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <span>⚠ {unpriced} item{unpriced === 1 ? '' : 's'} still show the cost price — selling price not updated yet.</span>
+          <span>⚠ {unpriced} item{unpriced === 1 ? ' still shows' : 's still show'} the cost price — selling price not updated yet.</span>
           <button onClick={() => setOnlyUnpriced(v => !v)}
             style={{ height: 26, padding: '0 10px', borderRadius: 6, border: '1px solid #fdba74', background: onlyUnpriced ? '#ea580c' : '#fff', color: onlyUnpriced ? '#fff' : '#9a3412', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
             {onlyUnpriced ? 'Show all items' : 'Show only these'}
@@ -308,13 +308,13 @@ td.na{color:#888;font-style:italic}
                         ) : (
                           <><span onClick={() => canEdit && setEditPrice({ id: r.productId, v: String(Math.round(r.price)) })}
                             title={canEdit ? 'Click to change the price shown on this sheet (cost price is not changed)' : ''}
-                            style={{ fontWeight: 800, fontSize: fs + 1, color: needsPrice(r) ? '#c2410c' : '#0f172a', cursor: canEdit ? 'pointer' : 'default', borderBottom: canEdit ? '1px dashed #94a3b8' : 'none' }}>
+                            style={{ display: 'inline-block', fontWeight: 800, fontSize: fs + 1, color: needsPrice(r) ? '#c2410c' : '#0f172a', cursor: canEdit ? 'pointer' : 'default', borderBottom: canEdit ? '1px dashed #94a3b8' : 'none' }}>
                             {inr(r.price)}
                           </span>
                           {needsPrice(r) && (
                             <div onClick={() => canEdit && setEditPrice({ id: r.productId, v: String(Math.round(r.price)) })}
                               title="This is still the cost price. Click to set the selling price."
-                              style={{ marginTop: 3, display: 'inline-block', fontSize: 9.5, fontWeight: 800, color: '#fff', background: '#ea580c', borderRadius: 4, padding: '1px 5px', cursor: canEdit ? 'pointer' : 'default', whiteSpace: 'nowrap' }}>
+                              style={{ marginTop: 4, display: 'block', width: 'fit-content', fontSize: 9.5, fontWeight: 800, color: '#fff', background: '#ea580c', borderRadius: 4, padding: '1px 6px', cursor: canEdit ? 'pointer' : 'default', whiteSpace: 'nowrap' }}>
                               Update price
                             </div>
                           )}</>
