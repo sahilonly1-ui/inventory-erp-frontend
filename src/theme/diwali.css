@@ -133,29 +133,29 @@ html.diwali .drawer-tab.on { color: var(--brand); border-bottom-color: var(--bra
 
 /* Many screens colour things inline. Recolour the main ones by their value:
    the app blue becomes saffron, the dark slate headers become maroon. */
-html.diwali [style*="background: rgb(37, 99, 235)"],
-html.diwali [style*="background-color: rgb(37, 99, 235)"],
-html.diwali [style*="background: rgb(29, 78, 216)"] {
+html.diwali [style*="background: rgb(37, 99, 235)"]:not(.dw-plain *),
+html.diwali [style*="background-color: rgb(37, 99, 235)"]:not(.dw-plain *),
+html.diwali [style*="background: rgb(29, 78, 216)"]:not(.dw-plain *) {
   background: linear-gradient(135deg, #f59e0b, #e8590c) !important;
   border-color: #e8590c !important;
 }
-html.diwali [style*="color: rgb(37, 99, 235)"],
-html.diwali [style*="color: rgb(29, 78, 216)"] { color: #c2410c !important; }
-html.diwali [style*="border-bottom: 2px solid rgb(37, 99, 235)"],
-html.diwali [style*="border-color: rgb(37, 99, 235)"],
-html.diwali [style*="border: 1.5px solid rgb(37, 99, 235)"] { border-color: #e8590c !important; }
-html.diwali [style*="background: rgb(30, 41, 59)"],
-html.diwali [style*="background: rgb(15, 23, 42)"],
-html.diwali [style*="background-color: rgb(30, 41, 59)"] {
+html.diwali [style*="color: rgb(37, 99, 235)"]:not(.dw-plain *),
+html.diwali [style*="color: rgb(29, 78, 216)"]:not(.dw-plain *) { color: #c2410c !important; }
+html.diwali [style*="border-bottom: 2px solid rgb(37, 99, 235)"]:not(.dw-plain *),
+html.diwali [style*="border-color: rgb(37, 99, 235)"]:not(.dw-plain *),
+html.diwali [style*="border: 1.5px solid rgb(37, 99, 235)"]:not(.dw-plain *) { border-color: #e8590c !important; }
+html.diwali [style*="background: rgb(30, 41, 59)"]:not(.dw-plain *),
+html.diwali [style*="background: rgb(15, 23, 42)"]:not(.dw-plain *),
+html.diwali [style*="background-color: rgb(30, 41, 59)"]:not(.dw-plain *) {
   background: linear-gradient(90deg, #7a1235, #4c0c3c) !important;
   border-bottom: 1px solid var(--gold);
 }
-html.diwali [style*="background: rgb(239, 246, 255)"],
-html.diwali [style*="background: rgb(238, 242, 255)"] { background: #fff1e0 !important; }
-html.diwali [style*="background: rgb(248, 250, 252)"] { background: #fff6ea !important; }
+html.diwali [style*="background: rgb(239, 246, 255)"]:not(.dw-plain *),
+html.diwali [style*="background: rgb(238, 242, 255)"]:not(.dw-plain *) { background: #fff1e0 !important; }
+html.diwali [style*="background: rgb(248, 250, 252)"]:not(.dw-plain *) { background: #fff6ea !important; }
 
 /* Table headers and cards get a warm touch */
-html.diwali thead th { background-color: #fff3e3; }
+html.diwali thead th:not(.dw-plain *) { background-color: #fff3e3; }
 html.diwali .card, html.diwali .stat-card { border-color: #f3dcc0; }
 
 /* ── Animations ─────────────────────────────────────────────────────────── */

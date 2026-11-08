@@ -421,9 +421,16 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
       
       // Create offscreen div with report content for canvas rendering
       const container = document.createElement('div');
-      container.style.cssText = 'position:fixed;top:0;left:0;width:1122px;background:#fff;padding:12px;font-family:Arial,sans-serif;font-size:9px;z-index:-1;opacity:0';
+      // width: max-content (at least 1122px) so a long product name widens the image
+      // instead of pushing the Qty / Retail / ACC columns out of the card.
+      // "dw-plain" keeps the festive theme's colours out of the downloaded image.
+      container.className = 'dw-plain';
+      container.style.cssText = 'position:fixed;top:0;left:0;width:max-content;min-width:1122px;background:#fff;padding:12px;font-family:Arial,sans-serif;font-size:9px;z-index:-1;opacity:0';
       
       // Build the visual report in DOM
+      // The app's own table header style (uppercase, wide letter spacing, padding)
+      // would otherwise apply here and widen the headers past the card edge.
+      const TH = 'padding:2px;text-align:center;border:0.5px solid #aaa;font-size:8px;font-weight:700;text-transform:none;letter-spacing:normal;background:#e8e8e8;';
       const cardHTML = (brand: string) => {
         const bRows  = byBrand[brand];
         const bTotal = bRows.reduce((s,r)=>s+r.totalQty,0);
@@ -432,15 +439,17 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
         return `<div style="border:1px solid #ccc;border-radius:6px;overflow:hidden;margin-bottom:8px">
           <div style="background:#1e293b;color:#fff;padding:4px 8px;font-size:9px;font-weight:800">${brand}</div>
           <table style="width:100%;border-collapse:collapse;font-size:8px">
-            <tr style="background:#e8e8e8"><th style="padding:2px 6px;text-align:left;border:0.5px solid #aaa;white-space:nowrap">Product Name</th><th style="padding:2px;text-align:center;width:32px;border:0.5px solid #aaa">Qty</th><th style="padding:2px;text-align:center;width:40px;border:0.5px solid #aaa;color:#16a34a">Retail</th><th style="padding:2px;text-align:center;width:30px;border:0.5px solid #aaa;color:#7c3aed">ACC</th></tr>
+            <tr style="background:#e8e8e8"><th style="${TH}text-align:left;padding:2px 6px;white-space:nowrap;color:#334155">Product Name</th><th style="${TH}width:32px;color:#334155">Qty</th><th style="${TH}width:40px;color:#16a34a">Retail</th><th style="${TH}width:30px;color:#7c3aed">ACC</th></tr>
             ${bRows.map((r,i)=>`<tr style="background:${i%2===0?'#fff':'#fafafa'}"><td style="padding:2px 6px;border:0.5px solid #eee;white-space:nowrap">${r.model}${r.demo?` <span style="font-size:6px;font-weight:700;color:#b45309;background:#fffbeb;padding:1px 4px;border-radius:6px">+${r.demo} demo</span>`:''}</td><td style="padding:2px;text-align:center;font-weight:700;border:0.5px solid #eee">${r.totalQty}</td><td style="padding:2px;text-align:center;font-weight:700;color:#16a34a;border:0.5px solid #eee">${r.retail}</td><td style="padding:2px;text-align:center;font-weight:700;color:${r.activated>0?'#7c3aed':'#ccc'};border:0.5px solid #eee">${r.activated||0}</td></tr>`).join('')}
             <tr style="background:#f0f0f0;font-weight:700"><td style="padding:2px 6px;border:0.5px solid #ccc">Total — ${brand}</td><td style="padding:2px;text-align:center;border:0.5px solid #ccc">${bTotal}</td><td style="padding:2px;text-align:center;color:#16a34a;border:0.5px solid #ccc">${bRet}</td><td style="padding:2px;text-align:center;color:#7c3aed;border:0.5px solid #ccc">${bAcc}</td></tr>
           </table>
         </div>`;
       };
 
-      const brandSectionsHTML = buildBalancedColumns(3)
-        .map(col => `<div style="flex:1 1 0;min-width:0">${col.brands.map(cardHTML).join('')}</div>`)
+      // Never more columns than brands; a column is never narrower than its widest card.
+      const brandSectionsHTML = buildBalancedColumns(Math.max(1, Math.min(3, brandList.length)))
+        .filter(col => col.brands.length)
+        .map(col => `<div style="flex:1 1 0;min-width:max-content">${col.brands.map(cardHTML).join('')}</div>`)
         .join('');
 
       container.innerHTML = `
