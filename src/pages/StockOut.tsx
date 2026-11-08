@@ -302,11 +302,10 @@ export function StockOut(){
           setBusy(false);return;
         }
         await api('/inventory/entries/replace',{method:'POST',body:JSON.stringify({deleteIds:editMode.txnIds,ops})});
-      }else{
-        for(const op of ops){
-          if(op.type==='imeiDispatch')await api('/imei/dispatch',{method:'POST',body:JSON.stringify(op.body)});
-          else await api('/inventory/stock-out',{method:'POST',body:JSON.stringify(op.body)});
-        }
+      }else if(ops.length){
+        // The whole entry in ONE request: faster (one trip to the server instead of
+        // one per product) and all-or-nothing — never a half-saved entry.
+        await api('/inventory/entries/save',{method:'POST',body:JSON.stringify({ops})});
       }
 
       if(cust)saveC(cust);

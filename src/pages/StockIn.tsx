@@ -455,11 +455,10 @@ export function StockIn(){
           setBusy(false);return;
         }
         await api('/inventory/entries/replace',{method:'POST',body:JSON.stringify({deleteIds:editMode.txnIds,ops})});
-      }else{
-        for(const op of ops){
-          const path=op.type==='imeiReturn'?'/imei/return':op.type==='imeiReceive'?'/imei/receive':'/inventory/stock-in';
-          await api(path,{method:'POST',body:JSON.stringify(op.body)});
-        }
+      }else if(ops.length){
+        // The whole entry in ONE request: faster (one trip to the server instead of
+        // one per product) and all-or-nothing — never a half-saved entry.
+        await api('/inventory/entries/save',{method:'POST',body:JSON.stringify({ops})});
       }
 
       eCache.clear();setRows([mk()]);moveTo(0,'ean');
