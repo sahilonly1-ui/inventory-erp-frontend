@@ -3,6 +3,7 @@ import ScanButton from '../native/ScanButton';
 import { useIsPhone, M } from '../mobile/ui';
 import { MScanFooter } from '../mobile/MScanCard';
 import { useSearchParams } from 'react-router-dom';
+import { bgSave } from '../lib/bgSave';
 import { api, ApiError } from '../api/client';
 
 interface Warehouse { id: string; name: string; }
@@ -456,9 +457,19 @@ export function StockIn(){
         }
         await api('/inventory/entries/replace',{method:'POST',body:JSON.stringify({deleteIds:editMode.txnIds,ops})});
       }else if(ops.length){
-        // The whole entry in ONE request: faster (one trip to the server instead of
-        // one per product) and all-or-nothing — never a half-saved entry.
-        await api('/inventory/entries/save',{method:'POST',body:JSON.stringify({ops})});
+        // NEW ENTRY: clear the screen at once and save in the background (one
+        // all-or-nothing request). If the server refuses it, everything comes back.
+        const keep={rows,supp,suppId,inv,draft:localStorage.getItem(DK)}, keepDoc=doc, count=sv.length;
+        eCache.clear();setRows([mk()]);moveTo(0,'ean');
+        setSupp('');setSuppId('');setInv('');
+        localStorage.removeItem(DK);
+        bgSave(`${count} item(s) stocked in — ${keepDoc}`,()=>api('/inventory/entries/save',{method:'POST',body:JSON.stringify({ops})}))
+          .catch((e:any)=>{
+            setRows(keep.rows);setSupp(keep.supp);setSuppId(keep.suppId);setInv(keep.inv);
+            if(keep.draft)localStorage.setItem(DK,keep.draft);
+            alert(`⚠ Stock In ${keepDoc} was NOT saved.\n\n${e?.message||'Unknown error'}\n\nYour rows are back on screen — fix the problem and press Commit again.`);
+          });
+        return;
       }
 
       eCache.clear();setRows([mk()]);moveTo(0,'ean');

@@ -3,6 +3,7 @@ import ScanButton from '../native/ScanButton';
 import { useIsPhone, M, mInput, MEmpty } from '../mobile/ui';
 import { MScanCard, MScanFooter } from '../mobile/MScanCard';
 import { useSearchParams } from 'react-router-dom';
+import { bgSave } from '../lib/bgSave';
 import { api, ApiError } from '../api/client';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -303,9 +304,17 @@ export function StockOut(){
         }
         await api('/inventory/entries/replace',{method:'POST',body:JSON.stringify({deleteIds:editMode.txnIds,ops})});
       }else if(ops.length){
-        // The whole entry in ONE request: faster (one trip to the server instead of
-        // one per product) and all-or-nothing — never a half-saved entry.
-        await api('/inventory/entries/save',{method:'POST',body:JSON.stringify({ops})});
+        // NEW ENTRY: clear the screen at once and save in the background (one
+        // all-or-nothing request). If the server refuses it, the rows come back.
+        const keep=rows, keepDoc=doc, count=sv.length;
+        if(cust)saveC(cust);
+        pCache.clear();setRows([mk()]);moveTo(0,'ean');
+        bgSave(`${count} item(s) dispatched — ${keepDoc}`,()=>api('/inventory/entries/save',{method:'POST',body:JSON.stringify({ops})}))
+          .catch((e:any)=>{
+            setRows(keep);
+            alert(`⚠ Stock Out ${keepDoc} was NOT saved.\n\n${e?.message||'Unknown error'}\n\nYour rows are back on screen — fix the problem and press Dispatch again.`);
+          });
+        return;
       }
 
       if(cust)saveC(cust);

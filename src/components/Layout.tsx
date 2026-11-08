@@ -1,6 +1,7 @@
 import { ReactNode, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { FestiveTop, FestiveAmbient, ThemeSwitch } from '../theme/Festive';
+import { SaveChip } from './SaveChip';
 import { useAuth } from '../auth/AuthContext';
 import OfflineBanner from '../native/OfflineBanner';
 import { useIsPhone } from '../mobile/ui';
@@ -168,6 +169,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <FestiveTop />
         <OfflineBanner />
         <FestiveAmbient />
+        <SaveChip />
         <main className="m-main"
           onTouchStart={e => { const t = e.touches[0]; edgeRef.current = t.clientX < 20 ? { x: t.clientX, y: t.clientY } : null; }}
           onTouchMove={e => {
@@ -209,6 +211,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <FitToScreen>{children}</FitToScreen>
       </main>
       <FestiveAmbient />
+      <SaveChip />
     </div>
   );
 }
