@@ -35,9 +35,9 @@ export function brandCounts<T extends Priced>(rows: T[]): [string, number][] {
  */
 export function buildView<T extends Priced>(
   rows: T[],
-  opts: { brand: string; priceSort: PriceSort },
+  opts: { brand: string; priceSort: PriceSort; keep?: (r: T) => boolean },
 ): SheetView<T> {
-  const kept = rows.filter(r => !opts.brand || r.brand === opts.brand);
+  const kept = rows.filter(r => (!opts.brand || r.brand === opts.brand) && (!opts.keep || opts.keep(r)));
 
   if (opts.priceSort === 'asc') {
     const order = new Map(kept.map((r, i) => [r, i] as [T, number]));

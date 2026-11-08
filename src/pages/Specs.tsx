@@ -25,6 +25,9 @@ type Cat = { id: string; name: string; count: number };
 const inr = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');
 const esc = (t: string) => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const busy = (s: Row['status']) => s === 'PENDING' || s === 'FETCHING';
+// Selling price not set yet: never changed on this sheet, or still equal to the cost price.
+const needsPrice = (r: { priceEdited: boolean; price: number; costPrice: number }) =>
+  !r.priceEdited || Math.round(r.price) === Math.round(r.costPrice);
 // Specs the AI filled from its own knowledge (no web page) — salesman should verify before quoting.
 const fromAi = (r: Row) => (r.sources ?? []).includes('ai:knowledge');
 
@@ -45,6 +48,7 @@ export default function Specs() {
   const [linkOpen, setLinkOpen] = useState<string | null>(null);
   const [brand, setBrand] = useState('');
   const [priceSort, setPriceSort] = useState<PriceSort>('');
+  const [onlyUnpriced, setOnlyUnpriced] = useState(false);
   const timer = useRef<number | null>(null);
 
   const say = (t: string) => { setToast(t); window.setTimeout(() => setToast(''), 3500); };
@@ -82,8 +86,8 @@ export default function Specs() {
   // A brand picked in one category may not exist in the next; then show all.
   const activeBrand = brandChoices.some(([b]) => b === brand) ? brand : '';
   const view = useMemo(
-    () => buildView(sheet?.rows ?? [], { brand: activeBrand, priceSort }),
-    [sheet, activeBrand, priceSort],
+    () => buildView(sheet?.rows ?? [], { brand: activeBrand, priceSort, keep: onlyUnpriced ? needsPrice : undefined }),
+    [sheet, activeBrand, priceSort, onlyUnpriced],
   );
   const viewGroups = view.groups;
   // Price order is one list across every brand: no brand headers, so each row
@@ -92,6 +96,7 @@ export default function Specs() {
   const viewRows = useMemo(() => viewGroups.flatMap(([, r]) => r), [viewGroups]);
   const models = new Set(sheet?.rows.map(r => r.key)).size;
   const ready = new Set(sheet?.rows.filter(r => r.status === 'OK').map(r => r.key)).size;
+  const unpriced = (sheet?.rows ?? []).filter(r => (!activeBrand || r.brand === activeBrand) && needsPrice(r)).length;
 
   const savePrice = async (r: Row, raw: string) => {
     const v = raw.trim() === '' ? null : Number(raw);
@@ -207,6 +212,15 @@ td.na{color:#888;font-style:italic}
         </div>
       </div>
 
+      {sheet && (unpriced > 0 || onlyUnpriced) && (
+        <div style={{ padding: '7px 20px', fontSize: 12.5, fontWeight: 700, background: '#fff7ed', color: '#9a3412', borderBottom: '1px solid #fed7aa', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span>⚠ {unpriced} item{unpriced === 1 ? '' : 's'} still show the cost price — selling price not updated yet.</span>
+          <button onClick={() => setOnlyUnpriced(v => !v)}
+            style={{ height: 26, padding: '0 10px', borderRadius: 6, border: '1px solid #fdba74', background: onlyUnpriced ? '#ea580c' : '#fff', color: onlyUnpriced ? '#fff' : '#9a3412', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+            {onlyUnpriced ? 'Show all items' : 'Show only these'}
+          </button>
+        </div>
+      )}
       {sheet && pending > 0 && (
         <div style={{ padding: '8px 20px', fontSize: 12.5, fontWeight: 600, background: '#eff6ff', color: '#1d4ed8', borderBottom: '1px solid #e5e7eb' }}>
           Fetching specifications for new models: {ready} of {models} ready. This page updates by itself.
@@ -292,11 +306,18 @@ td.na{color:#888;font-style:italic}
                             {r.priceEdited && <button onClick={() => savePrice(r, '')} style={{ marginTop: 4, fontSize: 11, color: '#64748b', border: 'none', background: 'none', cursor: 'pointer', padding: 0 }}>Use cost price</button>}
                           </div>
                         ) : (
-                          <span onClick={() => canEdit && setEditPrice({ id: r.productId, v: String(Math.round(r.price)) })}
+                          <><span onClick={() => canEdit && setEditPrice({ id: r.productId, v: String(Math.round(r.price)) })}
                             title={canEdit ? 'Click to change the price shown on this sheet (cost price is not changed)' : ''}
-                            style={{ fontWeight: 800, fontSize: fs + 1, color: '#0f172a', cursor: canEdit ? 'pointer' : 'default', borderBottom: canEdit ? '1px dashed #94a3b8' : 'none' }}>
+                            style={{ fontWeight: 800, fontSize: fs + 1, color: needsPrice(r) ? '#c2410c' : '#0f172a', cursor: canEdit ? 'pointer' : 'default', borderBottom: canEdit ? '1px dashed #94a3b8' : 'none' }}>
                             {inr(r.price)}
                           </span>
+                          {needsPrice(r) && (
+                            <div onClick={() => canEdit && setEditPrice({ id: r.productId, v: String(Math.round(r.price)) })}
+                              title="This is still the cost price. Click to set the selling price."
+                              style={{ marginTop: 3, display: 'inline-block', fontSize: 9.5, fontWeight: 800, color: '#fff', background: '#ea580c', borderRadius: 4, padding: '1px 5px', cursor: canEdit ? 'pointer' : 'default', whiteSpace: 'nowrap' }}>
+                              Update price
+                            </div>
+                          )}</>
                         )}
                       </td>
                       <td style={{ ...cell, textAlign: 'center', whiteSpace: 'nowrap' }}>
