@@ -1,0 +1,172 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Diwali look — everything is scoped under html.diwali, so switching the class
+   off restores the original interface exactly. Visual only.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@import url('https://fonts.googleapis.com/css2?family=Yatra+One&display=swap');
+
+html.diwali {
+  --brand: #e8590c;          /* saffron */
+  --brand-h: #c2410c;
+  --brand-l: #fff1e0;
+  --brand-m: #fdba74;
+  --gold: #f5b301;
+  --gold-d: #b7791f;
+  --maroon: #6b0f2a;
+  --plum: #3b0a45;
+  --surf-1: #fffaf2;         /* warm cream page */
+  --surf-2: #fff3e3;
+  --surf-3: #fde7c8;
+  --bdr: #f3dcc0;
+  --bdr-s: #fbeedd;
+  --bdr-h: #e9c79a;
+  --nav-ink: #fff7e6;
+  --nav-faint: #f5c76b;
+  --nav-line: rgba(245, 179, 1, .25);
+}
+
+/* Page: cream with a faint rangoli pattern */
+html.diwali body {
+  background-color: #fffaf2;
+  background-image:
+    radial-gradient(circle at 20px 20px, rgba(232, 89, 12, .07) 2px, transparent 3px),
+    radial-gradient(circle at 60px 60px, rgba(183, 121, 31, .07) 2px, transparent 3px),
+    radial-gradient(circle at 60px 20px, rgba(107, 15, 42, .05) 1.5px, transparent 2.5px);
+  background-size: 80px 80px;
+}
+
+/* ── Sidebar: royal maroon → plum with gold ──────────────────────────────── */
+html.diwali .d-sidebar,
+html.diwali .m-drawer {
+  background:
+    radial-gradient(120% 60% at 0% 0%, rgba(245, 179, 1, .18), transparent 60%),
+    linear-gradient(175deg, #7a1235 0%, #4c0c3c 55%, #2a0838 100%);
+  border-right: 2px solid var(--gold);
+  box-shadow: 4px 0 24px rgba(107, 15, 42, .25);
+}
+html.diwali .d-sidebar-head,
+html.diwali .m-drawer-head { border-bottom: 1px solid var(--nav-line); }
+html.diwali .nav-brand-name { color: #fff3d6; font-family: 'Yatra One', var(--font); font-size: 16px; letter-spacing: .3px; }
+html.diwali .nav-brand-sub { color: var(--gold) !important; }
+html.diwali .nav-logo {
+  background: conic-gradient(from 0deg, #f5b301, #e8590c, #d6336c, #f5b301);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, .25), 0 0 14px rgba(245, 179, 1, .7);
+  animation: dwGlow 3s ease-in-out infinite;
+}
+html.diwali .nav-group-label { color: var(--gold); }
+html.diwali .nav-link { color: #f8e7d2; }
+html.diwali .nav-link:hover { background: rgba(255, 255, 255, .08); color: #fff; }
+html.diwali .nav-link.active {
+  background: linear-gradient(90deg, rgba(245, 179, 1, .95), rgba(232, 89, 12, .9));
+  color: #3b0a1f; font-weight: 700;
+  box-shadow: 0 0 12px rgba(245, 179, 1, .55);
+}
+html.diwali .nav-footer { border-top-color: var(--nav-line); }
+html.diwali .nav-user-name { color: #fff3d6; }
+html.diwali .nav-user-role { color: var(--gold); }
+html.diwali .nav-avatar { background: linear-gradient(135deg, #f5b301, #e8590c); color: #3b0a1f; }
+html.diwali .nav-signout { color: #ffd6a5 !important; }
+html.diwali .dw-switch { color: var(--gold) !important; font-weight: 700; }
+html:not(.diwali) .dw-switch { color: #b45309 !important; }
+
+/* Phone header */
+html.diwali .m-header {
+  background: linear-gradient(90deg, #7a1235, #4c0c3c) !important;
+  color: #fff3d6; border-bottom: 2px solid var(--gold);
+}
+html.diwali .m-header .m-icon-btn, html.diwali .m-title { color: #fff3d6 !important; }
+
+/* ── Top: marigold toran, string lights, greeting ───────────────────────── */
+.dw-top { position: relative; flex-shrink: 0; pointer-events: none; z-index: 5; }
+.dw-toran {
+  height: 16px;
+  background:
+    radial-gradient(circle at 10px 6px, #ffb300 5px, #f57c00 6px, transparent 7px) 0 0 / 20px 16px repeat-x,
+    linear-gradient(#2e7d32, #2e7d32) 0 0 / 100% 3px no-repeat;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .15));
+}
+.dw-toran::after {
+  content: ''; position: absolute; left: 0; right: 0; top: 10px; height: 22px;
+  background: radial-gradient(ellipse 10px 14px at 50% 0, transparent 9px, #ffa000 10px, #ffa000 11px, transparent 12px) 0 0 / 60px 22px repeat-x;
+  opacity: .85;
+}
+.dw-lights { display: flex; justify-content: space-between; padding: 0 10px; margin-top: 10px; height: 10px; }
+.dw-lights i { width: 7px; height: 7px; border-radius: 50%; display: block; animation: dwTwinkle 2.4s ease-in-out infinite; }
+.dw-lights i:nth-child(4n+1) { background: #ffd23f; box-shadow: 0 0 8px #ffd23f; }
+.dw-lights i:nth-child(4n+2) { background: #ff6b35; box-shadow: 0 0 8px #ff6b35; }
+.dw-lights i:nth-child(4n+3) { background: #f72585; box-shadow: 0 0 8px #f72585; }
+.dw-lights i:nth-child(4n+4) { background: #4cc9f0; box-shadow: 0 0 8px #4cc9f0; }
+.dw-greet {
+  text-align: center; font-family: 'Yatra One', var(--font); font-size: 15px; line-height: 1;
+  padding: 4px 0 6px; color: #7a1235;
+  background: linear-gradient(90deg, transparent, rgba(245, 179, 1, .18), transparent);
+  text-shadow: 0 1px 0 #fff;
+}
+.dw-greet .dw-sub { font-family: var(--font); font-size: 11px; font-weight: 700; color: #b45309; letter-spacing: .04em; }
+@media (max-width: 760px) { .dw-greet { font-size: 13px; } .dw-lights { margin-top: 8px; } }
+
+/* ── Ambient: diyas + sparkles (never block clicks) ─────────────────────── */
+.dw-ambient { position: fixed; inset: 0; pointer-events: none; z-index: 2; overflow: hidden; }
+.dw-diya { position: absolute; bottom: 8px; font-size: 26px; filter: drop-shadow(0 0 10px rgba(255, 170, 0, .9)); animation: dwFlicker 1.6s ease-in-out infinite; }
+.dw-diya.l { left: calc(var(--sw, 220px) + 10px); }
+.dw-diya.r { right: 12px; animation-delay: .5s; }
+@media (max-width: 760px) { .dw-diya.l { left: 8px; } .dw-diya { font-size: 20px; } }
+.dw-spark {
+  position: absolute; top: -10px; width: 4px; height: 4px; border-radius: 50%;
+  background: #ffd23f; box-shadow: 0 0 6px 2px rgba(255, 210, 63, .8);
+  animation: dwFall 7s linear infinite; opacity: 0;
+}
+.dw-spark:nth-child(3n) { background: #ff6b35; box-shadow: 0 0 6px 2px rgba(255, 107, 53, .8); }
+.dw-spark:nth-child(3n+1) { background: #f72585; box-shadow: 0 0 6px 2px rgba(247, 37, 133, .7); }
+
+/* ── Controls & surfaces across every tab ───────────────────────────────── */
+html.diwali .btn-primary,
+html.diwali .pg-btn.on,
+html.diwali .bulk-apply-btn {
+  background: linear-gradient(135deg, #f59e0b, #e8590c) !important;
+  border-color: #e8590c !important; color: #fff !important;
+  box-shadow: 0 2px 10px rgba(232, 89, 12, .3);
+}
+html.diwali .search-input:focus,
+html.diwali .f-select:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(232, 89, 12, .15); }
+html.diwali .modal { border-top: 4px solid var(--gold); box-shadow: 0 20px 50px rgba(107, 15, 42, .25); }
+html.diwali .drawer-tab.on { color: var(--brand); border-bottom-color: var(--brand); }
+
+/* Many screens colour things inline. Recolour the main ones by their value:
+   the app blue becomes saffron, the dark slate headers become maroon. */
+html.diwali [style*="background: rgb(37, 99, 235)"],
+html.diwali [style*="background-color: rgb(37, 99, 235)"],
+html.diwali [style*="background: rgb(29, 78, 216)"] {
+  background: linear-gradient(135deg, #f59e0b, #e8590c) !important;
+  border-color: #e8590c !important;
+}
+html.diwali [style*="color: rgb(37, 99, 235)"],
+html.diwali [style*="color: rgb(29, 78, 216)"] { color: #c2410c !important; }
+html.diwali [style*="border-bottom: 2px solid rgb(37, 99, 235)"],
+html.diwali [style*="border-color: rgb(37, 99, 235)"],
+html.diwali [style*="border: 1.5px solid rgb(37, 99, 235)"] { border-color: #e8590c !important; }
+html.diwali [style*="background: rgb(30, 41, 59)"],
+html.diwali [style*="background: rgb(15, 23, 42)"],
+html.diwali [style*="background-color: rgb(30, 41, 59)"] {
+  background: linear-gradient(90deg, #7a1235, #4c0c3c) !important;
+  border-bottom: 1px solid var(--gold);
+}
+html.diwali [style*="background: rgb(239, 246, 255)"],
+html.diwali [style*="background: rgb(238, 242, 255)"] { background: #fff1e0 !important; }
+html.diwali [style*="background: rgb(248, 250, 252)"] { background: #fff6ea !important; }
+
+/* Table headers and cards get a warm touch */
+html.diwali thead th { background-color: #fff3e3; }
+html.diwali .card, html.diwali .stat-card { border-color: #f3dcc0; }
+
+/* ── Animations ─────────────────────────────────────────────────────────── */
+@keyframes dwTwinkle { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.8); } }
+@keyframes dwFlicker { 0%, 100% { transform: translateY(0) scale(1); filter: drop-shadow(0 0 10px rgba(255, 170, 0, .9)); } 50% { transform: translateY(-1px) scale(1.04); filter: drop-shadow(0 0 16px rgba(255, 200, 0, 1)); } }
+@keyframes dwGlow { 0%, 100% { box-shadow: 0 0 0 2px rgba(255, 255, 255, .25), 0 0 10px rgba(245, 179, 1, .6); } 50% { box-shadow: 0 0 0 2px rgba(255, 255, 255, .35), 0 0 20px rgba(245, 179, 1, 1); } }
+@keyframes dwFall { 0% { transform: translateY(0); opacity: 0; } 10% { opacity: 1; } 80% { opacity: .9; } 100% { transform: translateY(105vh); opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .dw-lights i, .dw-diya, .dw-spark, html.diwali .nav-logo { animation: none !important; }
+  .dw-spark { display: none; }
+}
+/* Printing from the browser keeps the plain look. */
+@media print { .dw-top, .dw-ambient { display: none !important; } }

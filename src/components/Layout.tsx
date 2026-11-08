@@ -1,5 +1,6 @@
 import { ReactNode, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { FestiveTop, FestiveAmbient, ThemeSwitch } from '../theme/Festive';
 import { useAuth } from '../auth/AuthContext';
 import OfflineBanner from '../native/OfflineBanner';
 import { useIsPhone } from '../mobile/ui';
@@ -94,6 +95,7 @@ function UserFooter({ onSignOut }: { onSignOut: () => void }) {
           Fingerprint sign-in: on · Turn off
         </button>
       )}
+      <ThemeSwitch />
       <button className="nav-signout" onClick={onSignOut}>Sign out</button>
     </div>
   );
@@ -163,7 +165,9 @@ export function Layout({ children }: { children: ReactNode }) {
           <div className="m-title">{current?.label ?? 'iTechArena'}</div>
           <div className="nav-avatar" aria-hidden="true">{user?.fullName?.charAt(0)?.toUpperCase() || 'A'}</div>
         </header>
+        <FestiveTop />
         <OfflineBanner />
+        <FestiveAmbient />
         <main className="m-main"
           onTouchStart={e => { const t = e.touches[0]; edgeRef.current = t.clientX < 20 ? { x: t.clientX, y: t.clientY } : null; }}
           onTouchMove={e => {
@@ -200,9 +204,11 @@ export function Layout({ children }: { children: ReactNode }) {
         <UserFooter onSignOut={signOut} />
       </aside>
       <main className="d-main">
+        <FestiveTop />
         <OfflineBanner />
         <FitToScreen>{children}</FitToScreen>
       </main>
+      <FestiveAmbient />
     </div>
   );
 }
