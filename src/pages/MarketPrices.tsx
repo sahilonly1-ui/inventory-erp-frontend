@@ -158,6 +158,16 @@ export default function MarketPrices() {
     return [...m.values()].sort((a, b) => a.localeCompare(b));
   }, [items]);
   const checkable = shown.filter(i => i.active);
+  // Consecutive runs of the same brand (the list is already sorted by brand).
+  const brandGroups = useMemo(() => {
+    const out: { brand: string; items: Item[] }[] = [];
+    for (const it of shown) {
+      const b = it.brand || 'No brand';
+      const last = out[out.length - 1];
+      if (last && last.brand.toLowerCase() === b.toLowerCase()) last.items.push(it); else out.push({ brand: b, items: [it] });
+    }
+    return out;
+  }, [shown]);
 
   const [notice, setNotice] = useState('');
   /** Refresh prices for exactly the products on screen (or one product). */
@@ -272,7 +282,12 @@ export default function MarketPrices() {
           hint={items.length ? undefined : 'In-stock products are added automatically within the hour — or add one now.'} />
       ) : isPhone ? (
         <div style={{ display: 'grid', gap: M.gap }}>
-          {shown.map(it => <ItemCard key={it.id} it={it} open={open === it.id} onToggle={() => setOpen(open === it.id ? null : it.id)} act={act} />)}
+          {brandGroups.map(g => [
+            <div key={`b-${g.brand}`} style={{ background: '#1e293b', color: '#fff', fontWeight: 800, fontSize: 15, padding: '9px 14px', borderRadius: 10, marginTop: 6 }}>
+              {g.brand} <span style={{ fontWeight: 500, fontSize: 12, color: '#cbd5e1', marginLeft: 6 }}>{g.items.length}</span>
+            </div>,
+            ...g.items.map(it => <ItemCard key={it.id} it={it} open={open === it.id} onToggle={() => setOpen(open === it.id ? null : it.id)} act={act} />),
+          ])}
         </div>
       ) : (
         <div style={{ background: '#fff', border: `1px solid ${M.color.line}`, borderRadius: 12, overflow: 'auto', maxHeight: 'calc(100vh / var(--fit-z, 1) - 210px)' }}>
@@ -285,7 +300,14 @@ export default function MarketPrices() {
               </tr>
             </thead>
             <tbody>
-              {shown.map(it => <ItemRow key={it.id} it={it} open={open === it.id} onToggle={() => setOpen(open === it.id ? null : it.id)} act={act} />)}
+              {brandGroups.map(g => [
+                <tr key={`b-${g.brand}`}>
+                  <td colSpan={STORES.length + 4} style={{ background: '#1e293b', color: '#fff', fontWeight: 800, fontSize: 14.5, padding: '9px 14px', borderTop: '6px solid #fff' }}>
+                    {g.brand} <span style={{ fontWeight: 500, fontSize: 12, color: '#cbd5e1', marginLeft: 6 }}>{g.items.length}</span>
+                  </td>
+                </tr>,
+                ...g.items.map(it => <ItemRow key={it.id} it={it} open={open === it.id} onToggle={() => setOpen(open === it.id ? null : it.id)} act={act} />),
+              ])}
             </tbody>
           </table>
         </div>
@@ -342,7 +364,7 @@ function ItemTitle({ it }: { it: Item }) {
         {it.requested && <span title="Waiting for the next agent run" style={{ fontSize: 11, color: M.color.brand }}>⏳</span>}
       </div>
       <div style={{ fontSize: 11.5, color: M.color.faint, marginTop: 2 }}>
-        {[it.brand, it.variant, it.category, (it.colours ?? 0) > 1 ? `${it.colours} colours` : null].filter(Boolean).join(' · ')}
+        {[it.variant, it.category, (it.colours ?? 0) > 1 ? `${it.colours} colours` : null].filter(Boolean).join(' · ')}
         {!it.productId && <span style={{ color: '#7c3aed', fontWeight: 600 }}> · not stocked</span>}
       </div>
     </div>
