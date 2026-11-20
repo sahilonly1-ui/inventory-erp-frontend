@@ -433,10 +433,10 @@ function OurPrice({ it, act }: { it: Item; act: Act }) {
     <div onClick={e => e.stopPropagation()}>
       <input autoFocus type="number" min="1" value={v} onChange={e => setV(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter') save(v); if (e.key === 'Escape') setEd(false); }}
-        style={{ width: 96, height: 30, padding: '0 6px', border: `1.5px solid ${M.color.brand}`, borderRadius: 7, fontSize: 13 }} />
+        style={{ width: 96, height: 30, padding: '0 6px', border: `1.5px solid ${M.color.brand}`, borderRadius: 7, fontSize: 13, color: '#0f172a', background: '#fff' }} />
       <div style={{ display: 'flex', gap: 5, marginTop: 4 }}>
         <button onClick={() => save(v)} style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: M.color.brand, border: 'none', borderRadius: 5, padding: '3px 8px', cursor: 'pointer' }}>Save</button>
-        <button onClick={() => setEd(false)} style={{ fontSize: 11, border: `1px solid ${M.color.line}`, background: '#fff', borderRadius: 5, padding: '3px 8px', cursor: 'pointer' }}>Cancel</button>
+        <button onClick={() => setEd(false)} style={{ fontSize: 11, fontWeight: 700, border: '1px solid #cbd5e1', background: '#f1f5f9', color: '#334155', borderRadius: 5, padding: '3px 8px', cursor: 'pointer' }}>Cancel</button>
       </div>
     </div>
   );
