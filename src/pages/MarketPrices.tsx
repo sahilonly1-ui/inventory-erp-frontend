@@ -17,7 +17,7 @@ interface Offer { bank: string | null; cardType: string | null; offerType: strin
 interface Snap { status: 'ok' | 'suspect' | 'unverified' | 'not_found' | 'not_listed' | 'blocked' | 'error'; price: number | null; mrp: number | null; inStock: boolean | null; title: string | null; offers: Offer[]; effectivePrice: number | null; bestOffer: string | null; priceText: string | null; notes: string | null; method: string | null; url: string; fetchedAt: string }
 interface Link { url: string | null; lockedByUser: boolean; notListed: boolean; discoveredAt: string | null }
 interface StoreState { link: Link | null; latest: Snap | null; lastGood: Snap | null }
-interface Item { id: string; productId: string | null; name: string; brand: string | null; variant: string | null; source: 'auto' | 'manual'; active: boolean; priority: boolean; lastRefreshedAt: string | null; ean: string | null; ourPrice: number | null; specPrice: number | null; category: string | null; stock: number; requested: boolean; stores: Record<StoreKey, StoreState> }
+interface Item { id: string; productId: string | null; name: string; brand: string | null; variant: string | null; source: 'auto' | 'manual'; active: boolean; priority: boolean; lastRefreshedAt: string | null; ean: string | null; ourPrice: number | null; specPrice: number | null; category: string | null; stock: number; colours?: number; requested: boolean; stores: Record<StoreKey, StoreState> }
 interface Status { lastAgentRun: string | null; requested: number; instantRun?: boolean; localOnline?: boolean; localSeen?: string | null; notWatchedBrands?: { brand: string; products: number }[] }
 interface RunStatus { configured: boolean; error?: string; run?: { number: number; status: string; conclusion: string | null; startedAt: string; updatedAt: string; url: string } | null }
 interface Settings { autoSyncInStock: boolean; autoSyncCategories: string[]; autoSyncBrands: string[]; includeOutOfStock: boolean; options?: { brands: string[]; categories: string[] }; defaultIntervalMins: number; priorityIntervalMins: number; stores: StoreKey[]; batchSize: number }
@@ -311,7 +311,7 @@ function ItemTitle({ it }: { it: Item }) {
         {it.requested && <span title="Waiting for the next agent run" style={{ fontSize: 11, color: M.color.brand }}>⏳</span>}
       </div>
       <div style={{ fontSize: 11.5, color: M.color.faint, marginTop: 2 }}>
-        {[it.brand, it.variant, it.category].filter(Boolean).join(' · ')}
+        {[it.brand, it.variant, it.category, (it.colours ?? 0) > 1 ? `${it.colours} colours` : null].filter(Boolean).join(' · ')}
         {!it.productId && <span style={{ color: '#7c3aed', fontWeight: 600 }}> · not stocked</span>}
       </div>
     </div>
