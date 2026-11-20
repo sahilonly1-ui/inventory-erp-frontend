@@ -152,11 +152,14 @@ export default function MarketPrices() {
 
   // Dropdown options come from what is actually being watched.
   const catOptions = useMemo(() => [...new Set(items.map(i => i.category ?? 'Not stocked'))].sort(), [items]);
+  // Brands follow the chosen category: with "Smartphone" picked, only phone brands are listed.
   const brandOptions = useMemo(() => {
     const m = new Map<string, string>();
-    items.forEach(i => { if (i.brand) m.set(i.brand.toLowerCase(), i.brand); });
+    items.forEach(i => { if (i.brand && (!cat || (i.category ?? 'Not stocked') === cat)) m.set(i.brand.toLowerCase(), i.brand); });
     return [...m.values()].sort((a, b) => a.localeCompare(b));
-  }, [items]);
+  }, [items, cat]);
+  // A brand picked earlier that the new category doesn't have is cleared.
+  useEffect(() => { if (brand && items.length && !brandOptions.some(b => b.toLowerCase() === brand.toLowerCase())) setBrand(''); }, [brandOptions, brand, items.length]);
   const checkable = shown.filter(i => i.active);
   // Consecutive runs of the same brand (the list is already sorted by brand).
   const brandGroups = useMemo(() => {
