@@ -61,6 +61,20 @@ function lowest(it: Item) {
   return best;
 }
 
+/** Our own selling price (not MRP) below the cheapest store's listed price: we may be selling too cheap. */
+function underpriced(it: Item) {
+  const our = ourPriceOf(it);
+  if (!our.value || our.isMrp) return null;
+  let low: { store: StoreKey; price: number } | null = null;
+  for (const s of STORES) {
+    const v = view(it.stores[s.key]);
+    if (!trusted(v) || v.kind !== 'price' || v.snap.price == null) continue;
+    if (!low || v.snap.price < low.price) low = { store: s.key, price: v.snap.price };
+  }
+  if (!low || our.value >= low.price) return null;
+  return { ...low, gap: low.price - our.value };
+}
+
 const btn = (primary = false): React.CSSProperties => ({
   height: 38, padding: '0 14px', borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap',
   border: primary ? 'none' : `1px solid ${M.color.line}`, background: primary ? M.color.brand : '#fff', color: primary ? '#fff' : M.color.ink,
@@ -77,7 +91,8 @@ export default function MarketPrices() {
   const [err, setErr] = useState('');
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<'all' | 'stock' | 'starred' | 'custom' | 'paused'>('all');
-  const [cat, setCat] = useState('');
+  const [cat, setCat] = useState('Smartphone');
+  const [onlyCheap, setOnlyCheap] = useState(false);
   const [brand, setBrand] = useState('');
   const [open, setOpen] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -122,10 +137,18 @@ export default function MarketPrices() {
       if (filter === 'starred' && !i.priority) return false;
       if (filter === 'custom' && i.productId) return false;
       if (cat && (i.category ?? 'Not stocked') !== cat) return false;
+      if (onlyCheap && !underpriced(i)) return false;
       if (brand && (i.brand ?? '').toLowerCase() !== brand.toLowerCase()) return false;
       return !t || `${i.name} ${i.brand ?? ''} ${i.ean ?? ''} ${i.category ?? ''}`.toLowerCase().includes(t);
-    });
-  }, [items, q, filter, cat, brand]);
+    })
+    // Brand A→Z, then our price low → high (no price last), then name.
+    .sort((a, b) => (a.brand ?? '').localeCompare(b.brand ?? '')
+      || (ourPriceOf(a).value ?? Infinity) - (ourPriceOf(b).value ?? Infinity)
+      || a.name.localeCompare(b.name));
+  }, [items, q, filter, cat, brand, onlyCheap]);
+  // Default "Smartphone" only when that category exists.
+  useEffect(() => { if (cat === 'Smartphone' && items.length && !items.some(i => i.category === 'Smartphone')) setCat(''); }, [items, cat]);
+  const cheapCount = useMemo(() => items.filter(i => i.active && (!cat || (i.category ?? 'Not stocked') === cat) && underpriced(i)).length, [items, cat]);
 
   // Dropdown options come from what is actually being watched.
   const catOptions = useMemo(() => [...new Set(items.map(i => i.category ?? 'Not stocked'))].sort(), [items]);
@@ -195,6 +218,14 @@ export default function MarketPrices() {
         <button onClick={() => setNotice('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1e40af', fontSize: 16 }}>×</button>
       </div>}
       {err && <Banner tone="bad">{err}</Banner>}
+      {(cheapCount > 0 || onlyCheap) && (
+        <div style={{ padding: '10px 14px', borderRadius: 10, background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', fontSize: 13, fontWeight: 700, marginBottom: 12, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ flex: 1 }}>⚠ {cheapCount} product{cheapCount === 1 ? ' is' : 's are'} priced below every website{cat ? ` in ${cat}` : ''} — you may be selling too cheap. Check and raise our price.</span>
+          <button onClick={() => setOnlyCheap(v => !v)} style={{ ...btn(), height: 30, borderColor: '#fca5a5', background: onlyCheap ? '#dc2626' : '#fff', color: onlyCheap ? '#fff' : '#991b1b' }}>
+            {onlyCheap ? 'Show all' : 'Show only these'}
+          </button>
+        </div>
+      )}
       {/* A brand left off the brand list in Settings is simply absent from this page —
           say so, with how many in-stock products it has, instead of letting it look as if
           those phones were not in stock. */}
@@ -336,8 +367,7 @@ function ItemRow({ it, open, onToggle, act }: { it: Item; open: boolean; onToggl
       <tr onClick={onToggle} style={{ cursor: 'pointer', background: open ? '#f8fafc' : undefined }}>
         <td style={{ ...td, maxWidth: 280 }}><ItemTitle it={it} /></td>
         <td style={{ ...td, whiteSpace: 'nowrap' }}>
-          <div style={{ fontWeight: 700 }} title={our.isMrp ? 'MRP from Product Master: no price has been set for this on the Specifications tab' : 'Price set on the Specifications tab'}>{our.value ? inr(our.value) : '—'}</div>
-          {our.value && our.isMrp && <div style={{ fontSize: 10, color: M.color.faint }}>MRP</div>}
+          <OurPrice it={it} act={act} />
           {it.productId && <div style={{ fontSize: 11, color: it.stock > 0 ? M.color.good : M.color.faint }}>Stock {it.stock}</div>}
         </td>
         {STORES.map(s => <td key={s.key} style={{ ...td, whiteSpace: 'nowrap' }}><PriceCell st={it.stores[s.key]} cheapest={low?.store === s.key} running={it.requested} /></td>)}
@@ -358,6 +388,41 @@ function ItemRow({ it, open, onToggle, act }: { it: Item; open: boolean; onToggl
         <tr><td colSpan={STORES.length + 4} style={{ padding: '4px 12px 16px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}><Detail it={it} act={act} /></td></tr>
       )}
     </>
+  );
+}
+
+/** Our price, editable here — the same price as on the Specifications tab. */
+function OurPrice({ it, act }: { it: Item; act: Act }) {
+  const our = ourPriceOf(it);
+  const [ed, setEd] = useState(false);
+  const [v, setV] = useState('');
+  const cheap = underpriced(it);
+  const save = async (raw: string) => {
+    const n = raw.trim() === '' ? null : Number(raw);
+    if (n !== null && !(n > 0)) { alert('Enter a price above 0, or leave it empty to clear it'); return; }
+    await act(`/price-watch/items/${it.id}/our-price`, { method: 'PUT', body: JSON.stringify({ price: n }) });
+    setEd(false);
+  };
+  if (!it.productId) return <div style={{ fontWeight: 700 }}>—</div>;
+  if (ed) return (
+    <div onClick={e => e.stopPropagation()}>
+      <input autoFocus type="number" min="1" value={v} onChange={e => setV(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') save(v); if (e.key === 'Escape') setEd(false); }}
+        style={{ width: 96, height: 30, padding: '0 6px', border: `1.5px solid ${M.color.brand}`, borderRadius: 7, fontSize: 13 }} />
+      <div style={{ display: 'flex', gap: 5, marginTop: 4 }}>
+        <button onClick={() => save(v)} style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: M.color.brand, border: 'none', borderRadius: 5, padding: '3px 8px', cursor: 'pointer' }}>Save</button>
+        <button onClick={() => setEd(false)} style={{ fontSize: 11, border: `1px solid ${M.color.line}`, background: '#fff', borderRadius: 5, padding: '3px 8px', cursor: 'pointer' }}>Cancel</button>
+      </div>
+    </div>
+  );
+  return (
+    <div onClick={e => { e.stopPropagation(); setV(our.value && !our.isMrp ? String(Math.round(our.value)) : ''); setEd(true); }} style={{ cursor: 'pointer' }}
+      title="Click to change our selling price (also changes it on the Specifications tab)">
+      <div style={{ fontWeight: 700, borderBottom: '1px dashed #94a3b8', display: 'inline-block', color: cheap ? '#dc2626' : undefined }}>{our.value ? inr(our.value) : 'Set price'}</div>
+      {our.value && our.isMrp && <div style={{ fontSize: 10, color: M.color.faint }}>MRP · click to set our price</div>}
+      {cheap && <div style={{ marginTop: 3, fontSize: 10, fontWeight: 800, color: '#fff', background: '#dc2626', borderRadius: 4, padding: '1px 5px', width: 'fit-content' }}>
+        ⚠ ₹{Math.round(cheap.gap).toLocaleString('en-IN')} below {STORES.find(s => s.key === cheap.store)?.label}</div>}
+    </div>
   );
 }
 
@@ -393,8 +458,8 @@ function ItemCard({ it, open, onToggle, act }: { it: Item; open: boolean; onTogg
             </div>
           ))}
           <div style={{ padding: 8, borderRadius: 9, background: '#f8fafc' }}>
-            <div style={{ fontSize: 10.5, fontWeight: 700, color: M.color.muted }}>{our.isMrp ? 'MRP (ERP)' : 'Our price'}</div>
-            <div style={{ fontWeight: 800 }}>{our.value ? inr(our.value) : '—'}</div>
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: M.color.muted }}>Our price</div>
+            <OurPrice it={it} act={act} />
             {our.value && low ? <Diff ours={our.value} market={low.eff} isMrp={our.isMrp} /> : null}
           </div>
         </div>
