@@ -349,7 +349,10 @@ function PriceCell({ st, cheapest, running }: { st: StoreState; cheapest: boolea
       </div>
       {s.mrp && s.mrp > (s.price ?? 0) && <div style={{ fontSize: 11, color: M.color.faint, textDecoration: 'line-through' }}>{inr(s.mrp)}</div>}
       {s.effectivePrice != null && (
-        <div style={{ fontSize: 11.5, color: M.color.good, fontWeight: 700 }} title={`Best full-swipe deal: ${s.bestOffer}`}>{inr(s.effectivePrice)} <span style={{ fontWeight: 500, color: M.color.muted }}>w/ {s.bestOffer?.split(' · ').slice(0, 2).join(' ')}</span></div>
+        <div title={`Best bank offer (full payment, not EMI): ${s.bestOffer}`}>
+          <div style={{ fontSize: 11.5, color: M.color.good, fontWeight: 700 }}>{inr(s.effectivePrice)} <span style={{ fontWeight: 500, fontSize: 10.5 }}>with offer</span></div>
+          <div style={{ fontSize: 10.5, color: M.color.muted, maxWidth: 170, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{offerLabel(s.bestOffer)}</div>
+        </div>
       )}
       <div style={{ fontSize: 10.5, color: M.color.faint }}>{s.offers.length ? `${s.offers.length} offer${s.offers.length > 1 ? 's' : ''} · ` : ''}{ago(s.fetchedAt)}</div>
     </div>
@@ -493,6 +496,17 @@ function ItemCard({ it, open, onToggle, act }: { it: Item; open: boolean; onTogg
       {open && <div style={{ marginTop: 12 }}><Detail it={it} act={act} /></div>}
     </MCard>
   );
+}
+
+/** "₹1,500 off · HDFC Bank · Credit Card · Full swipe" → "₹1,500 off · HDFC Bank CC". */
+function offerLabel(b: string | null): string {
+  if (!b) return '';
+  const parts = b.split(' · ');
+  const short = (t: string) => t.replace(/^Credit Card$/, 'CC').replace(/^Debit Card$/, 'DC').replace(/^Credit & Debit$/, 'CC/DC');
+  const saving = /^₹/.test(parts[0]) ? parts.shift()! : '';
+  const bank = parts[0] || '';
+  const card = parts[1] && !/swipe|emi/i.test(parts[1]) ? short(parts[1]) : '';
+  return [saving, [bank, card].filter(Boolean).join(' ')].filter(Boolean).join(' · ');
 }
 
 // ── Expanded detail: per-store offers, links, controls ─────────────────────
