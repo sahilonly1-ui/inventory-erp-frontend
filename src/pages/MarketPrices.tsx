@@ -349,7 +349,7 @@ function PriceCell({ st, cheapest, running }: { st: StoreState; cheapest: boolea
       </div>
       {s.mrp && s.mrp > (s.price ?? 0) && <div style={{ fontSize: 11, color: M.color.faint, textDecoration: 'line-through' }}>{inr(s.mrp)}</div>}
       {s.effectivePrice != null && (
-        <div title={`Best bank offer (full payment, not EMI): ${s.bestOffer}`}>
+        <div title={`Best bank / payment offer: ${s.bestOffer}${/ · EMI$/.test(s.bestOffer ?? '') ? ' (only on EMI — no full-payment offer on this page)' : ''}\nOpen the row for every offer.`}>
           <div style={{ fontSize: 11.5, color: M.color.good, fontWeight: 700 }}>{inr(s.effectivePrice)} <span style={{ fontWeight: 500, fontSize: 10.5 }}>with offer</span></div>
           <div style={{ fontSize: 10.5, color: M.color.muted, maxWidth: 170, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{offerLabel(s.bestOffer)}</div>
         </div>
@@ -506,7 +506,8 @@ function offerLabel(b: string | null): string {
   const saving = /^₹/.test(parts[0]) ? parts.shift()! : '';
   const bank = parts[0] || '';
   const card = parts[1] && !/swipe|emi/i.test(parts[1]) ? short(parts[1]) : '';
-  return [saving, [bank, card].filter(Boolean).join(' ')].filter(Boolean).join(' · ');
+  const emi = /^emi$/i.test(parts[parts.length - 1] || '') ? ' (EMI)' : '';
+  return [saving, [bank, card].filter(Boolean).join(' ') + emi].filter(Boolean).join(' · ');
 }
 
 // ── Expanded detail: per-store offers, links, controls ─────────────────────
@@ -555,7 +556,7 @@ function StoreDetail({ itemId, store, st, act }: { itemId: string; store: typeof
           {snap.title && <div style={{ color: M.color.muted, fontSize: 11.5, marginTop: 2 }}>{snap.title}</div>}
           {snap.offers.length > 0 ? (
             <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
-              {snap.offers.map((o, i) => (
+              {[...snap.offers].sort((a, b) => (b.value || 0) - (a.value || 0)).map((o, i) => (
                 <div key={i} style={{ padding: '7px 9px', borderRadius: 8, background: o.value > 0 ? M.color.goodBg : '#f8fafc', border: `1px solid ${o.value > 0 ? '#bbf7d0' : M.color.line}` }}>
                   <div style={{ fontWeight: 700, color: M.color.ink }}>
                     {o.bank ?? 'Offer'}{o.value > 0 && <span style={{ color: M.color.good }}> · save {inr(o.value)}</span>}
