@@ -175,6 +175,17 @@ export function StockReport() {
   const [data,        setData]        = useState<ReportData|null>(null);
   const [exCats,      setExCats]      = useState<Set<string>>(new Set()); // excluded categories
   const isPhone = useIsPhone();
+  // Brand tables need ~360px each: 3 side by side only when there is room (a phone in
+  // desktop view gets 2, so names don't wrap into narrow strips).
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [gridW, setGridW] = useState(1200);
+  useEffect(() => {
+    const el = gridRef.current; if (!el) return;
+    const ro = new ResizeObserver(e => setGridW(e[0].contentRect.width));
+    ro.observe(el); setGridW(el.clientWidth);
+    return () => ro.disconnect();
+  });
+  const screenCols = isPhone ? 1 : Math.max(1, Math.min(3, Math.floor((gridW + 14) / 374)));
   const [exBrands,    setExBrands]    = useState<Set<string>>(new Set()); // excluded brands
   const [loading,     setLoading]     = useState(false);
   const [lastFetch,   setLastFetch]   = useState<Date|null>(null);
@@ -671,9 +682,9 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
         </div>
       ) : (
         <div className="page-scroll pad-phone" ref={reportRef} style={{ flex:1, overflowY:'auto', padding:'14px 16px' }}>
-          <div style={{ display:'flex', flexDirection: isPhone ? 'column' : 'row', gap:14, alignItems:'flex-start' }}>
-            {buildBalancedColumns(isPhone ? 1 : 3).map((col, ci) => (
-              <div key={ci} style={{ flex:'1 1 0', minWidth:0, width: isPhone ? '100%' : undefined }}>
+          <div ref={gridRef} style={{ display:'flex', flexDirection: screenCols === 1 ? 'column' : 'row', gap:14, alignItems:'flex-start' }}>
+            {buildBalancedColumns(screenCols).map((col, ci) => (
+              <div key={ci} style={{ flex:'1 1 0', minWidth:0, width: screenCols === 1 ? '100%' : undefined }}>
                 {col.brands.map(brand => {
                   const bRows  = byBrand[brand];
                   const bTotal = bRows.reduce((s,r)=>s+r.totalQty,0);
