@@ -18,6 +18,7 @@ type Row = {
   price: number; priceEdited: boolean; costPrice: number; mrp: number;
   status: 'PENDING' | 'FETCHING' | 'OK' | 'NOT_FOUND' | 'ERROR' | 'NO_AI';
   specs: Record<string, string>; sources: string[]; error: string | null; sourceUrl: string | null; manual: boolean;
+  market?: { price: number; effective: number; store: string; offer: string | null; at: string } | null;
 };
 type Sheet = { category: { id: string; name: string }; fields: Field[]; rows: Row[]; aiEnabled: boolean };
 type Cat = { id: string; name: string; count: number };
@@ -30,6 +31,12 @@ const needsPrice = (r: { priceEdited: boolean; price: number; costPrice: number 
   !r.priceEdited || Math.round(r.price) === Math.round(r.costPrice);
 // Specs the AI filled from its own knowledge (no web page) — salesman should verify before quoting.
 const fromAi = (r: Row) => (r.sources ?? []).includes('ai:knowledge');
+
+// The last sheet of each category is kept in this browser and shown at once; the fresh
+// one replaces it a moment later.
+const cacheKey = (id: string) => `erp_specs_sheet_${id}`;
+const readCache = <T,>(k: string): T | null => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) as T : null; } catch { return null; } };
+const writeCache = (k: string, v: unknown) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* full / blocked */ } };
 
 export default function Specs() {
   const isPhone = useIsPhone();
@@ -49,30 +56,41 @@ export default function Specs() {
   const [brand, setBrand] = useState('');
   const [priceSort, setPriceSort] = useState<PriceSort>('');
   const [onlyUnpriced, setOnlyUnpriced] = useState(false);
+  // Market best-price column (admins): hidden before printing or showing a customer.
+  const [showMarket, setShowMarket] = useState(() => readCache<boolean>('erp_specs_market') ?? true);
+  useEffect(() => writeCache('erp_specs_market', showMarket), [showMarket]);
   const timer = useRef<number | null>(null);
 
   const say = (t: string) => { setToast(t); window.setTimeout(() => setToast(''), 3500); };
 
   // Categories with stock; default to Smartphones.
   useEffect(() => {
+    const cached = readCache<Cat[]>('erp_specs_cats');
+    if (cached?.length) { setCats(cached); const d = cached.find(x => /smart\s*phone/i.test(x.name)) ?? cached[0]; if (d) setCatId(id => id || d.id); }
     api<Cat[]>('/specs/categories').then(c => {
-      setCats(c);
+      setCats(c); writeCache('erp_specs_cats', c);
       const def = c.find(x => /smart\s*phone/i.test(x.name)) ?? c.find(x => /phone|mobile/i.test(x.name)) ?? c[0];
-      if (def) setCatId(def.id);
+      if (def) setCatId(id => (id && c.some(x => x.id === id) ? id : def.id));
     }).catch(e => setErr(e.message || 'Could not load categories'));
   }, []);
 
   const load = useCallback(async (quiet = false) => {
     if (!catId) return;
     if (!quiet) setLoading(true);
-    try { setSheet(await api<Sheet>(`/specs?categoryId=${catId}`)); setErr(''); }
+    try { const s = await api<Sheet>(`/specs?categoryId=${catId}`); setSheet(s); writeCache(cacheKey(catId), s); setErr(''); }
     catch (e: any) { if (!quiet) setErr(e.message || 'Could not load specifications'); }
     finally { if (!quiet) setLoading(false); }
   }, [catId]);
-  useEffect(() => { setSheet(null); load(); }, [load]);
+  useEffect(() => {
+    const cached = catId ? readCache<Sheet>(cacheKey(catId)) : null;
+    setSheet(cached);
+    load(!!cached);
+  }, [load, catId]);
 
   // While specs are still being fetched, check back every few seconds.
-  const pending = sheet?.rows.filter(r => busy(r.status)).length ?? 0;
+  const pending = sheet?.rows.filter(r => busy(r.status) && !Object.keys(r.specs ?? {}).length).length ?? 0;
+  const hasMarket = !!sheet?.rows.some(r => r.market !== undefined);
+  const marketOn = hasMarket && showMarket;
   const noAi = sheet?.rows.filter(r => r.status === 'NO_AI').length ?? 0;
   useEffect(() => {
     if (timer.current) window.clearTimeout(timer.current);
@@ -131,11 +149,12 @@ export default function Specs() {
     const f = sheet.fields;
     const date = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
     const body = viewGroups.map(([brand, rows]) => `
-      ${grouped ? `<tr class="brand"><td colspan="${f.length + 3}">${esc(brand)}</td></tr>` : ''}
+      ${grouped ? `<tr class="brand"><td colspan="${f.length + 3 + (marketOn ? 1 : 0)}">${esc(brand)}</td></tr>` : ''}
       ${rows.map(r => `<tr>
         <td class="model">${grouped ? '' : `<span class="bd">${esc(r.brand)}</span>`}${esc(r.model)}${!r.manual && fromAi(r) ? ' *' : ''}</td>
         <td class="price">${inr(r.price)}</td>
         <td class="stock">${r.qty}</td>
+        ${marketOn ? `<td class="price">${r.market ? inr(r.market.effective) + `<div class="mk">${esc(r.market.store)}</div>` : '—'}</td>` : ''}
         ${r.status === 'OK' || Object.keys(r.specs).length
           ? f.map(x => `<td>${esc(r.specs[x.key] || '—')}</td>`).join('')
           : `<td colspan="${f.length}" class="na">Specifications not available</td>`}
@@ -159,12 +178,13 @@ td.model{font-weight:700}
 td.price{font-weight:800;white-space:nowrap}
 td.stock{text-align:center;font-weight:800}
 td.na{color:#888;font-style:italic}
+.mk{font-size:6pt;font-weight:600;color:#64748b}
 .ft{margin-top:2mm;font-size:6.5pt;color:#666}
 </style></head><body>
 <div class="hd"><h1>${esc(sheet.category.name)} specifications</h1>
 <div class="sub">iTechArena, in stock on ${date}${activeBrand ? ` \u00b7 ${esc(activeBrand)}` : ''}${priceSort === 'asc' ? ' \u00b7 price low to high' : ''}</div></div>
-<table><colgroup><col style="width:15%"><col style="width:6.5%"><col style="width:4.5%">${f.map(() => `<col>`).join('')}</colgroup>
-<thead><tr><th>Model &amp; Variant</th><th>Price</th><th style="text-align:center">Stock</th>${f.map(x => `<th>${esc(x.label)}</th>`).join('')}</tr></thead>
+<table><colgroup><col style="width:15%"><col style="width:6.5%"><col style="width:4.5%">${marketOn ? '<col style="width:6.5%">' : ''}${f.map(() => `<col>`).join('')}</colgroup>
+<thead><tr><th>Model &amp; Variant</th><th>Price</th><th style="text-align:center">Stock</th>${marketOn ? '<th>Market best</th>' : ''}${f.map(x => `<th>${esc(x.label)}</th>`).join('')}</tr></thead>
 <tbody>${body}</tbody></table>
 <div class="ft">Specifications are from the manufacturer and authorised spec sources${viewRows.some(r => !r.manual && fromAi(r)) ? '; * marked items are unverified, please confirm before purchase' : ''}. Prices and availability may change.</div>
 </body></html>`;
@@ -206,6 +226,12 @@ td.na{color:#888;font-style:italic}
           <option value="">Price: Default</option>
           <option value="asc">Price: Low to High</option>
         </select>
+        {hasMarket && (
+          <button onClick={() => setShowMarket(v => !v)} title="Lowest price on Amazon / Flipkart / Reliance / Croma / brand site (from Market Prices). Hide it before printing or showing a customer."
+            style={{ height: 38, padding: '0 14px', border: `1px solid ${showMarket ? '#86efac' : '#e2e8f0'}`, borderRadius: 10, background: showMarket ? '#f0fdf4' : '#fff', color: showMarket ? '#166534' : '#64748b', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+            {showMarket ? '👁 Market price: shown' : '🙈 Market price: hidden'}
+          </button>
+        )}
         <button onClick={() => load()} style={{ height: 38, padding: '0 14px', border: '1px solid #e2e8f0', borderRadius: 10, background: '#fff', color: '#334155', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Refresh</button>
         <button onClick={handlePrint} disabled={!sheet?.rows.length}
           style={{ height: 38, padding: '0 16px', border: 'none', borderRadius: 10, background: '#2563eb', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Print A4</button>
@@ -244,17 +270,19 @@ td.na{color:#888;font-style:italic}
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: isPhone ? 900 : undefined }}>
             <colgroup>
               <col style={{ width: '14%' }} /><col style={{ width: '6.5%' }} /><col style={{ width: '5%' }} />
+              {marketOn && <col style={{ width: '7%' }} />}
               {fields.map(f => <col key={f.key} />)}
             </colgroup>
             <thead><tr>
               <th style={th}>Model &amp; Variant</th>
               <th style={th}>Price</th>
               <th style={{ ...th, textAlign: 'center' }}>Stock</th>
+              {marketOn && <th style={{ ...th, color: '#166534' }}>Market best</th>}
               {fields.map(f => <th key={f.key} style={th}>{f.label}</th>)}
             </tr></thead>
             <tbody>
               {viewGroups.map(([brand, rows]) => [
-                ...(grouped ? [<tr key={`b-${brand}`}><td colSpan={fields.length + 3}
+                ...(grouped ? [<tr key={`b-${brand}`}><td colSpan={fields.length + 3 + (marketOn ? 1 : 0)}
                   style={{ background: '#1e293b', color: '#fff', fontWeight: 800, fontSize: 14, padding: '8px 12px' }}>{brand}
                   <span style={{ fontWeight: 500, fontSize: 12, color: '#cbd5e1', marginLeft: 8 }}>{rows.length}</span></td></tr>] : []),
                 ...rows.map(r => {
@@ -325,6 +353,15 @@ td.na{color:#888;font-style:italic}
                                        background: r.qty <= 1 ? '#fef3c7' : '#dcfce7', color: r.qty <= 1 ? '#92400e' : '#166534' }}>{r.qty}</span>
                         {r.activated > 0 && <div style={{ fontSize: 10.5, color: '#7c3aed', fontWeight: 700, marginTop: 3 }}>{r.activated} ACC</div>}
                       </td>
+                      {marketOn && (
+                        <td style={{ ...cell, whiteSpace: 'nowrap' }}
+                          title={r.market ? `${r.market.store}: ${inr(r.market.price)}${r.market.effective < r.market.price ? ` · ${inr(r.market.effective)} with ${r.market.offer ?? 'bank offer'}` : ''}` : 'No current market price (see Market Prices)'}>
+                          {r.market ? <>
+                            <div style={{ fontWeight: 800, color: r.market.effective < r.price ? '#b91c1c' : '#166534' }}>{inr(r.market.effective)}</div>
+                            <div style={{ fontSize: 10, color: '#64748b' }}>{r.market.store}{r.market.effective < r.market.price ? ' · with offer' : ''}</div>
+                          </> : <span style={{ color: '#cbd5e1' }}>—</span>}
+                        </td>
+                      )}
                       {editingThis ? (
                         <td colSpan={fields.length} style={cell}>
                           <div style={{ display: 'grid', gridTemplateColumns: `repeat(${isPhone ? 1 : Math.min(4, fields.length)}, 1fr)`, gap: 8 }}>
