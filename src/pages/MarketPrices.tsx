@@ -81,14 +81,18 @@ const btn = (primary = false): React.CSSProperties => ({
   border: primary ? 'none' : `1px solid ${M.color.line}`, background: primary ? M.color.brand : '#fff', color: primary ? '#fff' : M.color.ink,
 });
 
+// Last list seen this session: opening the tab again shows it at once while a
+// fresh copy loads behind it (the list is large, so it is kept in memory only).
+let memo: { items: Item[]; status: Status; run: RunStatus | null } | null = null;
+
 // ── Page ────────────────────────────────────────────────────────────────────
 export default function MarketPrices() {
   const { user } = useAuth();
   const isAdmin = (user?.permissions ?? []).includes('*');
   const isPhone = useIsPhone();
-  const [items, setItems] = useState<Item[]>([]);
-  const [status, setStatus] = useState<Status | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState<Item[]>(() => memo?.items ?? []);
+  const [status, setStatus] = useState<Status | null>(() => memo?.status ?? null);
+  const [loading, setLoading] = useState(() => !memo);
   const [err, setErr] = useState('');
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<'all' | 'stock' | 'nostock' | 'starred' | 'custom' | 'paused'>('all');
@@ -106,7 +110,7 @@ export default function MarketPrices() {
   const [open, setOpen] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [run, setRun] = useState<RunStatus | null>(null);
+  const [run, setRun] = useState<RunStatus | null>(() => memo?.run ?? null);
   const running = !!run?.run && run.run.status !== 'completed';
   const busy = (status?.requested ?? 0) + (running ? 1 : 0);
 
@@ -118,11 +122,12 @@ export default function MarketPrices() {
         api<RunStatus>('/price-watch/run-status').catch(() => null),
       ]);
       setItems(d.items); setStatus(d.status); setRun(r); setErr('');
+      memo = { items: d.items, status: d.status, run: r };
     } catch (e: any) { if (!silent) setErr(e?.message || 'Could not load'); }
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { if (isAdmin) load(); }, [isAdmin, load]);
+  useEffect(() => { if (isAdmin) load(!!memo); }, [isAdmin, load]);
 
   // The agent saves in another tab — poll so results appear here as they land.
   const busyRef = useRef(busy); busyRef.current = busy;
@@ -206,15 +211,15 @@ export default function MarketPrices() {
   return (
     <div style={{ padding: isPhone ? 12 : '20px 24px', maxWidth: 1500, margin: '0 auto' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
-        <div style={{ flex: '1 1 260px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: isPhone ? 10 : 14 }}>
+        <div className="dup-title" style={{ flex: '1 1 260px' }}>
           <div style={{ fontSize: 22, fontWeight: 800, color: M.color.ink }}>Market Prices</div>
           <div style={{ fontSize: 13, color: M.color.muted, marginTop: 2 }}>
             Live prices & bank offers on Amazon, Flipkart, Reliance Digital, Croma and brand sites
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          {running && <MPill tone="brand">⟳ Scraper running…</MPill>}
+        <div style={isPhone ? { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 8, width: '100%' } : { display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          {running && <span style={isPhone ? { gridColumn: '1 / -1' } : undefined}><MPill tone="brand">⟳ Scraper running…</MPill></span>}
           <button style={{ ...btn(showDrops), background: showDrops ? '#15803d' : '#fff', color: showDrops ? '#fff' : '#15803d', borderColor: '#86efac' }}
             title="Products whose price fell on a store — buy now" onClick={() => setShowDrops(v => !v)}>
             📉 Price drops{drops ? ` (${drops.length})` : ''}
@@ -270,19 +275,19 @@ export default function MarketPrices() {
       )}
 
       {/* Filters */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-        <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search product, brand, EAN…" style={{ ...mInput, flex: '1 1 240px', height: 40 }} />
-        <select value={cat} onChange={e => setCat(e.target.value)} style={{ ...mInput, height: 40, flex: '0 1 190px' }}>
+      <div style={isPhone ? { display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0,1fr))', gap: 8, marginBottom: 12 } : { display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search product, brand, EAN…" style={{ ...mInput, flex: '1 1 240px', height: isPhone ? 44 : 40, gridColumn: '1 / -1' }} />
+        <select value={cat} onChange={e => setCat(e.target.value)} style={{ ...mInput, height: isPhone ? 44 : 40, flex: '0 1 190px', gridColumn: 'span 3' }}>
           <option value="">All categories</option>
           {catOptions.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
-        <select value={brand} onChange={e => setBrand(e.target.value)} style={{ ...mInput, height: 40, flex: '0 1 170px' }}>
+        <select value={brand} onChange={e => setBrand(e.target.value)} style={{ ...mInput, height: isPhone ? 44 : 40, flex: '0 1 170px', gridColumn: 'span 3' }}>
           <option value="">All brands</option>
           {brandOptions.map(b => <option key={b} value={b}>{b}</option>)}
         </select>
         {([['all', 'All'], ['stock', 'In stock'], ['nostock', 'No stock'], ['starred', '★ Starred'], ['custom', 'Not stocked'], ['paused', 'Paused']] as const).map(([k, l]) => (
           <button key={k} onClick={() => setFilter(k)}
-            style={{ ...btn(), height: 40, background: filter === k ? M.color.ink : '#fff', color: filter === k ? '#fff' : M.color.ink }}>{l}</button>
+            style={{ ...btn(), height: 40, background: filter === k ? M.color.ink : '#fff', color: filter === k ? '#fff' : M.color.ink, ...(isPhone ? { gridColumn: 'span 2', padding: '0 4px', fontSize: 12.5 } : {}) }}>{l}</button>
         ))}
       </div>
 
@@ -349,16 +354,37 @@ function DropsPanel({ drops, days, setDays, isPhone, onOpen }: { drops: Drop[] |
     <div style={{ background: '#fff', border: '1px solid #86efac', borderRadius: 12, padding: 14, marginBottom: 14 }}>
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
         <b style={{ fontSize: 15, color: '#15803d', flex: 1 }}>📉 Prices that dropped — good time to buy</b>
-        <span style={{ fontSize: 12, color: M.color.muted }}>Dropped in the last</span>
-        {[1, 3, 7, 30].map(d => (
-          <button key={d} onClick={() => setDays(d)} style={{ ...btn(d === days), height: 30, fontSize: 12, background: d === days ? '#15803d' : '#fff' }}>{d === 1 ? '24 hours' : `${d} days`}</button>
-        ))}
+        {!isPhone && <span style={{ fontSize: 12, color: M.color.muted }}>Dropped in the last</span>}
+        <div style={isPhone ? { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: 6, width: '100%' } : { display: 'flex', gap: 8 }}>
+          {[1, 3, 7, 30].map(d => (
+            <button key={d} onClick={() => setDays(d)} style={{ ...btn(d === days), height: 32, minHeight: 32, fontSize: 12, padding: isPhone ? 0 : '0 14px', background: d === days ? '#15803d' : '#fff' }}>{d === 1 ? '24 hours' : `${d} days`}</button>
+          ))}
+        </div>
       </div>
       {drops === null ? <div style={{ color: M.color.faint, fontSize: 13 }}>Loading…</div>
         : !drops.length ? <div style={{ color: M.color.faint, fontSize: 13 }}>No price drops in this period.</div>
-        : (
+        : isPhone ? (
+          <div style={{ display: 'grid', gap: 8 }}>
+            {drops.map(d => (
+              <div key={d.itemId + d.store} style={{ border: '1px solid #dcfce7', borderRadius: 12, padding: 11, background: '#fbfffc' }}>
+                <button onClick={() => onOpen(d.itemId)} style={{ minHeight: 0, background: 'none', border: 'none', padding: 0, fontWeight: 700, fontSize: 14, color: M.color.ink, cursor: 'pointer', textAlign: 'left', lineHeight: 1.3 }}>{d.name}</button>
+                <div data-keep-row style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 6 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: STORES.find(x => x.key === d.store)?.color }}>{label(d.store)}</span>
+                  <span style={{ fontSize: 12, color: M.color.faint, textDecoration: 'line-through' }}>{inr(d.was)}</span>
+                  <span style={{ fontSize: 17, fontWeight: 900, color: '#15803d' }}>{inr(d.now)}</span>
+                  <span style={{ marginLeft: 'auto', fontSize: 11.5, fontWeight: 800, color: '#fff', background: '#16a34a', borderRadius: 999, padding: '2px 8px', whiteSpace: 'nowrap' }}>−{d.pct}%</span>
+                </div>
+                {d.effectivePrice != null && <div style={{ fontSize: 12, color: '#15803d', fontWeight: 700, marginTop: 2 }}>{inr(d.effectivePrice)} <span style={{ fontWeight: 500 }}>with offer</span><span style={{ color: M.color.muted, fontWeight: 500 }}> · {offerLabel(d.bestOffer)}</span></div>}
+                <div data-keep-row style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                  <span style={{ fontSize: 11.5, color: M.color.muted, flex: 1 }}>{ago(d.droppedAt)} · our stock <b style={{ color: d.stock > 0 ? M.color.good : M.color.bad }}>{d.stock > 0 ? d.stock : 'none'}</b></span>
+                  {d.url && <a href={d.url} target="_blank" rel="noreferrer" style={{ ...btn(true), height: 32, fontSize: 12.5, display: 'inline-flex', alignItems: 'center', textDecoration: 'none', background: '#15803d' }}>Buy ↗</a>}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
           <div style={{ overflow: 'auto', maxHeight: 420 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: isPhone ? 640 : undefined }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead><tr>{['Product', 'Store', 'Was', 'Now', 'Drop', 'With offer', 'When', 'Our stock', ''].map(h => (
                 <th key={h} style={{ textAlign: 'left', padding: '6px 8px', fontSize: 11, color: M.color.muted, borderBottom: `1px solid ${M.color.line}`, position: 'sticky', top: 0, background: '#fff' }}>{h}</th>))}</tr></thead>
               <tbody>

@@ -662,3 +662,37 @@ button.ghost:hover{background:var(--surf-1)}
 .fit-outer,.fit-inner{flex:1 0 auto;min-width:0;display:flex;flex-direction:column}
 /* Only when the content is still too wide at the smallest readable size. */
 .fit-outer.fit-scroll{overflow-x:auto}
+
+/* ── Phone polish (Nov 2026) ─────────────────────────────────────────────
+   Card building blocks shared by the phone views, page transitions, and
+   touch feedback. Colours follow the festive theme variables when one is on. */
+.m-group-head{display:flex;align-items:center;gap:8px;margin:14px 0 8px;padding:9px 14px;border-radius:12px;
+  background:linear-gradient(90deg,var(--fx-nav1,#1e293b),var(--fx-nav2,#334155));color:#fff;font-weight:800;font-size:15px;letter-spacing:.01em}
+.m-group-head span{font-weight:600;font-size:12px;opacity:.75}
+.sp-card{background:#fff;border:1px solid #e6e9ef;border-radius:14px;padding:12px;box-shadow:0 1px 2px rgba(16,24,40,.05);min-width:0}
+.sp-box{margin-top:10px;padding:10px 11px;border-radius:11px;border:1px solid #e6e9ef}
+.sp-fetching{background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8;font-weight:700;font-size:13px;
+  background-image:linear-gradient(90deg,transparent,rgba(255,255,255,.7),transparent);background-size:200% 100%;animation:spShimmer 1.4s linear infinite}
+@keyframes spShimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+.sp-specs{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:1px;margin-top:10px;background:#eef1f5;border:1px solid #eef1f5;border-radius:11px;overflow:hidden}
+.sp-spec{background:#fff;padding:7px 9px;min-width:0}
+.sp-spec-l{font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em}
+.sp-spec-v{font-size:12.5px;color:#0f172a;line-height:1.35;margin-top:1px;overflow-wrap:anywhere}
+.sp-note{display:flex;align-items:center;gap:10px;margin:10px 12px 0;padding:9px 12px;border-radius:11px;border:1px solid;font-size:12.5px;font-weight:700}
+.m-toast{position:fixed;left:16px;right:16px;bottom:calc(var(--safe-b,0px) + 18px);z-index:700;background:#0f172a;color:#fff;padding:12px 16px;border-radius:12px;font-size:13.5px;font-weight:600;text-align:center;box-shadow:0 8px 24px rgba(15,23,42,.3);animation:mToast .22s ease}
+@keyframes mToast{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+/* Tables that must fit the phone width instead of scrolling sideways. */
+@media (max-width: 899px){
+  table.m-fit{display:table !important;white-space:normal !important;table-layout:fixed;width:100% !important;overflow:visible !important}
+  table.m-fit td,table.m-fit th{overflow-wrap:anywhere}
+  /* Chip rows wrap instead of hiding options off the right edge. */
+  .chip-row{flex-wrap:wrap !important;overflow-x:visible !important;margin:0 !important;padding:2px 0 6px !important}
+  /* Page change: a short fade-up so tabs feel like an app, not a reload. */
+  .m-main > *{animation:mPageIn .18s ease-out both}
+  /* Pressed state for every button and link on touch. */
+  button:not(:disabled):active,a:active{transform:scale(.97);transition:transform .06s}
+  button{transition:transform .12s, background-color .15s, color .15s, border-color .15s}
+}
+@keyframes mPageIn{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.m-main > *,.m-toast,.sp-fetching{animation:none}}

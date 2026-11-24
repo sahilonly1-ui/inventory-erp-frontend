@@ -215,6 +215,195 @@ td.na{color:#888;font-style:italic}
   const th: React.CSSProperties = { padding: '7px 7px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: '#475569', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 1, whiteSpace: 'normal', lineHeight: 1.25 };
   const link: React.CSSProperties = { border: 'none', background: 'none', color: '#2563eb', fontSize: 10.5, fontWeight: 700, cursor: 'pointer', padding: 0 };
 
+  // ── Phone: one card per item, nothing wider than the screen ─────────────
+  const chip = (on = false, tone: 'plain' | 'brand' | 'good' = 'plain'): React.CSSProperties => ({
+    height: 40, minHeight: 40, padding: '0 10px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer',
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', whiteSpace: 'nowrap',
+    border: tone === 'brand' ? 'none' : `1px solid ${on ? '#86efac' : '#e2e8f0'}`,
+    background: tone === 'brand' ? 'var(--fx-btn2, #2563eb)' : on ? '#f0fdf4' : '#fff',
+    color: tone === 'brand' ? '#fff' : on ? '#166534' : '#334155',
+  });
+  const pSel: React.CSSProperties = { width: '100%', height: 44, padding: '0 12px', border: '1.5px solid #c7d2fe', borderRadius: 11, fontWeight: 700, color: '#1e3a8a', background: '#eef2ff', minWidth: 0 };
+  const act: React.CSSProperties = { minHeight: 30, height: 30, padding: '0 11px', borderRadius: 8, border: '1px solid #dbeafe', background: '#eff6ff', color: '#1d4ed8', fontSize: 12, fontWeight: 700, cursor: 'pointer' };
+
+  const phoneCard = (r: Row) => {
+    const editingThis = editRow?.key === r.key;
+    const hasSpecs = Object.keys(r.specs).length > 0;
+    const filled = fields.filter(f => r.specs[f.key]);
+    return (
+      <div key={r.productId} className="sp-card">
+        <div data-keep-row style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {!grouped && <div style={{ fontSize: 10.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '.06em' }}>{r.brand}</div>}
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', lineHeight: 1.3, overflowWrap: 'anywhere' }}>{r.model}</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6, alignItems: 'center' }}>
+              <span style={{ fontSize: 11.5, fontWeight: 800, padding: '2px 9px', borderRadius: 999, background: r.qty <= 1 ? '#fef3c7' : '#dcfce7', color: r.qty <= 1 ? '#92400e' : '#166534' }}>{r.qty} in stock</span>
+              {r.activated > 0 && <span style={{ fontSize: 11.5, fontWeight: 800, padding: '2px 9px', borderRadius: 999, background: '#f3e8ff', color: '#7c3aed' }}>{r.activated} ACC</span>}
+              {r.manual && <span style={{ fontSize: 11, fontWeight: 700, color: '#a16207' }}>edited</span>}
+              {!r.manual && fromAi(r) && r.status === 'OK' && <span style={{ fontSize: 11, fontWeight: 800, color: '#9a3412', background: '#ffedd5', borderRadius: 6, padding: '2px 7px' }}>AI — verify</span>}
+            </div>
+          </div>
+          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+            {editPrice?.id === r.productId ? null : (
+              <button onClick={() => canEdit && setEditPrice({ id: r.productId, v: String(Math.round(r.price)) })}
+                style={{ minHeight: 0, border: 'none', background: 'none', padding: 0, cursor: canEdit ? 'pointer' : 'default', textAlign: 'right' }}>
+                <div style={{ fontSize: 18, fontWeight: 900, color: needsPrice(r) ? '#c2410c' : '#0f172a', borderBottom: canEdit ? '1px dashed #94a3b8' : 'none', lineHeight: 1.2 }}>{inr(r.price)}</div>
+                {needsPrice(r) && <div style={{ marginTop: 4, display: 'inline-block', fontSize: 10.5, fontWeight: 800, color: '#fff', background: '#ea580c', borderRadius: 5, padding: '2px 7px' }}>Update price</div>}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {editPrice?.id === r.productId && (
+          <div className="sp-box" style={{ background: '#eff6ff', borderColor: '#bfdbfe' }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>Selling price on this sheet</div>
+            <input autoFocus type="number" inputMode="numeric" min="1" value={editPrice.v} onChange={e => setEditPrice({ id: r.productId, v: e.target.value })}
+              onKeyDown={e => { if (e.key === 'Enter') savePrice(r, editPrice.v); }}
+              placeholder={String(Math.round(r.costPrice))}
+              style={{ width: '100%', height: 44, padding: '0 12px', border: '1.5px solid #2563eb', borderRadius: 10, fontWeight: 700 }} />
+            <div style={{ display: 'grid', gridTemplateColumns: r.priceEdited ? '1fr 1fr 1fr' : '1fr 1fr', gap: 8, marginTop: 8 }}>
+              <button onClick={() => savePrice(r, editPrice.v)} style={chip(false, 'brand')}>Save</button>
+              <button onClick={() => setEditPrice(null)} style={chip()}>Cancel</button>
+              {r.priceEdited && <button onClick={() => savePrice(r, '')} style={chip()}>Cost price</button>}
+            </div>
+          </div>
+        )}
+
+        {marketOn && (
+          r.market ? (
+            <div className="sp-box" style={{ background: '#f0fdf4', borderColor: '#bbf7d0' }}>
+              <div data-keep-row style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <span style={{ fontSize: 10.5, fontWeight: 800, color: '#166534', textTransform: 'uppercase', letterSpacing: '.06em' }}>Market best</span>
+                <span style={{ fontSize: 11.5, color: '#64748b', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.market.store}</span>
+                <span style={{ fontSize: 15, fontWeight: 900, color: '#0f172a' }}>{inr(r.market.price)}</span>
+              </div>
+              {r.market.effective < r.market.price && (
+                <div style={{ marginTop: 3, fontSize: 12.5, color: '#15803d', fontWeight: 700, lineHeight: 1.35 }}>
+                  {inr(r.market.effective)} <span style={{ fontWeight: 500 }}>with offer</span>
+                  <span style={{ color: '#64748b', fontWeight: 500 }}> · {shortOffer(r.market.offer)}</span>
+                </div>
+              )}
+            </div>
+          ) : <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 8 }}>No current market price</div>
+        )}
+
+        {editingThis ? (
+          <div className="sp-box" style={{ background: '#f8fafc' }}>
+            {fields.map(f => (
+              <label key={f.key} style={{ display: 'block', fontSize: 11, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>{f.label}
+                <textarea value={editRow!.v[f.key] ?? ''} rows={2} onChange={e => setEditRow({ key: r.key, v: { ...editRow!.v, [f.key]: e.target.value } })}
+                  style={{ display: 'block', width: '100%', marginTop: 4, padding: 8, border: '1px solid #cbd5e1', borderRadius: 8, fontFamily: 'inherit', textTransform: 'none', letterSpacing: 0, fontWeight: 500, resize: 'vertical' }} />
+              </label>
+            ))}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <button onClick={saveSpecs} style={chip(false, 'brand')}>Save</button>
+              <button onClick={() => setEditRow(null)} style={chip()}>Cancel</button>
+            </div>
+          </div>
+        ) : busy(r.status) && !hasSpecs ? (
+          <div className="sp-box sp-fetching">{r.status === 'FETCHING' ? 'Fetching specifications…' : 'Waiting to fetch specifications…'}</div>
+        ) : r.status === 'OK' || hasSpecs ? (
+          <div className="sp-specs">
+            {(filled.length ? filled : fields).map(f => (
+              <div key={f.key} className="sp-spec">
+                <div className="sp-spec-l">{f.label}</div>
+                <div className="sp-spec-v">{r.specs[f.key] || '—'}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="sp-box" style={{ background: '#fffbeb', borderColor: '#fde68a' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#92400e', lineHeight: 1.4 }}>
+              {r.status === 'NO_AI' ? 'Automatic fetching is not on for this category yet.' : r.status === 'ERROR' ? 'Fetching did not work this time.' : 'Specifications for this exact model were not found.'}
+              <span style={{ fontWeight: 500 }}> Paste a page that has them (brand site, GSMArena, 91mobiles…).</span>
+            </div>
+            {r.error && r.status === 'ERROR' && <div style={{ fontSize: 12, color: '#b45309', marginTop: 3 }}>{r.error}</div>}
+            <input value={links[r.key] ?? r.sourceUrl ?? ''} onChange={e => setLinks(l => ({ ...l, [r.key]: e.target.value }))}
+              placeholder="https://www.gsmarena.com/…" inputMode="url"
+              style={{ width: '100%', height: 44, padding: '0 12px', marginTop: 8, border: '1px solid #fcd34d', borderRadius: 10, background: '#fff' }} />
+            <div style={{ display: 'grid', gridTemplateColumns: canEdit ? '1.3fr 1fr 1fr' : '1.3fr 1fr', gap: 8, marginTop: 8 }}>
+              <button onClick={() => refetch(r, true)} style={{ ...chip(), background: '#d97706', color: '#fff', border: 'none' }}>Fetch link</button>
+              <button onClick={() => refetch(r, false)} style={chip()}>Try again</button>
+              {canEdit && <button onClick={() => setEditRow({ key: r.key, v: { ...r.specs } })} style={chip()}>Type in</button>}
+            </div>
+          </div>
+        )}
+
+        {!editingThis && (r.status === 'OK' || hasSpecs) && !busy(r.status) && (
+          <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+            {canEdit && <button onClick={() => setEditRow({ key: r.key, v: { ...r.specs } })} style={act}>Edit</button>}
+            <button onClick={() => refetch(r, false)} style={act}>Refetch</button>
+            <button onClick={() => setLinkOpen(linkOpen === r.key ? null : r.key)} style={act}>Other link</button>
+          </div>
+        )}
+        {linkOpen === r.key && (
+          <div style={{ marginTop: 8 }}>
+            <input autoFocus value={links[r.key] ?? ''} onChange={e => setLinks(l => ({ ...l, [r.key]: e.target.value }))}
+              onKeyDown={e => { if (e.key === 'Enter') { refetch(r, true); setLinkOpen(null); } }}
+              placeholder="Paste specs page link" inputMode="url"
+              style={{ width: '100%', height: 44, padding: '0 12px', border: '1px solid #93c5fd', borderRadius: 10 }} />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+              <button onClick={() => { refetch(r, true); setLinkOpen(null); }} style={chip(false, 'brand')}>Fetch</button>
+              <button onClick={() => setLinkOpen(null)} style={chip()}>Cancel</button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  if (isPhone) return (
+    <div className="sp-phone">
+      <div style={{ padding: '12px 12px 10px', background: '#fff', borderBottom: '1px solid #e5e7eb', display: 'grid', gap: 8 }}>
+        <select value={catId} onChange={e => setCatId(e.target.value)} aria-label="Category" style={pSel}>
+          {cats.map(c => <option key={c.id} value={c.id}>{c.name} ({c.count})</option>)}
+        </select>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 8 }}>
+          <select value={activeBrand} onChange={e => setBrand(e.target.value)} aria-label="Brand" style={pSel}>
+            <option value="">All brands ({sheet?.rows.length ?? 0})</option>
+            {brandChoices.map(([b, n]) => <option key={b} value={b}>{b} ({n})</option>)}
+          </select>
+          <select value={priceSort} onChange={e => setPriceSort(e.target.value as PriceSort)} aria-label="Price order" style={pSel}>
+            <option value="">Price: default</option>
+            <option value="asc">Price: low → high</option>
+          </select>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: hasMarket ? '1.25fr 1fr 1fr' : '1fr 1fr', gap: 8 }}>
+          {hasMarket && <button onClick={() => setShowMarket(v => !v)} style={chip(showMarket)}>{showMarket ? '👁 Market' : '🙈 Market'}</button>}
+          <button onClick={() => load()} style={chip()}>⟳ Refresh</button>
+          <button onClick={handlePrint} disabled={!sheet?.rows.length} style={chip(false, 'brand')}>Print A4</button>
+        </div>
+        <div style={{ fontSize: 12, color: '#64748b' }}>
+          {sheet ? `${viewRows.length}${viewRows.length !== sheet.rows.length ? ` of ${sheet.rows.length}` : ''} items in stock · ${new Set(viewRows.map(r => r.key)).size} models` : 'Only items in stock are listed'}
+        </div>
+      </div>
+
+      {sheet && (unpriced > 0 || onlyUnpriced) && (
+        <div className="sp-note" style={{ background: '#fff7ed', color: '#9a3412', borderColor: '#fed7aa' }}>
+          <span style={{ flex: 1 }}>⚠ {unpriced} still show{unpriced === 1 ? 's' : ''} the cost price</span>
+          <button onClick={() => setOnlyUnpriced(v => !v)} style={{ ...act, borderColor: '#fdba74', background: onlyUnpriced ? '#ea580c' : '#fff', color: onlyUnpriced ? '#fff' : '#9a3412' }}>
+            {onlyUnpriced ? 'Show all' : 'Show these'}
+          </button>
+        </div>
+      )}
+      {sheet && pending > 0 && <div className="sp-note" style={{ background: '#eff6ff', color: '#1d4ed8', borderColor: '#bfdbfe' }}>Fetching specs for new models: {ready} of {models} ready</div>}
+      {sheet && pending === 0 && noAi > 0 && <div className="sp-note" style={{ background: '#fff7ed', color: '#9a3412', borderColor: '#fed7aa' }}>Automatic fetching for {sheet.category.name} is not on yet. Specs can be typed in.</div>}
+      {err && <div className="sp-note" style={{ background: '#fef2f2', color: '#b91c1c', borderColor: '#fecaca' }}>{err}</div>}
+      {toast && <div className="m-toast">{toast}</div>}
+
+      <div style={{ padding: '4px 12px 16px' }}>
+        {loading && !sheet && <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>Loading…</div>}
+        {sheet && sheet.rows.length === 0 && <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>Nothing in stock in {sheet.category.name}. Pick another category.</div>}
+        {viewGroups.map(([b, rows]) => (
+          <div key={b || 'all'}>
+            {grouped && <div className="m-group-head">{b}<span>{rows.length}</span></div>}
+            <div style={{ display: 'grid', gap: 10 }}>{rows.map(phoneCard)}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: isPhone ? '12px 14px' : '14px 20px', borderBottom: '1px solid #e5e7eb', flexWrap: 'wrap', background: '#fff', color: '#334155' }}>

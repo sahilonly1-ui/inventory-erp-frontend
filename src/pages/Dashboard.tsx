@@ -38,11 +38,14 @@ interface EditImei {
 const fmtT = (s:string) => new Date(s).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
 const uid = () => Math.random().toString(36).slice(2,9);
 
+let dashMemo:{stats:Stats;daily:Daily;date:string}|null=null;
+
 export function Dashboard() {
-  const [stats,setStats]=useState<Stats|null>(null);
-  const [daily,setDaily]=useState<Daily|null>(null);
   const [date,setDate]=useState(new Date().toISOString().slice(0,10));
-  const [loading,setLoading]=useState(true);
+  // Last figures seen this session show at once on coming back; fresh ones replace them.
+  const [stats,setStats]=useState<Stats|null>(()=>dashMemo?.stats??null);
+  const [daily,setDaily]=useState<Daily|null>(()=>dashMemo&&dashMemo.date===date?dashMemo.daily:null);
+  const [loading,setLoading]=useState(()=>!dashMemo);
   const [tab,setTab]=useState<'in'|'out'|'all'>('in');
   const [deleting,setDeleting]=useState<string|null>(null);
   const [downloading,setDownloading]=useState<string|null>(null);
@@ -72,14 +75,14 @@ export function Dashboard() {
   const newEanRef = useRef<HTMLInputElement>(null);
 
   const load=useCallback(async()=>{
-    setLoading(true);
+    if(!(dashMemo&&dashMemo.date===date))setLoading(true);
     try{
       const [s,d]=await Promise.all([
         api<Stats>('/inventory/dashboard-stats'),
         api<Daily>(`/inventory/daily-summary?date=${date}`),
       ]);
       // Enrich recentTxns with productId/ean/vendorId/warehouseId if missing
-      setStats(s);setDaily(d);
+      setStats(s);setDaily(d);dashMemo={stats:s,daily:d,date};
     }catch{}
     finally{setLoading(false);}
   },[date]);
@@ -552,7 +555,7 @@ export function Dashboard() {
               <div>
                 <div style={{fontSize:10,fontWeight:800,color:'#16a34a',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>TOP RECEIVED PRODUCTS</div>
                 <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:10,overflow:'hidden',boxShadow:'0 1px 3px rgba(0,0,0,.04)'}}>
-                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+                  <table className="m-fit" style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
                     <thead><tr style={{background:'#f8fafc'}}>
                       {['Product','Units In'].map(h=><th key={h} style={{padding:'8px 12px',textAlign:h==='Units In'?'right':'left',fontWeight:700,color:'#64748b',fontSize:10,textTransform:'uppercase',borderBottom:'1px solid #e2e8f0'}}>{h}</th>)}
                     </tr></thead>
@@ -584,7 +587,7 @@ export function Dashboard() {
               <div>
                 <div style={{fontSize:10,fontWeight:800,color:'#dc2626',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10}}>TOP DISPATCHED PRODUCTS</div>
                 <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:10,overflow:'hidden',boxShadow:'0 1px 3px rgba(0,0,0,.04)'}}>
-                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+                  <table className="m-fit" style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
                     <thead><tr style={{background:'#f8fafc'}}>
                       {['Product','Units Out'].map(h=><th key={h} style={{padding:'8px 12px',textAlign:h==='Units Out'?'right':'left',fontWeight:700,color:'#64748b',fontSize:10,textTransform:'uppercase',borderBottom:'1px solid #e2e8f0'}}>{h}</th>)}
                     </tr></thead>
@@ -606,7 +609,7 @@ export function Dashboard() {
           {/* All Movements */}
           {tab==='all'&&(
             <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:10,overflow:'hidden',boxShadow:'0 1px 3px rgba(0,0,0,.04)'}}>
-              <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+              <table className="m-fit" style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
                 <thead><tr style={{background:'#f8fafc',position:'sticky',top:0}}>
                   {['Time','Type','Product','Qty','Warehouse','Actions'].map(h=>(
                     <th key={h} style={{padding:'8px 12px',textAlign:'left',fontWeight:700,color:'#64748b',fontSize:10,textTransform:'uppercase',borderBottom:'1px solid #e2e8f0',whiteSpace:'nowrap'}}>{h}</th>

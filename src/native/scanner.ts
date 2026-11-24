@@ -190,8 +190,20 @@ export async function initNativeChrome(): Promise<void> {
   if (!isNative()) return;
   try {
     const { StatusBar, Style } = await import('@capacitor/status-bar');
-    await StatusBar.setStyle({ style: Style.Dark });
-    await StatusBar.setBackgroundColor({ color: '#1e293b' });
+    // The status bar takes the colour of the app's top bar: the festival colour
+    // when a festive look is on, plain white (dark icons) otherwise.
+    const sync = async () => {
+      const root = document.documentElement;
+      const festive = root.classList.contains('festive');
+      const c = festive ? getComputedStyle(root).getPropertyValue('--fx-nav1').trim() : '';
+      const hex = /^#[0-9a-f]{6}$/i.test(c) ? c : festive ? '#1e293b' : '#ffffff';
+      try {
+        await StatusBar.setBackgroundColor({ color: hex });
+        await StatusBar.setStyle({ style: festive || hex !== '#ffffff' ? Style.Dark : Style.Light });
+      } catch { /* not fatal */ }
+    };
+    await sync();
+    window.addEventListener('erp-theme', () => { void sync(); });
   } catch { /* not fatal */ }
   try {
     const { SplashScreen } = await import('@capacitor/splash-screen');

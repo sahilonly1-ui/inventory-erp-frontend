@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { saveFile, canvasToBlob } from '../native/download';
-import { useIsPhone } from '../mobile/ui';
+import { useIsPhone, MSheet } from '../mobile/ui';
 import { api } from '../api/client';
 
 interface Category  { id: string; name: string; }
@@ -34,9 +34,13 @@ function MultiSelect({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const ref = useRef<HTMLDivElement>(null);
+  // On a phone the list opens as a sheet from the bottom: a dropdown under the
+  // pill ran off the right edge of the screen.
+  const isPhone = useIsPhone();
 
   useEffect(() => {
     const fn = (e: MouseEvent) => {
+      if ((e.target as Element)?.closest?.('[data-sheet-open]')) return;
       if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setSearch(''); }
     };
     document.addEventListener('mousedown', fn);
@@ -69,7 +73,7 @@ function MultiSelect({
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       {/* Trigger pill */}
-      <button onClick={() => setOpen(o => !o)} style={triggerStyle}>
+      <button onClick={() => setOpen(o => !o)} style={isPhone ? { ...triggerStyle, width: '100%', justifyContent: 'center', height: 40 } : triggerStyle}>
         <span style={{ fontSize: 10, opacity: .7, letterSpacing: '.04em' }}>{label.toUpperCase()}</span>
         <span>{triggerLabel}</span>
         <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"
@@ -79,8 +83,8 @@ function MultiSelect({
       </button>
 
       {/* Dropdown */}
-      {open && (
-        <div style={{
+      {open && (c => isPhone ? <MSheet title={label} onClose={() => { setOpen(false); setSearch(''); }}>{c}</MSheet> : c)(
+        <div style={isPhone ? { display: 'flex', flexDirection: 'column' } : {
           position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 400,
           background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14,
           boxShadow: '0 16px 48px rgba(0,0,0,.16)',
@@ -126,7 +130,7 @@ function MultiSelect({
           </div>
 
           {/* Chip grid — all options as toggleable pills */}
-          <div style={{ padding:'10px 12px', display:'flex', flexWrap:'wrap', gap:6, maxHeight:260, overflowY:'auto' }}>
+          <div style={{ padding:'10px 12px', display:'flex', flexWrap:'wrap', gap:6, maxHeight: isPhone ? 'none' : 260, overflowY:'auto' }}>
             {visible.map(o => {
               const key = getKey(o);
               const active = !selected.has(key); // NOT in excluded set = active/visible
@@ -171,9 +175,13 @@ function MultiSelect({
   );
 }
 
+// Live report and filters from the last visit this session: the tab reopens
+// instantly with them while a fresh copy loads behind.
+let memo: { data: ReportData; exCats: Set<string>; exBrands: Set<string>; at: Date } | null = null;
+
 export function StockReport() {
-  const [data,        setData]        = useState<ReportData|null>(null);
-  const [exCats,      setExCats]      = useState<Set<string>>(new Set()); // excluded categories
+  const [data,        setData]        = useState<ReportData|null>(() => memo?.data ?? null);
+  const [exCats,      setExCats]      = useState<Set<string>>(() => memo?.exCats ?? new Set()); // excluded categories
   const isPhone = useIsPhone();
   // Brand tables need ~360px each: 3 side by side only when there is room (a phone in
   // desktop view gets 2, so names don't wrap into narrow strips).
@@ -186,25 +194,25 @@ export function StockReport() {
     return () => ro.disconnect();
   });
   const screenCols = isPhone ? 1 : Math.max(1, Math.min(3, Math.floor((gridW + 14) / 374)));
-  const [exBrands,    setExBrands]    = useState<Set<string>>(new Set()); // excluded brands
+  const [exBrands,    setExBrands]    = useState<Set<string>>(() => memo?.exBrands ?? new Set()); // excluded brands
   const [loading,     setLoading]     = useState(false);
-  const [lastFetch,   setLastFetch]   = useState<Date|null>(null);
+  const [lastFetch,   setLastFetch]   = useState<Date|null>(() => memo?.at ?? null);
   const [imgLoading,  setImgLoading]  = useState(false);
   const reportRef = useRef<HTMLDivElement>(null);
 
-  const [defaultApplied, setDefaultApplied] = useState(false);
+  const defaultApplied = useRef(!!memo);
   // Empty means live stock. A date rebuilds the position as it stood that day.
   const [asOf, setAsOf] = useState('');
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true);
     try {
       const r = await api<ReportData>(`/inventory/stock-report${asOf ? `?date=${asOf}` : ''}`);
       setData(r);
       setLastFetch(new Date());
       // On first load, default to showing only Smartphones + Tabs
-      if (!defaultApplied) {
-        setDefaultApplied(true);
+      if (!defaultApplied.current) {
+        defaultApplied.current = true;
         const nonDefault = r.categories
           .filter(c => {
             const n = c.name.toLowerCase();
@@ -213,11 +221,13 @@ export function StockReport() {
           .map(c => c.id);
         if (nonDefault.length > 0) setExCats(new Set(nonDefault));
       }
-    } catch (e: any) { alert('Failed to load: ' + e.message); }
+    } catch (e: any) { if (!quiet) alert('Failed to load: ' + e.message); }
     finally { setLoading(false); }
-  }, [defaultApplied, asOf]);
+  }, [asOf]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(!asOf && !!memo); }, [load, asOf]);
+  // Keep the live view for the next visit (a past-date view is not kept).
+  useEffect(() => { if (data && !asOf) memo = { data, exCats, exBrands, at: lastFetch ?? new Date() }; }, [data, exCats, exBrands, asOf, lastFetch]);
 
   // Filtered rows — exclude unchecked cats/brands
   const rows = (data?.rows ?? []).filter(r => {
@@ -539,8 +549,10 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
     <div className="page-root" style={{ display:'flex', flexDirection:'column', height:'100vh', background:'#f8fafc', overflow:'hidden' }}>
 
       {/* Header */}
-      <div style={{ padding:'10px 16px', background:'#fff', borderBottom:'1px solid #e2e8f0', display:'flex', alignItems:'center', gap:10, flexShrink:0, flexWrap:'wrap' }}>
-        <div>
+      <div style={isPhone
+        ? { padding:'10px 12px', background:'#fff', borderBottom:'1px solid #e2e8f0', display:'grid', gridTemplateColumns:'minmax(0,1fr) minmax(0,1fr)', gap:8, flexShrink:0 }
+        : { padding:'10px 16px', background:'#fff', borderBottom:'1px solid #e2e8f0', display:'flex', alignItems:'center', gap:10, flexShrink:0, flexWrap:'wrap' }}>
+        <div style={isPhone ? { gridColumn:'1 / -1' } : undefined}>
           <div className="dup-title" style={{ fontSize:15, fontWeight:800, color:'#0f172a' }}>Stock Report</div>
           <div style={{ fontSize:11, color: asOf ? '#b45309' : '#94a3b8' }}>
             {asOf
@@ -548,7 +560,7 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
               : `Brand-wise · ${lastFetch ? fmtDate(lastFetch) : 'Loading…'}`}
           </div>
         </div>
-        <div style={{ flex:1 }} />
+        {!isPhone && <div style={{ flex:1 }} />}
 
         {/* Multi-select: Categories */}
         <MultiSelect
@@ -572,7 +584,7 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
 
         {(exCats.size > 0 || exBrands.size > 0) && (
           <button onClick={() => { setExCats(new Set()); setExBrands(new Set()); }}
-            style={{ height:34, padding:'0 12px', border:'1px solid #fca5a5', borderRadius:8, background:'#fef2f2', fontSize:12, color:'#dc2626', cursor:'pointer', fontWeight:600 }}>
+            style={{ gridColumn: isPhone ? '1 / -1' : undefined, height:34, padding:'0 12px', border:'1px solid #fca5a5', borderRadius:8, background:'#fef2f2', fontSize:12, color:'#dc2626', cursor:'pointer', fontWeight:600 }}>
             ✕ Reset
           </button>
         )}
@@ -590,27 +602,27 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
                    color:'#0f172a', cursor:'pointer',
                    // Sized to its content. Without an explicit width it stretches
                    // to fill the toolbar row and dwarfs every control beside it.
-                   width:150, flex:'0 0 auto', boxSizing:'border-box' }}
+                   width: isPhone ? '100%' : 150, flex:'0 0 auto', boxSizing:'border-box', minHeight: isPhone ? 40 : undefined }}
         />
         {asOf && (
           <button onClick={() => setAsOf('')}
-            style={{ height:34, padding:'0 12px', border:'1px solid #fde68a', borderRadius:8, background:'#fffbeb', fontSize:12, color:'#92400e', cursor:'pointer', fontWeight:600 }}>
+            style={{ gridColumn: isPhone ? '1 / -1' : undefined, height:34, padding:'0 12px', border:'1px solid #fde68a', borderRadius:8, background:'#fffbeb', fontSize:12, color:'#92400e', cursor:'pointer', fontWeight:600 }}>
             ← Live stock
           </button>
         )}
 
-        <button onClick={load} disabled={loading}
+        <button onClick={() => load()} disabled={loading}
           style={{ height:34, padding:'0 12px', border:'1px solid #e2e8f0', borderRadius:8, background:'#fff', fontSize:12, color:'#64748b', cursor:'pointer' }}>
           🔄
         </button>
 
         <button onClick={handlePrint} disabled={loading || rows.length === 0}
-          style={{ height:34, padding:'0 14px', border:'none', borderRadius:8, background:'#2563eb', color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
+          style={{ height:34, padding:'0 14px', border:'none', borderRadius:8, background:'#2563eb', color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
           🖨️ Print
         </button>
 
         <button onClick={handleImageDownload} disabled={loading || imgLoading || rows.length === 0}
-          style={{ height:34, padding:'0 14px', border:'none', borderRadius:8, background: imgLoading ? '#94a3b8' : '#16a34a', color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
+          style={{ height:34, padding:'0 14px', border:'none', borderRadius:8, background: imgLoading ? '#94a3b8' : '#16a34a', color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
           {imgLoading ? '⏳ Generating…' : '🖼️ Download Image'}
         </button>
       </div>
@@ -693,19 +705,19 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
                   return (
                 <div key={brand} style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:10, overflow:'hidden', boxShadow:'0 1px 3px rgba(0,0,0,.04)', marginBottom:14 }}>
                   <div style={{ background:'#1e293b', color:'#fff', padding:'7px 12px', fontSize:12, fontWeight:800 }}>{brand}</div>
-                  <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
+                  <table className="m-fit" style={{ width:'100%', borderCollapse:'collapse', fontSize: isPhone ? 12 : 11 }}>
                     <thead>
                       <tr>
                         <th style={{ ...thS, padding:'5px 10px', fontSize:9 }}>Product Name</th>
-                        <th style={{ ...thS, padding:'5px 8px', fontSize:9, textAlign:'center', width:55 }}>Qty</th>
-                        <th style={{ ...thS, padding:'5px 8px', fontSize:9, textAlign:'center', color:'#16a34a', width:55 }}>Retail</th>
-                        <th style={{ ...thS, padding:'5px 8px', fontSize:9, textAlign:'center', color:'#7c3aed', width:45 }}>ACC</th>
+                        <th style={{ ...thS, padding: isPhone ? '5px 2px' : '5px 8px', fontSize:9, textAlign:'center', width: isPhone ? 38 : 55 }}>Qty</th>
+                        <th style={{ ...thS, padding: isPhone ? '5px 2px' : '5px 8px', fontSize:9, textAlign:'center', color:'#16a34a', width: isPhone ? 46 : 55 }}>Retail</th>
+                        <th style={{ ...thS, padding: isPhone ? '5px 2px' : '5px 8px', fontSize:9, textAlign:'center', color:'#7c3aed', width: isPhone ? 36 : 45 }}>ACC</th>
                       </tr>
                     </thead>
                     <tbody>
                       {bRows.map((r,idx) => (
                         <tr key={r.productId} style={{ background:idx%2===0?'#fff':'#fafafa', borderBottom:'1px solid #f1f5f9' }}>
-                          <td style={{ padding:'4px 10px', color:'#0f172a', fontSize:11 }}>
+                          <td style={{ padding: isPhone ? '6px 8px' : '4px 10px', color:'#0f172a', fontSize: isPhone ? 12.5 : 11, lineHeight:1.3 }}>
                             {r.model}
                             {!!r.demo && (
                               <span style={{ marginLeft:6, fontSize:9, fontWeight:700, color:'#d97706', background:'#fffbeb', padding:'1px 6px', borderRadius:8 }}>
@@ -734,7 +746,7 @@ th,td{border:.4pt solid #999;padding:1.5pt 3pt}
               </div>
             ))}
           </div>
-          <div style={{ marginTop:14, background:'#1e293b', borderRadius:10, padding:'10px 18px', display:'flex', gap:28, alignItems:'center' }}>
+          <div style={{ marginTop:14, background:'#1e293b', borderRadius:10, padding: isPhone ? '10px 14px' : '10px 18px', display:'flex', gap: isPhone ? '6px 16px' : 28, alignItems:'center', flexWrap:'wrap' }}>
             <span style={{ color:'#fff', fontWeight:700, fontSize:13 }}>GRAND TOTAL</span>
             <span style={{ color:'#93c5fd', fontSize:12 }}>Quantity: <strong style={{ color:'#fff' }}>{grandTotal}</strong></span>
             <span style={{ color:'#86efac', fontSize:12 }}>Retail: <strong style={{ color:'#fff' }}>{grandRetail}</strong></span>

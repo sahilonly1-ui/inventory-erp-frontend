@@ -721,6 +721,42 @@ export function OpeningStock() {
               <span style={{ fontSize: 14, fontWeight: 600 }}>No opening stock entries yet</span>
               <span style={{ fontSize: 13 }}>Switch to the Scan tab to add your inventory</span>
             </div>
+          ) : isPhone ? (
+            <div style={{ display: 'grid', gap: 10, padding: 12 }}>
+              {filteredHistory.map(entry => (
+                <div key={entry.id} className="sp-card">
+                  <div data-keep-row style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14.5, fontWeight: 700, color: '#0f172a', lineHeight: 1.3 }}>{entry.model}</div>
+                      <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 2 }}>{entry.brand} · <span style={{ fontFamily: 'monospace' }}>{entry.ean}</span></div>
+                    </div>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: '#16a34a', background: '#dcfce7', borderRadius: 999, padding: '3px 10px', whiteSpace: 'nowrap' }}>
+                      {entry.imeis.length ? `${entry.imeis.length} IMEI${entry.imeis.length !== 1 ? 's' : ''}` : `${entry.quantity} units`}
+                    </span>
+                  </div>
+                  <div data-keep-row style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+                    <span style={{ flex: 1, fontSize: 12, color: '#64748b' }}>{entry.warehouseName} · {fmtDate(entry.createdAt)} {fmtTime(entry.createdAt)}</span>
+                    {entry.imeis.length > 0 && (
+                      <button onClick={() => setExpandId(expandId === entry.id ? null : entry.id)}
+                        style={{ minHeight: 32, height: 32, padding: '0 10px', border: '1px solid #bfdbfe', borderRadius: 8, background: '#eff6ff', color: '#1d4ed8', fontSize: 12, fontWeight: 700 }}>
+                        {expandId === entry.id ? 'Hide' : 'IMEIs'}
+                      </button>
+                    )}
+                    <button onClick={() => deleteEntry(entry)} disabled={deleting === entry.id}
+                      style={{ minHeight: 32, height: 32, padding: '0 10px', border: '1px solid #fca5a5', borderRadius: 8, background: '#fef2f2', color: '#dc2626', fontSize: 12, fontWeight: 700, opacity: deleting === entry.id ? 0.6 : 1 }}>
+                      {deleting === entry.id ? 'Deleting…' : 'Delete'}
+                    </button>
+                  </div>
+                  {expandId === entry.id && entry.imeis.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                      {entry.imeis.map(im => (
+                        <span key={im} style={{ fontFamily: 'monospace', fontSize: 12, background: '#f0f9ff', border: '1px solid #bfdbfe', borderRadius: 6, padding: '3px 8px', color: '#1e40af' }}>{im}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           ) : (
             <div style={{ flex: 1, overflowY: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>

@@ -12,21 +12,49 @@ import { Login } from './pages/Login';
 // own chunk instead, fetched only when its route is actually visited.
 // Named exports are re-wrapped as default so React.lazy can load them; default
 // exports pass straight through.
-const Dashboard      = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
-const Products       = lazy(() => import('./pages/Products'));
-const Imei           = lazy(() => import('./pages/Imei').then(m => ({ default: m.Imei })));
-const Versions       = lazy(() => import('./pages/Versions').then(m => ({ default: m.Versions })));
-const Users          = lazy(() => import('./pages/Users'));
-const ProductHistory = lazy(() => import('./pages/ProductHistory'));
-const Suppliers      = lazy(() => import('./pages/Suppliers').then(m => ({ default: m.Suppliers })));
-const StockIn        = lazy(() => import('./pages/StockIn').then(m => ({ default: m.StockIn })));
-const OpeningStock   = lazy(() => import('./pages/OpeningStock').then(m => ({ default: m.OpeningStock })));
-const Specs          = lazy(() => import('./pages/Specs'));
-const StockReport    = lazy(() => import('./pages/StockReport').then(m => ({ default: m.StockReport })));
-const StockOut       = lazy(() => import('./pages/StockOut').then(m => ({ default: m.StockOut })));
-const Reports        = lazy(() => import('./pages/Reports').then(m => ({ default: m.Reports })));
-const MarketPrices   = lazy(() => import('./pages/MarketPrices'));
+const pages = {
+  Dashboard:      () => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })),
+  Products:       () => import('./pages/Products'),
+  Imei:           () => import('./pages/Imei').then(m => ({ default: m.Imei })),
+  Versions:       () => import('./pages/Versions').then(m => ({ default: m.Versions })),
+  Users:          () => import('./pages/Users'),
+  ProductHistory: () => import('./pages/ProductHistory'),
+  Suppliers:      () => import('./pages/Suppliers').then(m => ({ default: m.Suppliers })),
+  StockIn:        () => import('./pages/StockIn').then(m => ({ default: m.StockIn })),
+  OpeningStock:   () => import('./pages/OpeningStock').then(m => ({ default: m.OpeningStock })),
+  Specs:          () => import('./pages/Specs'),
+  StockReport:    () => import('./pages/StockReport').then(m => ({ default: m.StockReport })),
+  StockOut:       () => import('./pages/StockOut').then(m => ({ default: m.StockOut })),
+  Reports:        () => import('./pages/Reports').then(m => ({ default: m.Reports })),
+  MarketPrices:   () => import('./pages/MarketPrices'),
+};
+const Dashboard      = lazy(pages.Dashboard);
+const Products       = lazy(pages.Products);
+const Imei           = lazy(pages.Imei);
+const Versions       = lazy(pages.Versions);
+const Users          = lazy(pages.Users);
+const ProductHistory = lazy(pages.ProductHistory);
+const Suppliers      = lazy(pages.Suppliers);
+const StockIn        = lazy(pages.StockIn);
+const OpeningStock   = lazy(pages.OpeningStock);
+const Specs          = lazy(pages.Specs);
+const StockReport    = lazy(pages.StockReport);
+const StockOut       = lazy(pages.StockOut);
+const Reports        = lazy(pages.Reports);
+const MarketPrices   = lazy(pages.MarketPrices);
 const PriceAgent     = lazy(() => import('./pages/PriceAgent'));
+
+// Once the first screen is up, the other tabs are fetched quietly in the
+// background, one at a time, so opening any of them later is instant instead
+// of waiting on a download (in the app they come from the phone itself).
+if (typeof window !== 'undefined') {
+  const idle = (cb: () => void) => ('requestIdleCallback' in window ? (window as any).requestIdleCallback(cb, { timeout: 3000 }) : setTimeout(cb, 1200));
+  window.addEventListener('load', () => {
+    const queue = Object.values(pages);
+    const next = () => { const f = queue.shift(); if (f) f().catch(() => {}).finally(() => idle(next)); };
+    setTimeout(() => idle(next), 1500);
+  }, { once: true });
+}
 
 // A blank frame while a chunk downloads reads as a freeze; a small centred
 // spinner makes it obviously "loading" instead. Chunks are a few hundred KB on
