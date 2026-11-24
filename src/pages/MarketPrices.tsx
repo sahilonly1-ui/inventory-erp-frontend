@@ -14,13 +14,14 @@ const STORES: { key: StoreKey; label: string; color: string }[] = [
   { key: 'official', label: 'Brand site', color: '#475569' },
 ];
 interface Offer { bank: string | null; cardType: string | null; offerType: string; mode: string | null; amount: number | null; percent: number | null; maxDiscount: number | null; minTxn: number | null; summary: string; evidence: string; value: number }
-interface Snap { status: 'ok' | 'suspect' | 'unverified' | 'not_found' | 'not_listed' | 'blocked' | 'error'; price: number | null; mrp: number | null; inStock: boolean | null; title: string | null; offers: Offer[]; effectivePrice: number | null; bestOffer: string | null; priceText: string | null; notes: string | null; method: string | null; url: string; fetchedAt: string }
+interface Snap { status: 'ok' | 'suspect' | 'unverified' | 'not_found' | 'not_listed' | 'blocked' | 'error'; price: number | null; mrp: number | null; inStock: boolean | null; title: string | null; offers: Offer[]; effectivePrice: number | null; bestOffer: string | null; priceText: string | null; notes: string | null; method: string | null; url: string; fetchedAt: string; stockVia?: StoreKey }
 interface Link { url: string | null; lockedByUser: boolean; notListed: boolean; discoveredAt: string | null }
 interface StoreState { link: Link | null; latest: Snap | null; lastGood: Snap | null }
 interface Item { id: string; productId: string | null; name: string; brand: string | null; variant: string | null; source: 'auto' | 'manual'; active: boolean; priority: boolean; lastRefreshedAt: string | null; ean: string | null; ourPrice: number | null; specPrice: number | null; category: string | null; stock: number; colours?: number; requested: boolean; stores: Record<StoreKey, StoreState> }
 interface Status { lastAgentRun: string | null; requested: number; instantRun?: boolean; localOnline?: boolean; localSeen?: string | null; notWatchedBrands?: { brand: string; products: number }[] }
+interface Drop { itemId: string; name: string; brand: string | null; store: StoreKey; was: number; now: number; drop: number; pct: number; droppedAt: string; prevAt: string; url: string | null; inStock: boolean | null; effectivePrice: number | null; bestOffer: string | null; stock: number }
 interface RunStatus { configured: boolean; error?: string; run?: { number: number; status: string; conclusion: string | null; startedAt: string; updatedAt: string; url: string } | null }
-interface Settings { autoSyncInStock: boolean; autoSyncCategories: string[]; autoSyncBrands: string[]; includeOutOfStock: boolean; options?: { brands: string[]; categories: string[] }; defaultIntervalMins: number; priorityIntervalMins: number; stores: StoreKey[]; batchSize: number }
+interface Settings { autoSyncInStock: boolean; autoSyncCategories: string[]; autoSyncBrands: string[]; includeOutOfStock: boolean; recentDays?: number; options?: { brands: string[]; categories: string[] }; defaultIntervalMins: number; priorityIntervalMins: number; stores: StoreKey[]; batchSize: number }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 const inr = (n: number | null | undefined) => (n == null ? '—' : '₹' + Math.round(n).toLocaleString('en-IN'));
@@ -90,7 +91,14 @@ export default function MarketPrices() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
   const [q, setQ] = useState('');
-  const [filter, setFilter] = useState<'all' | 'stock' | 'starred' | 'custom' | 'paused'>('all');
+  const [filter, setFilter] = useState<'all' | 'stock' | 'nostock' | 'starred' | 'custom' | 'paused'>('all');
+  const [showDrops, setShowDrops] = useState(false);
+  const [drops, setDrops] = useState<Drop[] | null>(null);
+  const [dropDays, setDropDays] = useState(3);
+  useEffect(() => {
+    if (!isAdmin) return;
+    api<Drop[]>(`/price-watch/drops?days=${dropDays}`).then(setDrops).catch(() => setDrops([]));
+  }, [isAdmin, dropDays, status?.lastAgentRun]);
   const [cat, setCat] = useState('Smartphone');
   const [onlyCheap, setOnlyCheap] = useState(false);
   const [brand, setBrand] = useState('');
@@ -134,6 +142,7 @@ export default function MarketPrices() {
     return items.filter(i => {
       if (filter === 'paused' ? i.active : !i.active) return false;
       if (filter === 'stock' && i.stock <= 0) return false;
+      if (filter === 'nostock' && (!i.productId || i.stock > 0)) return false;
       if (filter === 'starred' && !i.priority) return false;
       if (filter === 'custom' && i.productId) return false;
       if (cat && (i.category ?? 'Not stocked') !== cat) return false;
@@ -205,6 +214,10 @@ export default function MarketPrices() {
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           {running && <MPill tone="brand">⟳ Scraper running…</MPill>}
+          <button style={{ ...btn(showDrops), background: showDrops ? '#15803d' : '#fff', color: showDrops ? '#fff' : '#15803d', borderColor: '#86efac' }}
+            title="Products whose price fell on a store — buy now" onClick={() => setShowDrops(v => !v)}>
+            📉 Price drops{drops ? ` (${drops.length})` : ''}
+          </button>
           <button style={btn()} disabled={!checkable.length} title="Check prices for the products currently shown"
             onClick={runCheck}>⟳ Refresh prices{checkable.length ? ` (${checkable.length})` : ''}</button>
           <button style={btn()} onClick={() => setShowSettings(true)}>⚙ Settings</button>
@@ -231,6 +244,7 @@ export default function MarketPrices() {
         <button onClick={() => setNotice('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1e40af', fontSize: 16 }}>×</button>
       </div>}
       {err && <Banner tone="bad">{err}</Banner>}
+      {showDrops && <DropsPanel drops={drops} days={dropDays} setDays={setDropDays} isPhone={isPhone} onOpen={id => { setShowDrops(false); setQ(''); setCat(''); setBrand(''); setFilter('all'); setOpen(id); setTimeout(() => document.getElementById(`mp-${id}`)?.scrollIntoView({ block: 'center' }), 200); }} />}
       {(cheapCount > 0 || onlyCheap) && (
         <div style={{ padding: '10px 14px', borderRadius: 10, background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', fontSize: 13, fontWeight: 700, marginBottom: 12, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ flex: 1 }}>⚠ {cheapCount} product{cheapCount === 1 ? ' is' : 's are'} priced below every website{cat ? ` in ${cat}` : ''} — you may be selling too cheap. Check and raise our price.</span>
@@ -265,7 +279,7 @@ export default function MarketPrices() {
           <option value="">All brands</option>
           {brandOptions.map(b => <option key={b} value={b}>{b}</option>)}
         </select>
-        {([['all', 'All'], ['stock', 'In stock'], ['starred', '★ Starred'], ['custom', 'Not stocked'], ['paused', 'Paused']] as const).map(([k, l]) => (
+        {([['all', 'All'], ['stock', 'In stock'], ['nostock', 'No stock'], ['starred', '★ Starred'], ['custom', 'Not stocked'], ['paused', 'Paused']] as const).map(([k, l]) => (
           <button key={k} onClick={() => setFilter(k)}
             style={{ ...btn(), height: 40, background: filter === k ? M.color.ink : '#fff', color: filter === k ? '#fff' : M.color.ink }}>{l}</button>
         ))}
@@ -317,13 +331,53 @@ export default function MarketPrices() {
       )}
 
       <div style={{ fontSize: 11.5, color: M.color.faint, marginTop: 12, lineHeight: 1.6 }}>
-        Prices are read from the live store pages by the price scraper, then sanity-checked before they are shown. Green price under each store = best <b>full-swipe</b> (non-EMI) bank deal. <b style={{ color: M.color.good }}>Green</b> = cheapest verified.
+        Prices are read from the live store pages by the price scraper, then sanity-checked before they are shown. Green price under each store = best <b>full-swipe bank-card discount</b> (wallet cashback like Amazon Pay ICICI only when no bank discount is shown). <b style={{ color: M.color.good }}>Green</b> = cheapest verified.
         <span style={{ color: M.color.warn }}> ⚠</span> = check it (possible wrong variant or unusual price). Effective price = price minus the best full-swipe (non-EMI) bank discount/cashback.
         Offers can depend on card type, EMI tenure and cart value — confirm on the store before quoting a customer.
       </div>
 
       {showAdd && <AddDialog onClose={() => setShowAdd(false)} onAdded={() => { setShowAdd(false); load(true); }} />}
       {showSettings && <SettingsDialog onClose={() => setShowSettings(false)} onSaved={() => { setShowSettings(false); load(true); }} />}
+    </div>
+  );
+}
+
+function DropsPanel({ drops, days, setDays, isPhone, onOpen }: { drops: Drop[] | null; days: number; setDays: (d: number) => void; isPhone: boolean; onOpen: (itemId: string) => void }) {
+  const label = (k: StoreKey) => STORES.find(s => s.key === k)?.label ?? k;
+  return (
+    <div style={{ background: '#fff', border: '1px solid #86efac', borderRadius: 12, padding: 14, marginBottom: 14 }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
+        <b style={{ fontSize: 15, color: '#15803d', flex: 1 }}>📉 Prices that dropped — good time to buy</b>
+        <span style={{ fontSize: 12, color: M.color.muted }}>Dropped in the last</span>
+        {[1, 3, 7, 30].map(d => (
+          <button key={d} onClick={() => setDays(d)} style={{ ...btn(d === days), height: 30, fontSize: 12, background: d === days ? '#15803d' : '#fff' }}>{d === 1 ? '24 hours' : `${d} days`}</button>
+        ))}
+      </div>
+      {drops === null ? <div style={{ color: M.color.faint, fontSize: 13 }}>Loading…</div>
+        : !drops.length ? <div style={{ color: M.color.faint, fontSize: 13 }}>No price drops in this period.</div>
+        : (
+          <div style={{ overflow: 'auto', maxHeight: 420 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: isPhone ? 640 : undefined }}>
+              <thead><tr>{['Product', 'Store', 'Was', 'Now', 'Drop', 'With offer', 'When', 'Our stock', ''].map(h => (
+                <th key={h} style={{ textAlign: 'left', padding: '6px 8px', fontSize: 11, color: M.color.muted, borderBottom: `1px solid ${M.color.line}`, position: 'sticky', top: 0, background: '#fff' }}>{h}</th>))}</tr></thead>
+              <tbody>
+                {drops.map(d => (
+                  <tr key={d.itemId + d.store} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '7px 8px' }}><button onClick={() => onOpen(d.itemId)} style={{ background: 'none', border: 'none', padding: 0, fontWeight: 700, color: M.color.ink, cursor: 'pointer', textAlign: 'left' }}>{d.name}</button></td>
+                    <td style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>{label(d.store)}{d.inStock === false && <span style={{ color: M.color.bad, fontWeight: 700, fontSize: 11 }}> OOS</span>}</td>
+                    <td style={{ padding: '7px 8px', color: M.color.faint, textDecoration: 'line-through', whiteSpace: 'nowrap' }}>{inr(d.was)}</td>
+                    <td style={{ padding: '7px 8px', fontWeight: 800, color: '#15803d', whiteSpace: 'nowrap' }}>{inr(d.now)}</td>
+                    <td style={{ padding: '7px 8px', fontWeight: 700, color: '#15803d', whiteSpace: 'nowrap' }}>−{inr(d.drop)} ({d.pct}%)</td>
+                    <td style={{ padding: '7px 8px', whiteSpace: 'nowrap' }} title={d.bestOffer ?? ''}>{d.effectivePrice ? inr(d.effectivePrice) : '—'}</td>
+                    <td style={{ padding: '7px 8px', whiteSpace: 'nowrap', color: M.color.muted }} title={`Was ${inr(d.was)} on ${fmtStamp(d.prevAt)}`}>{ago(d.droppedAt)}</td>
+                    <td style={{ padding: '7px 8px', whiteSpace: 'nowrap', fontWeight: 700, color: d.stock > 0 ? M.color.good : M.color.bad }}>{d.stock > 0 ? d.stock : 'No stock'}</td>
+                    <td style={{ padding: '7px 8px' }}>{d.url && <a href={d.url} target="_blank" rel="noreferrer" style={{ ...btn(true), height: 28, fontSize: 12, display: 'inline-flex', alignItems: 'center', textDecoration: 'none', background: '#15803d' }}>Buy ↗</a>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
     </div>
   );
 }
@@ -347,6 +401,7 @@ function PriceCell({ st, cheapest, running }: { st: StoreState; cheapest: boolea
         {inr(s.price)}{warn && <span style={{ color: M.color.warn, fontSize: 12 }}> ⚠</span>}
         {s.inStock === false && <span style={{ fontSize: 10.5, color: M.color.bad, fontWeight: 700 }}> OOS</span>}
       </div>
+      {s.stockVia && <div style={{ fontSize: 10.5, color: M.color.muted }}>sold via {STORES.find(x => x.key === s.stockVia)?.label}</div>}
       {s.mrp && s.mrp > (s.price ?? 0) && <div style={{ fontSize: 11, color: M.color.faint, textDecoration: 'line-through' }}>{inr(s.mrp)}</div>}
       {s.effectivePrice != null && (
         <div title={`Best bank / payment offer: ${s.bestOffer}${/ · EMI$/.test(s.bestOffer ?? '') ? ' (only on EMI — no full-payment offer on this page)' : ''}\nOpen the row for every offer.`}>
@@ -392,11 +447,13 @@ function ItemRow({ it, open, onToggle, act }: { it: Item; open: boolean; onToggl
   const td: React.CSSProperties = { padding: '11px 12px', verticalAlign: 'top', borderBottom: open ? 'none' : '1px solid #f1f5f9' };
   return (
     <>
-      <tr onClick={onToggle} style={{ cursor: 'pointer', background: open ? '#f8fafc' : undefined }}>
+      <tr id={`mp-${it.id}`} onClick={onToggle} style={{ cursor: 'pointer', background: open ? '#f8fafc' : undefined }}>
         <td style={{ ...td, maxWidth: 280 }}><ItemTitle it={it} /></td>
         <td style={{ ...td, whiteSpace: 'nowrap' }}>
           <OurPrice it={it} act={act} />
-          {it.productId && <div style={{ fontSize: 11, color: it.stock > 0 ? M.color.good : M.color.faint }}>Stock {it.stock}</div>}
+          {it.productId && (it.stock > 0
+            ? <div style={{ fontSize: 11, color: M.color.good, fontWeight: 700 }}>Stock {it.stock}</div>
+            : <div style={{ fontSize: 11, color: M.color.bad, fontWeight: 700 }} title="No stock with us — check where it can be bought">No stock</div>)}
         </td>
         {STORES.map(s => <td key={s.key} style={{ ...td, whiteSpace: 'nowrap' }}><PriceCell st={it.stores[s.key]} cheapest={low?.store === s.key} running={it.requested} /></td>)}
         <td style={{ ...td, whiteSpace: 'nowrap' }}>
@@ -470,7 +527,7 @@ function ItemCard({ it, open, onToggle, act }: { it: Item; open: boolean; onTogg
   const our = ourPriceOf(it);
   return (
     <MCard>
-      <div onClick={onToggle} style={{ cursor: 'pointer' }}>
+      <div id={`mp-${it.id}`} onClick={onToggle} style={{ cursor: 'pointer' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
           <ItemTitle it={it} />
           <div style={{ textAlign: 'right', flexShrink: 0 }}>
@@ -488,6 +545,7 @@ function ItemCard({ it, open, onToggle, act }: { it: Item; open: boolean; onTogg
           <div style={{ padding: 8, borderRadius: 9, background: '#f8fafc' }}>
             <div style={{ fontSize: 10.5, fontWeight: 700, color: M.color.muted }}>Our price</div>
             <OurPrice it={it} act={act} />
+            {it.productId && <div style={{ fontSize: 11, fontWeight: 700, color: it.stock > 0 ? M.color.good : M.color.bad }}>{it.stock > 0 ? `Stock ${it.stock}` : 'No stock'}</div>}
             {our.value && low ? <Diff ours={our.value} market={low.eff} isMrp={our.isMrp} /> : null}
           </div>
         </div>
@@ -547,7 +605,14 @@ function StoreDetail({ itemId, store, st, act }: { itemId: string; store: typeof
     <div style={{ background: '#fff', border: `1px solid ${M.color.line}`, borderTop: `3px solid ${store.color}`, borderRadius: 10, padding: 12, fontSize: 12.5 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
         <b style={{ color: M.color.ink }}>{store.label}</b>
-        {st.link?.url && <a href={st.link.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: M.color.brand, fontWeight: 600 }}>Open ↗</a>}
+        <span style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          {(st.link?.url || snap?.url) && <a href={st.link?.url || snap?.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: M.color.brand, fontWeight: 600 }}>Open ↗</a>}
+          {(st.link?.url || snap?.url) && (
+            <button title="This page is the wrong product: forget it and its prices, never use it again, search once more"
+              onClick={() => { if (confirm(`Remove this ${store.label} link as wrong?\n\nIts prices are deleted, it is never picked again for this product, and ${store.label} is searched once more. If nothing right is found, ${store.label} stays empty.`)) act(`/price-watch/items/${itemId}/links/${store.key}`, { method: 'DELETE' }); }}
+              style={{ background: 'none', border: 'none', padding: 0, color: M.color.bad, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>✕ Remove link</button>
+          )}
+        </span>
       </div>
 
       {snap && v.kind === 'price' && (
@@ -728,6 +793,7 @@ function SettingsDialog({ onClose, onSaved }: { onClose: () => void; onSaved: ()
           </div>
         </div>
         <div style={row}><span>Also watch products with <b>no stock</b></span><input type="checkbox" checked={s.includeOutOfStock} onChange={e => set({ includeOutOfStock: e.target.checked })} /></div>
+        <div style={row}><span>Also watch products <b>added or changed</b> in Product Master in the last … days, even with no stock (0 = off)</span>{num(s.recentDays ?? 90, 'recentDays')}</div>
       </>}
       <div style={row}><span>Re-check normal items after (minutes)</span>{num(s.defaultIntervalMins, 'defaultIntervalMins')}</div>
       <div style={row}><span>Re-check ★ starred items after (minutes)</span>{num(s.priorityIntervalMins, 'priorityIntervalMins')}</div>
