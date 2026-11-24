@@ -1,0 +1,178 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Festive looks — everything is scoped under html.festive, so taking the class
+   off restores the original interface exactly. Visual only. The colours come from
+   CSS variables set per festival (src/theme/festivals.ts).
+   ═══════════════════════════════════════════════════════════════════════════ */
+@import url('https://fonts.googleapis.com/css2?family=Yatra+One&display=swap');
+
+/* Page: soft colour with a faint dotted (rangoli) pattern */
+html.festive body {
+  background-color: var(--fx-page);
+  background-image:
+    radial-gradient(circle at 20px 20px, var(--fx-dot1) 2px, transparent 3px),
+    radial-gradient(circle at 60px 60px, var(--fx-dot2) 2px, transparent 3px);
+  background-size: 80px 80px;
+}
+
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+html.festive .d-sidebar,
+html.festive .m-drawer {
+  background:
+    radial-gradient(120% 60% at 0% 0%, color-mix(in srgb, var(--fx-accent) 22%, transparent), transparent 60%),
+    linear-gradient(175deg, var(--fx-nav1) 0%, var(--fx-nav2) 55%, var(--fx-nav3) 100%);
+  border-right: 2px solid var(--fx-accent);
+  box-shadow: 4px 0 24px rgba(0, 0, 0, .18);
+}
+html.festive .d-sidebar-head,
+html.festive .m-drawer-head { border-bottom: 1px solid var(--nav-line); }
+html.festive .nav-brand-name { color: #fffaf0; font-family: 'Yatra One', var(--font); font-size: 16px; letter-spacing: .3px; }
+html.festive .nav-brand-sub { color: var(--fx-accent) !important; }
+html.festive .nav-logo {
+  background: conic-gradient(from 0deg, var(--fx-accent), var(--fx-btn2), var(--fx-btn1), var(--fx-accent));
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, .25), 0 0 14px color-mix(in srgb, var(--fx-accent) 70%, transparent);
+  animation: dwGlow 3s ease-in-out infinite;
+}
+html.festive .nav-group-label { color: var(--fx-accent); }
+html.festive .nav-link { color: rgba(255, 250, 240, .9); }
+html.festive .nav-link:hover { background: rgba(255, 255, 255, .08); color: #fff; }
+html.festive .nav-link.active {
+  background: linear-gradient(90deg, var(--fx-accent), var(--fx-btn2));
+  color: var(--fx-ink); font-weight: 700;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--fx-accent) 55%, transparent);
+}
+html.festive .nav-footer { border-top-color: var(--nav-line); }
+html.festive .nav-user-name { color: #fffaf0; }
+html.festive .nav-user-role { color: var(--fx-accent); }
+html.festive .nav-avatar { background: linear-gradient(135deg, var(--fx-accent), var(--fx-btn2)); color: var(--fx-ink); }
+html.festive .nav-signout { color: #ffe2c2 !important; }
+
+/* Sidebar look switch */
+.fx-switch { padding: 6px 10px 8px; }
+.fx-switch-label { font-size: 12px; font-weight: 700; color: #b45309; margin-bottom: 4px; }
+.fx-switch-select { width: 100%; font-size: 12px; padding: 5px 6px; border-radius: 7px; border: 1px solid #e4e7ec; background: #fff; color: #344054; cursor: pointer; }
+.fx-switch-next { font-size: 11px; color: #667085; margin-top: 4px; }
+html.festive .fx-switch-label { color: var(--fx-accent); }
+html.festive .fx-switch-select { background: rgba(255, 255, 255, .1); color: #fffaf0; border-color: var(--nav-line); }
+html.festive .fx-switch-select option, html.festive .fx-switch-select optgroup { color: #1d2939; background: #fff; }
+
+/* Phone header */
+html.festive .m-header {
+  background: linear-gradient(90deg, var(--fx-nav1), var(--fx-nav2)) !important;
+  color: #fffaf0; border-bottom: 2px solid var(--fx-accent);
+}
+html.festive .m-header .m-icon-btn, html.festive .m-title { color: #fffaf0 !important; }
+
+/* ── Top: toran / bunting / tricolour, lights, greeting ─────────────────── */
+.dw-top { position: relative; flex-shrink: 0; pointer-events: none; z-index: 5; }
+.dw-toran {
+  height: 16px;
+  background:
+    radial-gradient(circle at 10px 6px, #ffb300 5px, #f57c00 6px, transparent 7px) 0 0 / 20px 16px repeat-x,
+    linear-gradient(#2e7d32, #2e7d32) 0 0 / 100% 3px no-repeat;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .15));
+}
+.dw-toran::after {
+  content: ''; position: absolute; left: 0; right: 0; top: 10px; height: 22px;
+  background: radial-gradient(ellipse 10px 14px at 50% 0, transparent 9px, #ffa000 10px, #ffa000 11px, transparent 12px) 0 0 / 60px 22px repeat-x;
+  opacity: .85;
+}
+/* Bunting: a string of little triangular flags */
+.fx-bunting { display: flex; justify-content: space-between; height: 16px; border-top: 2px solid color-mix(in srgb, var(--fx-greet) 60%, transparent); overflow: hidden; }
+.fx-bunting i { width: 0; height: 0; border-left: 9px solid transparent; border-right: 9px solid transparent; border-top: 14px solid; display: block; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .15)); }
+/* Tricolour band */
+.fx-tricolour { display: flex; flex-direction: column; height: 12px; }
+.fx-tricolour i { flex: 1; display: block; }
+.fx-tricolour i:nth-child(1) { background: #ff9933; }
+.fx-tricolour i:nth-child(2) { background: #fff; background-image: radial-gradient(circle, #000080 1.6px, transparent 2px); background-size: 4px 4px; background-position: center; background-repeat: no-repeat; }
+.fx-tricolour i:nth-child(3) { background: #138808; }
+.dw-lights { display: flex; justify-content: space-between; padding: 0 10px; margin-top: 10px; height: 10px; }
+.fx-top-bunting .dw-lights { margin-top: 4px; }
+.dw-lights i { width: 7px; height: 7px; border-radius: 50%; display: block; animation: dwTwinkle 2.4s ease-in-out infinite; }
+.dw-greet {
+  text-align: center; font-family: 'Yatra One', var(--font); font-size: 15px; line-height: 1.1;
+  padding: 4px 8px 6px; color: var(--fx-greet);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--fx-accent) 18%, transparent), transparent);
+  text-shadow: 0 1px 0 #fff;
+}
+.fx-top-tricolour .dw-greet { padding-top: 6px; }
+.dw-greet .dw-sub { font-family: var(--font); font-size: 11px; font-weight: 700; color: var(--brand-h); letter-spacing: .04em; }
+.fx-emoji { font-family: 'Segoe UI Symbol', 'Noto Sans Symbols', 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif; }
+html.fx-gurpurab .fx-emoji { color: #ef7d00; text-shadow: none; font-size: 1.1em; }
+@media (max-width: 760px) { .dw-greet { font-size: 13px; } .dw-lights { margin-top: 8px; } }
+
+/* ── Ambient: corner emoji + a gentle effect (never block clicks) ───────── */
+.dw-ambient { position: fixed; inset: 0; pointer-events: none; z-index: 2; overflow: hidden; }
+.dw-diya { position: absolute; bottom: 8px; font-size: 26px; filter: drop-shadow(0 0 10px color-mix(in srgb, var(--fx-accent) 90%, transparent)); animation: dwFlicker 1.6s ease-in-out infinite; }
+.dw-diya.l { left: calc(var(--sw, 220px) + 10px); }
+.dw-diya.r { right: 12px; animation-delay: .5s; }
+html.fx-gurpurab .dw-diya { color: #ef7d00; font-family: 'Segoe UI Symbol', 'Noto Sans Symbols', sans-serif; }
+@media (max-width: 760px) { .dw-diya.l { left: 8px; } .dw-diya { font-size: 20px; } }
+.dw-spark {
+  position: absolute; top: -10px; width: 4px; height: 4px; border-radius: 50%;
+  animation: dwFall 7s linear infinite; opacity: 0;
+}
+/* Confetti: little coloured squares turning as they fall (Holi, New Year, national days) */
+.fx-fx-confetti .dw-spark { width: 6px; height: 6px; border-radius: 1px; box-shadow: none !important; animation-name: fxConfetti; }
+/* Petals: soft round flowers drifting down */
+.fx-fx-petals .dw-spark { width: 7px; height: 7px; border-radius: 60% 0 60% 0; box-shadow: none !important; animation-name: fxPetal; }
+/* Snow */
+.fx-fx-snow .dw-spark { width: 5px; height: 5px; background: #fff; box-shadow: 0 0 4px 1px rgba(160, 190, 220, .9); animation-name: fxSnow; }
+/* Rising embers (Lohri bonfire) */
+.fx-fx-rise .dw-spark { top: auto; bottom: -10px; width: 4px; height: 4px; animation-name: fxRise; }
+
+/* ── Controls & surfaces across every tab ───────────────────────────────── */
+html.festive .btn-primary,
+html.festive .pg-btn.on,
+html.festive .bulk-apply-btn {
+  background: linear-gradient(135deg, var(--fx-btn1), var(--fx-btn2)) !important;
+  border-color: var(--fx-btn2) !important; color: #fff !important;
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--fx-btn2) 30%, transparent);
+}
+html.festive .search-input:focus,
+html.festive .f-select:focus { border-color: var(--brand); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 15%, transparent); }
+html.festive .modal { border-top: 4px solid var(--fx-accent); box-shadow: 0 20px 50px rgba(0, 0, 0, .22); }
+html.festive .drawer-tab.on { color: var(--brand); border-bottom-color: var(--brand); }
+
+/* Many screens colour things inline. Recolour the main ones by their value:
+   the app blue becomes the festival colour, the dark slate headers the sidebar colour. */
+html.festive [style*="background: rgb(37, 99, 235)"]:not(.dw-plain *),
+html.festive [style*="background-color: rgb(37, 99, 235)"]:not(.dw-plain *),
+html.festive [style*="background: rgb(29, 78, 216)"]:not(.dw-plain *) {
+  background: linear-gradient(135deg, var(--fx-btn1), var(--fx-btn2)) !important;
+  border-color: var(--fx-btn2) !important;
+}
+html.festive [style*="color: rgb(37, 99, 235)"]:not(.dw-plain *),
+html.festive [style*="color: rgb(29, 78, 216)"]:not(.dw-plain *) { color: var(--brand-h) !important; }
+html.festive [style*="border-bottom: 2px solid rgb(37, 99, 235)"]:not(.dw-plain *),
+html.festive [style*="border-color: rgb(37, 99, 235)"]:not(.dw-plain *),
+html.festive [style*="border: 1.5px solid rgb(37, 99, 235)"]:not(.dw-plain *) { border-color: var(--fx-btn2) !important; }
+html.festive [style*="background: rgb(30, 41, 59)"]:not(.dw-plain *),
+html.festive [style*="background: rgb(15, 23, 42)"]:not(.dw-plain *),
+html.festive [style*="background-color: rgb(30, 41, 59)"]:not(.dw-plain *) {
+  background: linear-gradient(90deg, var(--fx-nav1), var(--fx-nav2)) !important;
+  border-bottom: 1px solid var(--fx-accent);
+}
+html.festive [style*="background: rgb(239, 246, 255)"]:not(.dw-plain *),
+html.festive [style*="background: rgb(238, 242, 255)"]:not(.dw-plain *) { background: var(--brand-l) !important; }
+html.festive [style*="background: rgb(248, 250, 252)"]:not(.dw-plain *) { background: var(--surf-2) !important; }
+
+/* Table headers and cards get a warm touch */
+html.festive thead th:not(.dw-plain *) { background-color: var(--fx-head); }
+html.festive .card, html.festive .stat-card { border-color: var(--bdr); }
+
+/* ── Animations ─────────────────────────────────────────────────────────── */
+@keyframes dwTwinkle { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.8); } }
+@keyframes dwFlicker { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-1px) scale(1.04); } }
+@keyframes dwGlow { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.15); } }
+@keyframes dwFall { 0% { transform: translateY(0); opacity: 0; } 10% { opacity: 1; } 80% { opacity: .9; } 100% { transform: translateY(105vh); opacity: 0; } }
+@keyframes fxConfetti { 0% { transform: translateY(0) rotate(0); opacity: 0; } 10% { opacity: .9; } 100% { transform: translateY(105vh) rotate(540deg); opacity: 0; } }
+@keyframes fxPetal { 0% { transform: translate(0, 0) rotate(0); opacity: 0; } 10% { opacity: .85; } 50% { transform: translate(18px, 52vh) rotate(180deg); } 100% { transform: translate(-12px, 105vh) rotate(360deg); opacity: 0; } }
+@keyframes fxSnow { 0% { transform: translate(0, 0); opacity: 0; } 10% { opacity: 1; } 50% { transform: translate(14px, 52vh); } 100% { transform: translate(-8px, 105vh); opacity: 0; } }
+@keyframes fxRise { 0% { transform: translate(0, 0); opacity: 0; } 15% { opacity: 1; } 100% { transform: translate(10px, -70vh); opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .dw-lights i, .dw-diya, .dw-spark, html.festive .nav-logo { animation: none !important; }
+  .dw-spark { display: none; }
+}
+/* Printing from the browser keeps the plain look. */
+@media print { .dw-top, .dw-ambient { display: none !important; } }
