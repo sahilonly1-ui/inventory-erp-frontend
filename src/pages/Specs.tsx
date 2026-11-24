@@ -32,6 +32,18 @@ const needsPrice = (r: { priceEdited: boolean; price: number; costPrice: number 
 // Specs the AI filled from its own knowledge (no web page) — salesman should verify before quoting.
 const fromAi = (r: Row) => (r.sources ?? []).includes('ai:knowledge');
 
+// "₹1,500 off · RBL Bank · Credit Card · Full swipe" → "₹1,500 off · RBL Bank CC" (as on Market Prices).
+function shortOffer(b: string | null | undefined): string {
+  if (!b) return '';
+  const parts = b.split(' · ');
+  const short = (t: string) => t.replace(/^Credit Card$/, 'CC').replace(/^Debit Card$/, 'DC').replace(/^Credit & Debit$/, 'CC/DC');
+  const saving = /^₹/.test(parts[0]) ? parts.shift()! : '';
+  const bank = parts[0] || '';
+  const card = parts[1] && !/swipe|emi/i.test(parts[1]) ? short(parts[1]) : '';
+  const emi = /^emi$/i.test(parts[parts.length - 1] || '') ? ' (EMI)' : '';
+  return [saving, [bank, card].filter(Boolean).join(' ') + emi].filter(Boolean).join(' · ');
+}
+
 // The last sheet of each category is kept in this browser and shown at once; the fresh
 // one replaces it a moment later.
 const cacheKey = (id: string) => `erp_specs_sheet_${id}`;
@@ -154,7 +166,7 @@ export default function Specs() {
         <td class="model">${grouped ? '' : `<span class="bd">${esc(r.brand)}</span>`}${esc(r.model)}${!r.manual && fromAi(r) ? ' *' : ''}</td>
         <td class="price">${inr(r.price)}</td>
         <td class="stock">${r.qty}</td>
-        ${marketOn ? `<td class="price">${r.market ? inr(r.market.effective) + `<div class="mk">${esc(r.market.store)}</div>` : '—'}</td>` : ''}
+        ${marketOn ? `<td class="price">${r.market ? inr(r.market.price) + `<div class="mk">${esc(r.market.store)}</div>` + (r.market.effective < r.market.price ? `<div class="mko">${inr(r.market.effective)} with offer</div><div class="mk">${esc(shortOffer(r.market.offer))}</div>` : '') : '—'}</td>` : ''}
         ${r.status === 'OK' || Object.keys(r.specs).length
           ? f.map(x => `<td>${esc(r.specs[x.key] || '—')}</td>`).join('')
           : `<td colspan="${f.length}" class="na">Specifications not available</td>`}
@@ -179,6 +191,7 @@ td.price{font-weight:800;white-space:nowrap}
 td.stock{text-align:center;font-weight:800}
 td.na{color:#888;font-style:italic}
 .mk{font-size:6pt;font-weight:600;color:#64748b}
+.mko{font-size:6.5pt;font-weight:700;color:#15803d}
 .ft{margin-top:2mm;font-size:6.5pt;color:#666}
 </style></head><body>
 <div class="hd"><h1>${esc(sheet.category.name)} specifications</h1>
@@ -270,7 +283,7 @@ td.na{color:#888;font-style:italic}
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: isPhone ? 900 : undefined }}>
             <colgroup>
               <col style={{ width: '14%' }} /><col style={{ width: '6.5%' }} /><col style={{ width: '5%' }} />
-              {marketOn && <col style={{ width: '7%' }} />}
+              {marketOn && <col style={{ width: '8.5%' }} />}
               {fields.map(f => <col key={f.key} />)}
             </colgroup>
             <thead><tr>
@@ -355,10 +368,14 @@ td.na{color:#888;font-style:italic}
                       </td>
                       {marketOn && (
                         <td style={{ ...cell, whiteSpace: 'nowrap' }}
-                          title={r.market ? `${r.market.store}: ${inr(r.market.price)}${r.market.effective < r.market.price ? ` · ${inr(r.market.effective)} with ${r.market.offer ?? 'bank offer'}` : ''}` : 'No current market price (see Market Prices)'}>
+                          title={r.market ? `Lowest market price — ${r.market.store}: ${inr(r.market.price)}${r.market.effective < r.market.price ? `\n${inr(r.market.effective)} with ${r.market.offer ?? 'bank offer'}` : ''}` : 'No current market price (see Market Prices)'}>
                           {r.market ? <>
-                            <div style={{ fontWeight: 800, color: r.market.effective < r.price ? '#b91c1c' : '#166534' }}>{inr(r.market.effective)}</div>
-                            <div style={{ fontSize: 10, color: '#64748b' }}>{r.market.store}{r.market.effective < r.market.price ? ' · with offer' : ''}</div>
+                            <div style={{ fontWeight: 800, fontSize: 13.5, color: '#0f172a' }}>{inr(r.market.price)}</div>
+                            <div style={{ fontSize: 10, color: '#64748b' }}>{r.market.store}</div>
+                            {r.market.effective < r.market.price && <>
+                              <div style={{ fontSize: 11.5, color: '#15803d', fontWeight: 700 }}>{inr(r.market.effective)} <span style={{ fontWeight: 500, fontSize: 10 }}>with offer</span></div>
+                              <div style={{ fontSize: 10, color: '#64748b', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }}>{shortOffer(r.market.offer)}</div>
+                            </>}
                           </> : <span style={{ color: '#cbd5e1' }}>—</span>}
                         </td>
                       )}
