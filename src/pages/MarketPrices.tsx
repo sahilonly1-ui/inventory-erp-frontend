@@ -97,7 +97,8 @@ export default function MarketPrices() {
   const [dropDays, setDropDays] = useState(3);
   useEffect(() => {
     if (!isAdmin) return;
-    api<Drop[]>(`/price-watch/drops?days=${dropDays}`).then(setDrops).catch(() => setDrops([]));
+    // Out-of-stock listings can't be bought, so they are no deal.
+    api<Drop[]>(`/price-watch/drops?days=${dropDays}`).then(d => setDrops(d.filter(x => x.inStock !== false))).catch(() => setDrops([]));
   }, [isAdmin, dropDays, status?.lastAgentRun]);
   const [cat, setCat] = useState('Smartphone');
   const [onlyCheap, setOnlyCheap] = useState(false);
