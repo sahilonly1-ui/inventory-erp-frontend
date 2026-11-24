@@ -36,7 +36,7 @@ html.festive .nav-group-label { color: var(--fx-accent); }
 html.festive .nav-link { color: rgba(255, 250, 240, .9); }
 html.festive .nav-link:hover { background: rgba(255, 255, 255, .08); color: #fff; }
 html.festive .nav-link.active {
-  background: linear-gradient(90deg, var(--fx-accent), var(--fx-btn2));
+  background: linear-gradient(90deg, var(--fx-accent), color-mix(in srgb, var(--fx-accent) 70%, #fff));
   color: var(--fx-ink); font-weight: 700;
   box-shadow: 0 0 12px color-mix(in srgb, var(--fx-accent) 55%, transparent);
 }

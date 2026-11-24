@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react';
-import { activeFor, getMode, setMode, type Mode } from './festive';
+import { activeFor, getMode, setMode, upcoming, type Mode } from './festive';
 import { FESTIVALS, nextFestival, type Active } from './festivals';
 
 /** Current mode and the festival showing, kept in sync when either changes. */
@@ -70,21 +70,23 @@ const fmt = (ymd: string) => new Date(`${ymd}T00:00:00`).toLocaleDateString('en-
 /** Sidebar control: follow the festival calendar, keep the plain look, or pick one look. */
 export function ThemeSwitch() {
   const { mode, active } = useFestive();
-  const next = nextFestival();
+  const up = upcoming();
+  const nf = up ? null : nextFestival();
+  const next = up ? { name: up.name, from: up.day } : nf ? { name: nf.festival.name, from: nf.from } : null;
   const label = mode === 'auto'
-    ? (active ? `${active.festival.emoji} ${active.festival.name} look (auto)` : 'Festive look: auto')
+    ? (active ? `${active.festival.emoji} ${active.eventName ?? active.festival.name} (auto)` : 'Festive look: auto')
     : mode === 'off' ? 'Festive look: off' : `${FESTIVALS[mode]?.emoji ?? ''} ${FESTIVALS[mode]?.name ?? mode} look (kept on)`;
   return (
     <div className="fx-switch">
       <div className="fx-switch-label">{label}</div>
       <select className="fx-switch-select" value={mode} onChange={e => setMode(e.target.value)} aria-label="Festive look">
-        <option value="auto">Auto — by festival calendar</option>
+        <option value="auto">Auto — daily, by Drik Panchang</option>
         <option value="off">Off — plain look</option>
         <optgroup label="Keep one look on">
           {Object.values(FESTIVALS).map(f => <option key={f.key} value={f.key}>{f.emoji} {f.name}</option>)}
         </optgroup>
       </select>
-      {mode === 'auto' && !active && next && <div className="fx-switch-next">Next: {next.festival.name}, {fmt(next.from)}</div>}
+      {mode === 'auto' && next && <div className="fx-switch-next">Next: {next.name}, {fmt(next.from)}</div>}
     </div>
   );
 }

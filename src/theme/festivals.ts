@@ -122,6 +122,50 @@ export const FESTIVALS: Record<string, Festival> = {
 };
 FESTIVALS.independence.vars = FESTIVALS.republic.vars;
 
+// Families used by the day-by-day calendar (Drik Panchang events): one look per kind of
+// observance — the greeting names the day's own event.
+const fam = (key: string, name: string, emoji: string, top: TopStyle, effect: Effect, colours: string[], p: Parameters<typeof pal>[0], greeting = name, sub = 'from iTechArena'): Festival =>
+  ({ key, name, greeting, sub, emoji, top, effect, colours, vars: pal(p) });
+Object.assign(FESTIVALS, {
+  shiva: fam('shiva', 'Shiva', '🔱', 'bunting', 'spark', ['#93c5fd', '#e0f2fe', '#a5b4fc', '#ffffff'],
+    { nav: ['#1e3a5f', '#172a46', '#0b1626'], accent: '#93c5fd', brand: '#2563eb', brandH: '#1d4ed8', brandL: '#eff6ff', brandM: '#93c5fd', btn: ['#3b82f6', '#1e40af'], page: '#f8fafd', surf2: '#eef4fb', surf3: '#dde9f7', bdr: '#d3e0ef', head: '#edf3fa', ink: '#0b1626', dot1: 'rgba(37,99,235,.06)', dot2: 'rgba(148,163,184,.08)', greet: '#1e3a5f' }, 'Har Har Mahadev'),
+  vishnu: fam('vishnu', 'Vishnu', '🪷', 'toran', 'petals', ['#facc15', '#22c55e', '#f59e0b', '#fde68a'],
+    { nav: ['#a16207', '#854d0e', '#422006'], accent: '#fde047', brand: '#ca8a04', brandH: '#a16207', brandL: '#fefce8', brandM: '#fde68a', btn: ['#eab308', '#ca8a04'], page: '#fffef5', surf2: '#fefbe6', surf3: '#fdf3c4', bdr: '#efe4b4', head: '#fdf8de', ink: '#422006', dot1: 'rgba(202,138,4,.08)', dot2: 'rgba(34,197,94,.06)', greet: '#854d0e' }),
+  purnima: fam('purnima', 'Purnima', '🌕', 'bunting', 'spark', ['#f8fafc', '#e2e8f0', '#fde68a', '#c7d2fe'],
+    { nav: ['#312e81', '#1e1b4b', '#0f0c29'], accent: '#fde68a', brand: '#6366f1', brandH: '#4f46e5', brandL: '#eef2ff', brandM: '#c7d2fe', btn: ['#818cf8', '#4f46e5'], page: '#fafaff', surf2: '#f1f2fe', surf3: '#e2e5fd', bdr: '#dcdff5', head: '#f0f1fd', ink: '#1e1b4b', dot1: 'rgba(99,102,241,.06)', dot2: 'rgba(253,230,138,.12)', greet: '#312e81' }),
+  amavasya: fam('amavasya', 'Amavasya', '✨', 'bunting', 'spark', ['#e0e7ff', '#a5b4fc', '#fef3c7', '#c4b5fd'],
+    { nav: ['#1e1b3a', '#14122b', '#08071a'], accent: '#c4b5fd', brand: '#6d28d9', brandH: '#5b21b6', brandL: '#f5f3ff', brandM: '#c4b5fd', btn: ['#7c3aed', '#4c1d95'], page: '#fbfaff', surf2: '#f3f1fd', surf3: '#e6e2fb', bdr: '#dedaf2', head: '#f1effc', ink: '#14122b', dot1: 'rgba(109,40,217,.05)', dot2: 'rgba(196,181,253,.1)', greet: '#2e1065' }),
+  surya: fam('surya', 'Surya', '☀️', 'bunting', 'rise', ['#fbbf24', '#f97316', '#fde047', '#fb923c'],
+    { nav: ['#c2410c', '#9a3412', '#431407'], accent: '#fde047', brand: '#ea580c', brandH: '#c2410c', brandL: '#fff7ed', brandM: '#fdba74', btn: ['#f59e0b', '#ea580c'], page: '#fffbf3', surf2: '#fff4e3', surf3: '#fee6c2', bdr: '#f5dcb7', head: '#fff1dd', ink: '#431407', dot1: 'rgba(245,158,11,.09)', dot2: 'rgba(234,88,12,.06)', greet: '#9a3412' }),
+  sankranti: fam('sankranti', 'Makar Sankranti', '🪁', 'bunting', 'confetti', ['#f43f5e', '#0ea5e9', '#facc15', '#22c55e', '#a855f7'],
+    { nav: ['#0369a1', '#075985', '#082f49'], accent: '#facc15', brand: '#0284c7', brandH: '#0369a1', brandL: '#f0f9ff', brandM: '#7dd3fc', btn: ['#f59e0b', '#0284c7'], page: '#f7fcff', surf2: '#ecf7fe', surf3: '#d7eefc', bdr: '#cde4f3', head: '#eaf6fd', ink: '#082f49', dot1: 'rgba(2,132,199,.07)', dot2: 'rgba(250,204,21,.09)', greet: '#075985' }, 'Happy Makar Sankranti'),
+  hanuman: fam('hanuman', 'Hanuman', '🚩', 'toran', 'petals', ['#f97316', '#dc2626', '#fbbf24', '#fb923c'],
+    { nav: ['#c2410c', '#9a3412', '#4a1406'], accent: '#fbbf24', brand: '#ea580c', brandH: '#c2410c', brandL: '#fff4ec', brandM: '#fdba74', btn: ['#f97316', '#c2410c'], page: '#fffaf5', surf2: '#fff1e6', surf3: '#fee0c8', bdr: '#f4d4bb', head: '#ffeedf', ink: '#4a1406', dot1: 'rgba(234,88,12,.08)', dot2: 'rgba(220,38,38,.05)', greet: '#9a3412' }, 'Jai Bajrangbali'),
+  ram: fam('ram', 'Shri Ram', '🏹', 'toran', 'petals', ['#f59e0b', '#f97316', '#fde047', '#16a34a'],
+    { nav: ['#b45309', '#92400e', '#451a03'], accent: '#fde047', brand: '#d97706', brandH: '#b45309', brandL: '#fffbeb', brandM: '#fcd34d', btn: ['#f59e0b', '#d97706'], page: '#fffcf4', surf2: '#fef7e4', surf3: '#fdecc0', bdr: '#f2e0b3', head: '#fef4da', ink: '#451a03', dot1: 'rgba(217,119,6,.08)', dot2: 'rgba(22,163,74,.05)', greet: '#92400e' }, 'Jai Shri Ram'),
+  saraswati: fam('saraswati', 'Saraswati', '🌼', 'bunting', 'petals', ['#facc15', '#fde047', '#ffffff', '#fbbf24'],
+    { nav: ['#a16207', '#854d0e', '#3f2405'], accent: '#fef08a', brand: '#ca8a04', brandH: '#a16207', brandL: '#fefce8', brandM: '#fef08a', btn: ['#facc15', '#ca8a04'], page: '#fffef2', surf2: '#fefbdf', surf3: '#fdf4b8', bdr: '#efe6a9', head: '#fdf9d6', ink: '#3f2405', dot1: 'rgba(250,204,21,.12)', dot2: 'rgba(202,138,4,.06)', greet: '#854d0e' }),
+  jain: fam('jain', 'Jain', '🙏', 'bunting', 'petals', ['#f59e0b', '#ffffff', '#16a34a', '#dc2626'],
+    { nav: ['#7c2d12', '#57260c', '#2a1206'], accent: '#fbbf24', brand: '#d97706', brandH: '#b45309', brandL: '#fffbeb', brandM: '#fcd34d', btn: ['#f59e0b', '#b45309'], page: '#fffdf8', surf2: '#fdf8ee', surf3: '#f8ecd5', bdr: '#eee0c6', head: '#fbf5e8', ink: '#2a1206', dot1: 'rgba(217,119,6,.06)', dot2: 'rgba(22,163,74,.05)', greet: '#7c2d12' }),
+  buddha: fam('buddha', 'Buddha', '☸️', 'bunting', 'petals', ['#f59e0b', '#dc2626', '#fde047', '#ffffff'],
+    { nav: ['#7f1d1d', '#5f1414', '#2b0808'], accent: '#fbbf24', brand: '#d97706', brandH: '#b45309', brandL: '#fffbeb', brandM: '#fcd34d', btn: ['#f59e0b', '#b91c1c'], page: '#fffcf6', surf2: '#fdf5ea', surf3: '#f9e6cf', bdr: '#efdcc4', head: '#fcf2e4', ink: '#2b0808', dot1: 'rgba(217,119,6,.07)', dot2: 'rgba(185,28,28,.04)', greet: '#7f1d1d' }),
+  lakshmi: fam('lakshmi', 'Lakshmi', '🪙', 'toran', 'spark', ['#fbbf24', '#f472b6', '#fde68a', '#f59e0b'],
+    { nav: ['#9d174d', '#6b0f35', '#33061a'], accent: '#fbbf24', brand: '#db2777', brandH: '#be185d', brandL: '#fdf2f8', brandM: '#f9a8d4', btn: ['#f59e0b', '#db2777'], page: '#fffafb', surf2: '#fdf1f5', surf3: '#fbe1eb', bdr: '#f2d4df', head: '#fdeef3', ink: '#33061a', dot1: 'rgba(219,39,119,.06)', dot2: 'rgba(251,191,36,.09)', greet: '#9d174d' }),
+  teej: fam('teej', 'Teej', '🌿', 'bunting', 'petals', ['#22c55e', '#dc2626', '#facc15', '#16a34a'],
+    { nav: ['#15803d', '#166534', '#052e16'], accent: '#fca5a5', brand: '#16a34a', brandH: '#15803d', brandL: '#f0fdf4', brandM: '#86efac', btn: ['#22c55e', '#dc2626'], page: '#f8fdf9', surf2: '#eefaf1', surf3: '#d8f2df', bdr: '#cfe7d6', head: '#ecf8ef', ink: '#052e16', dot1: 'rgba(22,163,74,.07)', dot2: 'rgba(220,38,38,.05)', greet: '#166534' }),
+  karwa: fam('karwa', 'Karwa Chauth', '🌙', 'bunting', 'spark', ['#dc2626', '#fbbf24', '#f472b6', '#ffffff'],
+    { nav: ['#991b1b', '#7f1d1d', '#3b0a0a'], accent: '#fbbf24', brand: '#dc2626', brandH: '#b91c1c', brandL: '#fef2f2', brandM: '#fca5a5', btn: ['#ef4444', '#b91c1c'], page: '#fffafa', surf2: '#fef1f1', surf3: '#fde0e0', bdr: '#f4d2d2', head: '#feeeee', ink: '#3b0a0a', dot1: 'rgba(220,38,38,.06)', dot2: 'rgba(251,191,36,.08)', greet: '#991b1b' }),
+  onam: fam('onam', 'Onam', '🌸', 'bunting', 'petals', ['#f59e0b', '#16a34a', '#fde047', '#f97316'],
+    { nav: ['#3f6212', '#365314', '#1a2e05'], accent: '#fde047', brand: '#65a30d', brandH: '#4d7c0f', brandL: '#f7fee7', brandM: '#bef264', btn: ['#f59e0b', '#65a30d'], page: '#fffef6', surf2: '#f9fbe9', surf3: '#eef5cc', bdr: '#e4ebc0', head: '#f6f9e0', ink: '#1a2e05', dot1: 'rgba(101,163,13,.07)', dot2: 'rgba(245,158,11,.08)', greet: '#365314' }),
+  kids: fam('kids', "Children's Day", '🎈', 'bunting', 'confetti', ['#f43f5e', '#3b82f6', '#facc15', '#22c55e', '#a855f7'],
+    { nav: ['#2563eb', '#1d4ed8', '#1e3a8a'], accent: '#facc15', brand: '#2563eb', brandH: '#1d4ed8', brandL: '#eff6ff', brandM: '#93c5fd', btn: ['#f43f5e', '#f59e0b'], page: '#fbfdff', surf2: '#f0f6ff', surf3: '#dfeafe', bdr: '#d6e2f5', head: '#eef4fe', ink: '#172554', dot1: 'rgba(244,63,94,.06)', dot2: 'rgba(59,130,246,.06)', greet: '#1d4ed8' }),
+  modern: fam('modern', 'Special Day', '💐', 'bunting', 'confetti', ['#f472b6', '#fb7185', '#c084fc', '#fda4af'],
+    { nav: ['#be185d', '#9d174d', '#500724'], accent: '#fbcfe8', brand: '#db2777', brandH: '#be185d', brandL: '#fdf2f8', brandM: '#f9a8d4', btn: ['#f472b6', '#db2777'], page: '#fffafc', surf2: '#fdf1f6', surf3: '#fbe1ec', bdr: '#f2d3e0', head: '#fdeef4', ink: '#500724', dot1: 'rgba(219,39,119,.06)', dot2: 'rgba(192,132,252,.07)', greet: '#9d174d' }),
+  parv: fam('parv', 'Parv', '🌼', 'toran', 'petals', ['#f59e0b', '#f97316', '#fde047', '#dc2626'],
+    { nav: ['#9a3412', '#7c2d12', '#3b1206'], accent: '#fbbf24', brand: '#ea580c', brandH: '#c2410c', brandL: '#fff7ed', brandM: '#fdba74', btn: ['#f59e0b', '#ea580c'], page: '#fffbf5', surf2: '#fff3e6', surf3: '#fde4c9', bdr: '#f3d8bd', head: '#fff0e0', ink: '#3b1206', dot1: 'rgba(234,88,12,.07)', dot2: 'rgba(245,158,11,.07)', greet: '#7c2d12' }),
+});
+
+
 /** One stretch of days for a festival; `greeting` replaces the festival's on those days. */
 interface Span { key: string; from: string; to: string; greeting?: string; sub?: string }
 
@@ -170,7 +214,7 @@ export function indiaDate(d = new Date()): string {
   }
 }
 
-export interface Active { festival: Festival; greeting: string; sub?: string }
+export interface Active { festival: Festival; greeting: string; sub?: string; eventName?: string }
 
 const withSpan = (f: Festival, s?: Partial<Span>): Active => ({ festival: f, greeting: s?.greeting ?? f.greeting, sub: s?.sub ?? f.sub });
 
