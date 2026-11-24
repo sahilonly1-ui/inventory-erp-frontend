@@ -280,10 +280,13 @@ td.na{color:#888;font-style:italic}
           <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>Nothing in stock in {sheet.category.name}. Pick another category.</div>
         )}
         {sheet && sheet.rows.length > 0 && (
-          <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: isPhone ? 900 : undefined }}>
+          // Fixed widths for the first columns and at least ~105px per spec column: on a narrow
+          // screen (or a phone in desktop view) the table scrolls sideways instead of the
+          // columns squeezing into each other.
+          <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: 190 + 84 + 58 + (marketOn ? 124 : 0) + fields.length * 105 }}>
             <colgroup>
-              <col style={{ width: '14%' }} /><col style={{ width: '6.5%' }} /><col style={{ width: '5%' }} />
-              {marketOn && <col style={{ width: '8.5%' }} />}
+              <col style={{ width: 190 }} /><col style={{ width: 84 }} /><col style={{ width: 58 }} />
+              {marketOn && <col style={{ width: 124 }} />}
               {fields.map(f => <col key={f.key} />)}
             </colgroup>
             <thead><tr>
@@ -367,14 +370,14 @@ td.na{color:#888;font-style:italic}
                         {r.activated > 0 && <div style={{ fontSize: 10.5, color: '#7c3aed', fontWeight: 700, marginTop: 3 }}>{r.activated} ACC</div>}
                       </td>
                       {marketOn && (
-                        <td style={{ ...cell, whiteSpace: 'nowrap' }}
+                        <td style={{ ...cell, overflow: 'hidden' }}
                           title={r.market ? `Lowest market price — ${r.market.store}: ${inr(r.market.price)}${r.market.effective < r.market.price ? `\n${inr(r.market.effective)} with ${r.market.offer ?? 'bank offer'}` : ''}` : 'No current market price (see Market Prices)'}>
                           {r.market ? <>
                             <div style={{ fontWeight: 800, fontSize: 13.5, color: '#0f172a' }}>{inr(r.market.price)}</div>
                             <div style={{ fontSize: 10, color: '#64748b' }}>{r.market.store}</div>
                             {r.market.effective < r.market.price && <>
-                              <div style={{ fontSize: 11.5, color: '#15803d', fontWeight: 700 }}>{inr(r.market.effective)} <span style={{ fontWeight: 500, fontSize: 10 }}>with offer</span></div>
-                              <div style={{ fontSize: 10, color: '#64748b', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }}>{shortOffer(r.market.offer)}</div>
+                              <div style={{ fontSize: 11.5, color: '#15803d', fontWeight: 700, whiteSpace: 'nowrap' }}>{inr(r.market.effective)} <span style={{ fontWeight: 500, fontSize: 10 }}>with offer</span></div>
+                              <div style={{ fontSize: 10, color: '#64748b', lineHeight: 1.3, overflowWrap: 'anywhere' }}>{shortOffer(r.market.offer)}</div>
                             </>}
                           </> : <span style={{ color: '#cbd5e1' }}>—</span>}
                         </td>
